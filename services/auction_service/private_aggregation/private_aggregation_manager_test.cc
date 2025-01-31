@@ -15,8 +15,10 @@
 #include "services/auction_service/private_aggregation/private_aggregation_manager.h"
 
 #include "gmock/gmock.h"
+#include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 #include "services/auction_service/private_aggregation/private_aggregation_manager_test_util.h"
+#include "services/common/private_aggregation/private_aggregation_test_util.h"
 #include "services/common/util/json_util.h"
 #include "src/util/status_macro/status_macros.h"
 
@@ -146,6 +148,45 @@ TEST(HandlePrivateAggregationReportingTest, ValidWinningAdSuccess) {
       static_cast<int>(kTestBidInSellerCurrency *
                            contribution2.value().extended_value().scale() +
                        contribution2.value().extended_value().offset()));
+}
+
+TEST(GetPrivateAggregateReportingResponseForWinner,
+     PAggReportingResponseWithNoLossContributions) {
+  BaseValues base_values = MakeDefaultBaseValues();
+  std::vector<PrivateAggregateContribution> win_contributions = {
+      GetTestContributionWithIntegers(EVENT_TYPE_WIN, "")};
+  std::vector<PrivateAggregateContribution> loss_contributions = {
+      GetTestContributionWithIntegers(EVENT_TYPE_LOSS, "")};
+  std::vector<PrivateAggregateContribution> always_contributions = {
+      GetTestContributionWithIntegers(EVENT_TYPE_ALWAYS, "")};
+  std::vector<PrivateAggregateContribution> custom_contributions = {
+      GetTestContributionWithIntegers(EVENT_TYPE_CUSTOM, kTestCustomEvent)};
+  absl::flat_hash_map<std::string, std::vector<PrivateAggregateContribution>>
+      custom_event_contributions;
+  custom_event_contributions.try_emplace(kTestCustomEvent,
+                                         custom_contributions);
+  rapidjson::Document doc = CreateContributionResponseDocument(
+      win_contributions, loss_contributions, always_contributions,
+      custom_event_contributions);
+  PrivateAggregateReportingResponse parsed_pagg_response =
+      GetPrivateAggregateReportingResponseForWinner(base_values, doc);
+  EXPECT_EQ(parsed_pagg_response.contributions().size(),
+            3);  // win, always and custom event contributions.
+  PrivateAggregateReportingResponse expected_pagg_reporting_response;
+  win_contributions[0].clear_event();
+  always_contributions[0].clear_event();
+  *expected_pagg_reporting_response.add_contributions() = win_contributions[0];
+  *expected_pagg_reporting_response.add_contributions() =
+      always_contributions[0];
+  *expected_pagg_reporting_response.add_contributions() =
+      custom_contributions[0];
+
+  google::protobuf::util::MessageDifferencer diff;
+  std::string diff_output;
+  diff.ReportDifferencesToString(&diff_output);
+  EXPECT_TRUE(
+      diff.Compare(parsed_pagg_response, expected_pagg_reporting_response))
+      << diff_output;
 }
 
 TEST(HandlePrivateAggregationReportingTest, ValidLosingAdSuccess) {
@@ -283,7 +324,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"int_value": 10}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"int_value": 10}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 10, /* expected lower bits*/ 1,
       /* expected upper bits */ 2, absl::StatusCode::kOk);
 }
@@ -294,7 +335,7 @@ TEST(ParseAndProcessContributionTest, PAggValueAsExtendedValueSuccess) {
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kOk);
@@ -307,7 +348,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_SCRIPT_RUN_TIME", "offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_SCRIPT_RUN_TIME", "offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kInvalidArgument);
@@ -320,7 +361,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"invalid_field_name": {"base_value": "BASE_VALUE_WINNING_BID", "offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"invalid_field_name": {"base_value": "BASE_VALUE_WINNING_BID", "offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kInvalidArgument);
@@ -333,7 +374,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"extended_value": {"offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"extended_value": {"offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kInvalidArgument);
@@ -346,7 +387,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": "invalid_offset", "scale": 2.0}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": "invalid_offset", "scale": 2.0}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kInvalidArgument);
@@ -359,7 +400,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": 1}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": 1}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kInvalidArgument);
@@ -372,7 +413,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": "invalid_offset_field", "scale": 2.0}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": "invalid_offset_field", "scale": 2.0}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kInvalidArgument);
@@ -385,7 +426,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": 1, "scale": "invalid_scale_field"}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_WINNING_BID", "offset": 1, "scale": "invalid_scale_field"}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kInvalidArgument);
@@ -398,7 +439,7 @@ TEST(ParseAndProcessContributionTest,
   TestParseAndProcessContribution(
       /* base_values */ base_values,
       /* json_string */
-      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_BID_REJECTION_REASON", "offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit": [1, 2]}})json",
+      R"json({"value": {"extended_value": {"base_value": "BASE_VALUE_BID_REJECTION_REASON", "offset": 1, "scale": 2.0}}, "bucket": {"bucket_128_bit":  {"bucket_128_bits": [1, 2]}}})json",
       /* expected_int_value */ 21,
       /* expected lower bits*/ 1, /* expected upper bits */ 2,
       absl::StatusCode::kInvalidArgument);

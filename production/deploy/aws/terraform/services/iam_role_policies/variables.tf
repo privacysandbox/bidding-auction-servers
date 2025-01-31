@@ -29,10 +29,6 @@ variable "server_instance_role_name" {
   type        = string
 }
 
-variable "ssh_instance_role_name" {
-  description = "Role for SSH instance (bastion)."
-}
-
 variable "autoscaling_group_arns" {
   description = "ARNs for autoscaling groups."
   type        = set(string)

@@ -26,7 +26,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 // Builds Seller KV Value lookup https request url.
 HTTPRequest SellerKeyValueAsyncHttpClient::BuildSellerKeyValueRequest(
     absl::string_view kv_server_host_domain, const RequestMetadata& metadata,
-    std::unique_ptr<GetSellerValuesInput> client_input) {
+    std::unique_ptr<GetSellerValuesInput> client_input,
+    std::vector<std::string> expected_response_headers_to_include) {
   HTTPRequest request;
   ClearAndMakeStartOfUrl(kv_server_host_domain, &request.url);
 
@@ -54,6 +55,7 @@ HTTPRequest SellerKeyValueAsyncHttpClient::BuildSellerKeyValueRequest(
                                    true);
   }
   request.headers = RequestMetadataToHttpHeaders(metadata);
+  request.include_headers = std::move(expected_response_headers_to_include);
   return request;
 }
 
@@ -63,8 +65,9 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
         void(absl::StatusOr<std::unique_ptr<GetSellerValuesOutput>>) &&>
         on_done,
     absl::Duration timeout, RequestContext context) const {
-  HTTPRequest request = BuildSellerKeyValueRequest(kv_server_base_address_,
-                                                   metadata, std::move(keys));
+  HTTPRequest request = BuildSellerKeyValueRequest(
+      kv_server_base_address_, metadata, std::move(keys),
+      {kDataVersionResponseHeaderName});
   PS_VLOG(kKVLog, context.log)
       << "SellerKeyValueAsyncHttpClient Request: " << request.url;
   PS_VLOG(kKVLog, context.log) << "\nSellerKeyValueAsyncHttpClient Headers:\n";

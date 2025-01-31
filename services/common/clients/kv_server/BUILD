@@ -69,6 +69,7 @@ cc_test(
         "//services/common/clients/async_grpc:default_raw_async_grpc_client_integration_test_utils",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
+        "//services/common/test:constants",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:test_init",

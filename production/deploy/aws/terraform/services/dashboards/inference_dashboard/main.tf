@@ -211,7 +211,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "type": "metric",
             "properties": {
                 "metrics": [
-                    [ { "expression": "SEARCH(' deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"system.thread.count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.label')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                    [ { "expression": "SEARCH(' deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"system.thread.count\" label=\"main process thread count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.label')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
                 ],
                 "timezone": "UTC",
                 "region": "${var.region}",
@@ -223,7 +223,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                         "showUnits": false
                     }
                 },
-                "title": "system.thread.count [MEAN]"
+                "title": "system.thread.count for main process [MEAN]"
             }
         },
         {
@@ -231,6 +231,29 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
             "width": 10,
             "y": 24,
             "x": 10,
+            "type": "metric",
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SEARCH(' deployment.environment=\"${var.environment}\" Noise=(\"Raw\" OR \"Noised\") MetricName=\"system.thread.count\" label=\"inference process thread count\" ', 'Average', 60)", "id": "e1", "label": "$${PROP('Dim.service.name')} $${PROP('Dim.deployment.environment')} $${PROP('Dim.label')} $${PROP('Dim.Noise')} $${PROP('Dim.service.instance.id')}" } ]
+                ],
+                "timezone": "UTC",
+                "region": "${var.region}",
+                "view": "timeSeries",
+                "stacked": false,
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "showUnits": false
+                    }
+                },
+                "title": "system.thread.count for inference process [MEAN]"
+            }
+        },
+        {
+            "height": 6,
+            "width": 10,
+            "y": 30,
+            "x": 0,
             "type": "metric",
             "properties": {
                 "metrics": [
@@ -252,7 +275,7 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
         {
             "height": 6,
             "width": 10,
-            "y": 30,
+            "y": 66,
             "x": 0,
             "type": "metric",
             "properties": {

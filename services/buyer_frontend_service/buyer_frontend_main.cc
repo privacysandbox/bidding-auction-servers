@@ -37,6 +37,7 @@
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 #include "services/common/clients/http_kv_server/buyer/buyer_key_value_async_http_client.h"
 #include "services/common/clients/http_kv_server/buyer/fake_buyer_key_value_async_http_client.h"
+#include "services/common/constants/common_constants.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/feature_flags.h"
@@ -98,6 +99,12 @@ ABSL_FLAG(std::optional<int64_t>, bfe_tcmalloc_max_total_thread_cache_bytes,
           std::nullopt,
           "Maximum amount of cached memory in bytes across all threads (or "
           "logical CPUs)");
+ABSL_FLAG(std::optional<bool>, propagate_buyer_signals_to_tkv, std::nullopt,
+          "Propagate buyer signals to the key value server. Only works for v2");
+ABSL_FLAG(
+    std::optional<std::string>, bidding_signals_fetch_mode, std::nullopt,
+    "Specifies whether KV lookup for bidding signals is made or not, and if "
+    "so, whether bidding signals are required for generating bids or not.");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -178,8 +185,12 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_debug_sample_rate_micro, DEBUG_SAMPLE_RATE_MICRO);
   config_client.SetFlag(FLAGS_enable_tkv_v2_browser, ENABLE_TKV_V2_BROWSER);
   config_client.SetFlag(FLAGS_tkv_egress_tls, TKV_EGRESS_TLS);
+  config_client.SetFlag(FLAGS_propagate_buyer_signals_to_tkv,
+                        PROPAGATE_BUYER_SIGNALS_TO_TKV);
   config_client.SetFlag(FLAGS_consent_all_requests, CONSENT_ALL_REQUESTS);
   config_client.SetFlag(FLAGS_enable_priority_vector, ENABLE_PRIORITY_VECTOR);
+  config_client.SetFlag(FLAGS_bidding_signals_fetch_mode,
+                        BIDDING_SIGNALS_FETCH_MODE);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -254,6 +265,8 @@ absl::Status RunServer() {
     PS_LOG(WARNING, SystemLogContext())
         << "BUYER_TKV_V2_SERVER_ADDR is set to " << kIgnoredPlaceholderValue
         << ", this can affect Android auctions";
+    // Consider the placeholder string as being empty.
+    buyer_tkv_v2_server_addr = "";
   }
 
   if (bidding_server_addr.empty()) {
@@ -265,6 +278,25 @@ absl::Status RunServer() {
   if (use_tkv_v2_browser && buyer_tkv_v2_server_addr.empty()) {
     return absl::InvalidArgumentError(
         "Missing: Buyer Trusted KV server address");
+  }
+  BiddingSignalsFetchMode bidding_signals_fetch_mode =
+      BiddingSignalsFetchMode::REQUIRED;
+  if (config_client.GetStringParameter(BIDDING_SIGNALS_FETCH_MODE) ==
+      kSignalsFetchedButOptional) {
+    bidding_signals_fetch_mode = BiddingSignalsFetchMode::FETCHED_BUT_OPTIONAL;
+  } else if (config_client.GetStringParameter(BIDDING_SIGNALS_FETCH_MODE) ==
+             kSignalsNotFetched) {
+    bidding_signals_fetch_mode = BiddingSignalsFetchMode::NOT_FETCHED;
+  }
+  if (bidding_signals_fetch_mode != BiddingSignalsFetchMode::NOT_FETCHED &&
+      (buyer_kv_server_addr.empty() ||
+       buyer_kv_server_addr == kIgnoredPlaceholderValue) &&
+      (buyer_tkv_v2_server_addr.empty() ||
+       buyer_tkv_v2_server_addr == kIgnoredPlaceholderValue)) {
+    return absl::InvalidArgumentError(
+        "The server is configured to perform the trusted bidding signals fetch "
+        "(which is the default) yet no host has been provided, BYOS or Trusted "
+        "KV.");
   }
 
   server_common::GrpcInit gprc_init;
@@ -312,9 +344,8 @@ absl::Status RunServer() {
     kv_async_client = std::make_unique<KVAsyncGrpcClient>(
         key_fetcher_manager.get(), std::move(kv_v2_stub));
   } else {
-    PS_LOG(WARNING)
-        << "TKV V2 endpoint not set. All CLIENT_TYPE_ANDROID requests will "
-           "fail.";
+    PS_LOG(WARNING) << "TKV V2 endpoint not set. All CLIENT_TYPE_ANDROID "
+                       "protected audience requests will fail.";
     if (use_tkv_v2_browser) {
       PS_LOG(WARNING)
           << " TKV V2 endpoint not set, but ENABLE_TKV_V2_BROWSER is true. "
@@ -350,6 +381,8 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(ENABLE_PRIORITY_VECTOR),
           config_client.GetBooleanParameter(TEST_MODE),
           buyer_tkv_v2_server_addr.empty(),
+          bidding_signals_fetch_mode,
+          config_client.GetBooleanParameter(PROPAGATE_BUYER_SIGNALS_TO_TKV),
       },
       enable_buyer_frontend_benchmarking);
 
@@ -394,6 +427,8 @@ absl::Status RunServer() {
   // Set max message size to 256 MB.
   builder.AddChannelArgument(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH,
                              256L * 1024L * 1024L);
+  // Set soft limit of metadata size to 64 KB.
+  builder.AddChannelArgument(GRPC_ARG_MAX_METADATA_SIZE, 64L * 1024L);
   builder.RegisterService(&buyer_frontend_service);
 
   std::unique_ptr<Server> server(builder.BuildAndStart());

@@ -51,9 +51,37 @@ cc_library(
         "request_parser.h",
     ],
     deps = [
+        ":error",
+        ":inference_error_code",
+        ":inference_metric_util",
         ":json_util",
+        "//proto:inference_sidecar_cc_proto",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@rapidjson",
+    ],
+)
+
+cc_library(
+    name = "resource_size_utils",
+    srcs = [
+        "resource_size_utils.cc",
+    ],
+    hdrs = [
+        "resource_size_utils.h",
+    ],
+    deps = [
+    ],
+)
+
+cc_test(
+    name = "resource_size_utils_test",
+    size = "small",
+    timeout = "short",
+    srcs = ["resource_size_utils_test.cc"],
+    deps = [
+        ":resource_size_utils",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -63,7 +91,11 @@ cc_test(
     timeout = "short",
     srcs = ["request_parser_test.cc"],
     deps = [
+        ":error",
+        ":inference_error_code",
         ":request_parser",
+        ":test_util",
+        "//proto:inference_sidecar_cc_proto",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],

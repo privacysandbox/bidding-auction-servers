@@ -15,11 +15,13 @@ python_register_toolchains("//builders/bazel")
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    # 2024-11-15
-    sha256 = "ed6b6913c16a5948cf75519d37aa35805ba7b73f0333f6968e534fa9f08db3fd",
-    strip_prefix = "data-plane-shared-libraries-96f555a9c901a31c03c426fddc128a77973535db",
+    patch_args = ["-p1"],
+    patches = ["//third_party:common_repo.patch"],
+    # 2025-1-22
+    sha256 = "dd3135177278f40320844e74aee9d6f5a65949ef8ba205d81b0f1617cb07fbc5",
+    strip_prefix = "data-plane-shared-libraries-f1792a8385e62773e858ad77b262b9dfc2f97bb1",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/96f555a9c901a31c03c426fddc128a77973535db.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/f1792a8385e62773e858ad77b262b9dfc2f97bb1.zip",
     ],
 )
 
@@ -119,6 +121,17 @@ local_repository(
     path = "services/inference_sidecar/modules/tensorflow_v2_14_0",
 )
 
+load("@rules_python//python:pip.bzl", "pip_parse")
+
+pip_parse(
+    name = "cost_estimation_deps",
+    requirements_lock = "//tools/cost_estimation:requirements_lock.txt",
+)
+
+load("@cost_estimation_deps//:requirements.bzl", cost_estimation_install_deps = "install_deps")
+
+cost_estimation_install_deps()
+
 http_archive(
     name = "libevent",
     build_file = "//third_party:libevent.BUILD",
@@ -155,3 +168,18 @@ http_archive(
     urls = ["https://github.com/anweiss/cddl/archive/refs/tags/0.9.4.zip"],
     workspace_file = "//third_party/cddl:WORKSPACE",
 )
+
+http_archive(
+    name = "com_google_cpp_proto_builder",
+    patch_args = ["-p1"],
+    patches = [
+        "//third_party:cpp_proto_builder/cpp_proto_builder.patch",
+    ],
+    sha256 = "d36865e2d4e36856b9117b59ef3eab27b92e623418ab9a531c80fee9e1ad521d",
+    strip_prefix = "cpp-proto-builder-0.1.0",
+    urls = ["https://github.com/google/cpp-proto-builder/archive/refs/tags/v0.1.0.zip"],
+)
+
+load("@com_google_cpp_proto_builder//:workspace.bzl", "init_cpp_pb_external_repositories")
+
+init_cpp_pb_external_repositories()

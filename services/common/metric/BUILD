@@ -50,7 +50,6 @@ cc_library(
     deps = [
         "//services/common/clients/code_dispatcher:request_context",
         "//services/common/loggers:request_log_context",
-        "@com_google_protobuf//:protobuf",
         "@google_privacysandbox_servers_common//src/roma/roma_service",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",

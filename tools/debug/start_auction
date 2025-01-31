@@ -20,22 +20,23 @@ SERVER_START_CMD=$(cat << END
 --https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
 --init_config_client="false" \
 --port=${AUCTION_PORT} \
+--scoring_signals_fetch_mode="REQUIRED" \
 --enable_auction_service_benchmark="true" \
 --udf_num_workers=4 \
 --js_worker_queue_len=100 \
 --test_mode="true" \
---telemetry_config="mode: OFF" \
+--telemetry_config="${TELEMETRY_CONFIG}" \
 --roma_timeout_ms="120000" \
 --enable_report_win_input_noising="false" \
 "${SELLER_CODE_FETCH_CONFIG}" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
 --ps_verbosity=${PS_VERBOSITY} \
---enable_protected_audience="true" \
---enable_kanon="false" \
+--enable_protected_audience=${ENABLE_PROTECTED_AUDIENCE} \
+--enable_kanon=${ENABLE_KANON} \
 --auction_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --auction_tcmalloc_max_total_thread_cache_bytes=10737418240 \
---enable_protected_app_signals="false" && exit
+--enable_protected_app_signals=${ENABLE_PROTECTED_APP_SIGNALS} && exit
 END
 )
 

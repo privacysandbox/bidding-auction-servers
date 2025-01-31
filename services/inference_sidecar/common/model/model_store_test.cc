@@ -60,13 +60,15 @@ class MockModel {
 
 absl::StatusOr<std::unique_ptr<MockModel>> MockModelConstructor(
     const InferenceSidecarRuntimeConfig& config,
-    const RegisterModelRequest& request) {
+    const RegisterModelRequest& request,
+    ModelConstructMetrics& construct_metrics) {
   return std::make_unique<MockModel>();
 }
 
 absl::StatusOr<std::unique_ptr<MockModel>> FailureModelConstructor(
     const InferenceSidecarRuntimeConfig& config,
-    const RegisterModelRequest& request) {
+    const RegisterModelRequest& request,
+    ModelConstructMetrics& construct_metrics) {
   return absl::FailedPreconditionError("Error");
 }
 
@@ -85,11 +87,13 @@ class ModelStoreTest : public ::testing::Test {
       : store_(InferenceSidecarRuntimeConfig(), MockModelConstructor) {}
 
   MockModelStore store_;
+  ModelConstructMetrics model_construct_metrics_;
 };
 
 TEST_F(ModelStoreTest, PutModelAddsModel) {
   RegisterModelRequest request;
-  EXPECT_TRUE(store_.PutModel(kTestModelName, request).ok());
+  EXPECT_TRUE(
+      store_.PutModel(kTestModelName, request, model_construct_metrics_).ok());
   EXPECT_TRUE(store_.GetModel(kTestModelName, /*is_consented=*/false).ok());
   EXPECT_TRUE(store_.GetModel(kTestModelName, /*is_consented=*/true).ok());
 }
@@ -97,7 +101,8 @@ TEST_F(ModelStoreTest, PutModelAddsModel) {
 TEST_F(ModelStoreTest, PutModelFailureDoesNotWrite) {
   store_.SetModelConstructorForTestOnly(FailureModelConstructor);
   RegisterModelRequest request;
-  EXPECT_FALSE(store_.PutModel(kTestModelName, request).ok());
+  EXPECT_FALSE(
+      store_.PutModel(kTestModelName, request, model_construct_metrics_).ok());
   EXPECT_FALSE(store_.GetModel(kTestModelName, /*is_consented=*/false).ok());
   EXPECT_FALSE(store_.GetModel(kTestModelName, /*is_consented=*/true).ok());
 }
@@ -111,7 +116,8 @@ TEST_F(ModelStoreTest, GetNonExistentModelReturnsNotFound) {
 
 TEST_F(ModelStoreTest, ResetModelSuccess) {
   RegisterModelRequest request;
-  ASSERT_TRUE(store_.PutModel(kTestModelName, request).ok());
+  ASSERT_TRUE(
+      store_.PutModel(kTestModelName, request, model_construct_metrics_).ok());
 
   absl::StatusOr<std::shared_ptr<MockModel>> result1 =
       store_.GetModel(kTestModelName);
@@ -128,7 +134,8 @@ TEST_F(ModelStoreTest, ResetModelSuccess) {
 
 TEST_F(ModelStoreTest, ResetModelFailureDoesNotOverwrite) {
   RegisterModelRequest request;
-  ASSERT_TRUE(store_.PutModel(kTestModelName, request).ok());
+  ASSERT_TRUE(
+      store_.PutModel(kTestModelName, request, model_construct_metrics_).ok());
 
   absl::StatusOr<std::shared_ptr<MockModel>> result1 =
       store_.GetModel(kTestModelName);
@@ -153,7 +160,8 @@ TEST_F(ModelStoreTest, ListModels) {
   EXPECT_TRUE(store_.ListModels().empty());
 
   RegisterModelRequest request;
-  EXPECT_TRUE(store_.PutModel(kTestModelName, request).ok());
+  EXPECT_TRUE(
+      store_.PutModel(kTestModelName, request, model_construct_metrics_).ok());
   std::vector<std::string> models = store_.ListModels();
   EXPECT_EQ(models.size(), 1);
   EXPECT_EQ(models.front(), kTestModelName);
@@ -161,7 +169,8 @@ TEST_F(ModelStoreTest, ListModels) {
 
 TEST_F(ModelStoreTest, DeleteModelsSuccess) {
   RegisterModelRequest request;
-  EXPECT_TRUE(store_.PutModel(kTestModelName, request).ok());
+  EXPECT_TRUE(
+      store_.PutModel(kTestModelName, request, model_construct_metrics_).ok());
   EXPECT_TRUE(store_.GetModel(kTestModelName, /*is_consented=*/false).ok());
   EXPECT_TRUE(store_.GetModel(kTestModelName, /*is_consented=*/true).ok());
 
@@ -179,7 +188,8 @@ TEST_F(ModelStoreTest, DeleteNonExistentModelReturnsNotFound) {
 
 absl::StatusOr<std::unique_ptr<MockModel>> MockModelConstructorWithInitCounter(
     const InferenceSidecarRuntimeConfig& config,
-    const RegisterModelRequest& request) {
+    const RegisterModelRequest& request,
+    ModelConstructMetrics& construct_metrics) {
   int init_counter;
   auto it = request.model_files().find(kTestModelName);
   if (it == request.model_files().end() ||
@@ -196,6 +206,7 @@ class ModelStoreConcurrencyTest : public ::testing::Test {
                MockModelConstructorWithInitCounter) {}
 
   MockModelStore store_;
+  ModelConstructMetrics model_construct_metrics_;
 };
 
 RegisterModelRequest BuildMockModelRegisterModelRequest(int init_counter) {
@@ -210,16 +221,18 @@ TEST_F(ModelStoreConcurrencyTest,
   threads.reserve(kNumThreads * 2);
   for (int i = 0; i < kNumThreads; ++i) {
     threads.push_back(std::thread([this]() {
-      EXPECT_TRUE(
-          this->store_
-              .PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
-              .ok());
+      EXPECT_TRUE(this->store_
+                      .PutModel(kTestModelName,
+                                BuildMockModelRegisterModelRequest(1),
+                                model_construct_metrics_)
+                      .ok());
     }));
     threads.push_back(std::thread([this]() {
-      EXPECT_TRUE(
-          this->store_
-              .PutModel(kTestModelName, BuildMockModelRegisterModelRequest(2))
-              .ok());
+      EXPECT_TRUE(this->store_
+                      .PutModel(kTestModelName,
+                                BuildMockModelRegisterModelRequest(2),
+                                model_construct_metrics_)
+                      .ok());
     }));
   }
 
@@ -245,10 +258,11 @@ TEST_F(ModelStoreConcurrencyTest, ConcurrentPutAndDeleteModelSuccess) {
   threads.reserve(kNumThreads * 2);
   for (int i = 0; i < kNumThreads; ++i) {
     threads.push_back(std::thread([this]() {
-      EXPECT_TRUE(
-          this->store_
-              .PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
-              .ok());
+      EXPECT_TRUE(this->store_
+                      .PutModel(kTestModelName,
+                                BuildMockModelRegisterModelRequest(1),
+                                model_construct_metrics_)
+                      .ok());
     }));
     threads.push_back(
         std::thread([this]() { this->store_.DeleteModel(kTestModelName); }));
@@ -263,7 +277,8 @@ TEST_F(ModelStoreConcurrencyTest, ConcurrentGetAndDeleteModelSuccess) {
   for (int i = 0; i < kNumThreads; ++i) {
     EXPECT_TRUE(this->store_
                     .PutModel(absl::StrCat(kTestModelName, i),
-                              BuildMockModelRegisterModelRequest(1))
+                              BuildMockModelRegisterModelRequest(1),
+                              model_construct_metrics_)
                     .ok());
   }
 
@@ -292,9 +307,11 @@ TEST_F(ModelStoreConcurrencyTest, ConcurrentGetAndDeleteModelSuccess) {
 }
 
 TEST_F(ModelStoreConcurrencyTest, ConcurrentGetModelSuccess) {
-  EXPECT_TRUE(
-      store_.PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
-          .ok());
+  EXPECT_TRUE(store_
+                  .PutModel(kTestModelName,
+                            BuildMockModelRegisterModelRequest(1),
+                            model_construct_metrics_)
+                  .ok());
 
   std::vector<std::thread> threads;
   threads.reserve(kNumThreads * 2);
@@ -319,9 +336,11 @@ TEST_F(ModelStoreConcurrencyTest, ConcurrentGetModelSuccess) {
 }
 
 TEST_F(ModelStoreConcurrencyTest, ConcurrentResetModelSuccess) {
-  EXPECT_TRUE(
-      store_.PutModel(kTestModelName, BuildMockModelRegisterModelRequest(0))
-          .ok());
+  EXPECT_TRUE(store_
+                  .PutModel(kTestModelName,
+                            BuildMockModelRegisterModelRequest(0),
+                            model_construct_metrics_)
+                  .ok());
 
   absl::StatusOr<std::shared_ptr<MockModel>> prod_model_result_1 =
       store_.GetModel(kTestModelName, /*is_consented=*/false);
@@ -363,9 +382,11 @@ TEST_F(ModelStoreConcurrencyTest, ConcurrentResetModelSuccess) {
 
 TEST_F(ModelStoreConcurrencyTest,
        GetModelReturnsModelDuringConcurrentResetModel) {
-  EXPECT_TRUE(
-      store_.PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
-          .ok());
+  EXPECT_TRUE(store_
+                  .PutModel(kTestModelName,
+                            BuildMockModelRegisterModelRequest(1),
+                            model_construct_metrics_)
+                  .ok());
 
   std::vector<std::thread> threads;
   threads.reserve(kNumThreads * 4);
@@ -399,18 +420,21 @@ TEST_F(ModelStoreConcurrencyTest,
 
 TEST_F(ModelStoreConcurrencyTest,
        GetModelReturnsModelDuringConcurrentPutModel) {
-  EXPECT_TRUE(
-      store_.PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
-          .ok());
+  EXPECT_TRUE(store_
+                  .PutModel(kTestModelName,
+                            BuildMockModelRegisterModelRequest(1),
+                            model_construct_metrics_)
+                  .ok());
 
   std::vector<std::thread> threads;
   threads.reserve(kNumThreads * 3);
   for (int i = 0; i < kNumThreads; ++i) {
     threads.push_back(std::thread([this]() {
-      EXPECT_TRUE(
-          this->store_
-              .PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
-              .ok());
+      EXPECT_TRUE(this->store_
+                      .PutModel(kTestModelName,
+                                BuildMockModelRegisterModelRequest(1),
+                                model_construct_metrics_)
+                      .ok());
     }));
     threads.push_back(std::thread([this]() {
       absl::StatusOr<std::shared_ptr<MockModel>> model =
@@ -433,18 +457,21 @@ TEST_F(ModelStoreConcurrencyTest,
 
 TEST_F(ModelStoreConcurrencyTest,
        GetModelReturnsModelDuringConcurrentPutModelAndResetModel) {
-  EXPECT_TRUE(
-      store_.PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
-          .ok());
+  EXPECT_TRUE(store_
+                  .PutModel(kTestModelName,
+                            BuildMockModelRegisterModelRequest(1),
+                            model_construct_metrics_)
+                  .ok());
 
   std::vector<std::thread> threads;
   threads.reserve(kNumThreads * 5);
   for (int i = 0; i < kNumThreads; ++i) {
     threads.push_back(std::thread([this]() {
-      EXPECT_TRUE(
-          this->store_
-              .PutModel(kTestModelName, BuildMockModelRegisterModelRequest(1))
-              .ok());
+      EXPECT_TRUE(this->store_
+                      .PutModel(kTestModelName,
+                                BuildMockModelRegisterModelRequest(1),
+                                model_construct_metrics_)
+                      .ok());
     }));
     threads.push_back(std::thread([this]() {
       EXPECT_TRUE(
@@ -480,6 +507,7 @@ class ModelStoreBackgroundModelResetTest : public ::testing::Test {
                MockModelConstructorWithInitCounter) {}
 
   MockModelStore store_;
+  ModelConstructMetrics model_construct_metrics_;
 
  private:
   InferenceSidecarRuntimeConfig
@@ -494,7 +522,8 @@ TEST_F(ModelStoreBackgroundModelResetTest, ResetSuccessWithStatefulModels) {
   for (int i = 0; i < kNumThreads; ++i) {
     EXPECT_TRUE(store_
                     .PutModel(absl::StrCat(kTestModelName, i),
-                              BuildMockModelRegisterModelRequest(1))
+                              BuildMockModelRegisterModelRequest(1),
+                              model_construct_metrics_)
                     .ok());
   }
 
@@ -528,7 +557,8 @@ TEST_F(ModelStoreBackgroundModelResetTest, ResetSuccessWhileDeletingModels) {
   for (int i = 0; i < kNumThreads; ++i) {
     EXPECT_TRUE(store_
                     .PutModel(absl::StrCat(kTestModelName, i),
-                              BuildMockModelRegisterModelRequest(1))
+                              BuildMockModelRegisterModelRequest(1),
+                              model_construct_metrics_)
                     .ok());
   }
 

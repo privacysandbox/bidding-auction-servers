@@ -37,8 +37,9 @@ class SelectAdReactorForWeb : public SelectAdReactor {
       SelectAdResponse* response, const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
       const ReportWinMap& report_win_map, bool enable_cancellation = false,
-      bool enable_kanon = false, bool fail_fast = true,
-      int max_buyers_solicited = 2);
+      bool enable_kanon = false,
+      bool enable_buyer_private_aggregate_reporting = false,
+      bool fail_fast = true, int max_buyers_solicited = 2);
   virtual ~SelectAdReactorForWeb() = default;
 
   // SelectAdReactorForWeb is neither copyable nor movable.
@@ -61,12 +62,10 @@ class SelectAdReactorForWeb : public SelectAdReactor {
       const google::protobuf::Map<std::string, std::string>&
           encoded_buyer_inputs) override;
 
-  KAnonAuctionResultData GetKAnonAuctionResultData(
-      const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      const AdScores* ghost_winning_scores = nullptr) override;
-
-  AuctionResult::KAnonJoinCandidate GetKAnonJoinCandidate(
+  KAnonJoinCandidate GetKAnonJoinCandidate(
       const ScoreAdsResponse::AdScore& score) override;
+
+  absl::string_view GetKAnonSetType() override;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -47,11 +47,12 @@ class AuctionServicePrivateAggregationImpl {
         if (event === null || event === '' || event.startsWith('reserved.')) {
           return;
         }
-        privateAggregationContributions.custom_events.set(
-          event,
-          privateAggregationContributions.custom_events.get(event) || []
-        );
-        privateAggregationContributions.custom_events.get(event).push(newContribution);
+        // Initialize custom_events as an empty object if it doesn't exist
+        privateAggregationContributions.custom_events = privateAggregationContributions.custom_events || {};
+        // Access and update the array for the given event
+        privateAggregationContributions.custom_events[event] =
+          privateAggregationContributions.custom_events[event] || [];
+        privateAggregationContributions.custom_events[event].push(newContribution);
     }
   }
 
@@ -81,7 +82,7 @@ const privateAggregation = new AuctionServicePrivateAggregationImpl();
  * @property {?Array<Object>} always - An array of contributions for the 'reserved.always' event.
  * @property {?Map<string, Array<Object>>} custom_events - A map of custom event names to their corresponding contributions.
  */
-const privateAggregationContributions = { win: [], loss: [], always: [], custom_events: new Map() };
+const privateAggregationContributions = { win: [], loss: [], always: [], custom_events: {} };
 Object.seal(privateAggregationContributions);
 
 /** @type {Object} */

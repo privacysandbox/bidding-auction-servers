@@ -34,6 +34,7 @@ inline constexpr char kClient[] = "Bna.PA.Buyer.20240930";
 inline constexpr char kHostname[] = "hostname";
 inline constexpr char kClientType[] = "client_type";
 inline constexpr char kExperimentGroupId[] = "experiment_group_id";
+inline constexpr char kBuyerSignals[] = "buyer_signals";
 
 kv_server::v2::GetValuesRequest GetRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request) {
@@ -84,7 +85,8 @@ absl::StatusOr<std::unique_ptr<BiddingSignals>> ConvertV2BiddingSignalsToV1(
 }
 
 absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesRequest>>
-CreateV2BiddingRequest(const BiddingSignalsRequest& bidding_signals_request) {
+CreateV2BiddingRequest(const BiddingSignalsRequest& bidding_signals_request,
+                       bool propagate_buyer_signals_to_tkv) {
   auto& bids_request = bidding_signals_request.get_bids_raw_request_;
   PS_RETURN_IF_ERROR(ValidateInterestGroups(bids_request.buyer_input()));
   std::unique_ptr<kv_server::v2::GetValuesRequest> req =
@@ -95,6 +97,11 @@ CreateV2BiddingRequest(const BiddingSignalsRequest& bidding_signals_request) {
         bids_request.consented_debug_config();
   }
   { *req->mutable_log_context() = bids_request.log_context(); }
+  if (propagate_buyer_signals_to_tkv) {
+    (*req->mutable_metadata()->mutable_fields())[kBuyerSignals]
+        .set_string_value(bids_request.buyer_signals());
+  }
+
   int compression_and_partition_id = 0;
   // TODO (b/369181315): this needs to be reworked to include multiple IGs's
   // keys per partition.

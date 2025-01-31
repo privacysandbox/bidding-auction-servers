@@ -29,10 +29,9 @@
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/public_key_url_allowlist.h"
 #include "services/common/util/request_response_constants.h"
-#include "src/concurrent/event_engine_executor.h"
-#include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/encryption/key_fetcher/fake_key_fetcher_manager.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
+#include "src/errors/retry.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -46,6 +45,7 @@ using ::privacy_sandbox::server_common::PrivateKeyFetcherFactory;
 using ::privacy_sandbox::server_common::PrivateKeyFetcherInterface;
 using ::privacy_sandbox::server_common::PublicKeyFetcherFactory;
 using ::privacy_sandbox::server_common::PublicKeyFetcherInterface;
+using ::privacy_sandbox::server_common::RetryUntilOk;
 
 namespace {
 
@@ -135,14 +135,12 @@ std::unique_ptr<KeyFetcherManagerInterface> CreateKeyFetcherManager(
 
   absl::Duration key_refresh_flow_run_freq = absl::Seconds(
       config_client.GetIntParameter(KEY_REFRESH_FLOW_RUN_FREQUENCY_SECONDS));
-  auto event_engine = std::make_unique<server_common::EventEngineExecutor>(
-      grpc_event_engine::experimental::GetDefaultEventEngine());
   std::unique_ptr<server_common::KeyFetcherManagerInterface> manager =
       KeyFetcherManagerFactory::Create(
           key_refresh_flow_run_freq, std::move(public_key_fetcher),
-          std::move(private_key_fetcher), std::move(event_engine),
-          SystemLogContext());
-  manager->Start();
+          std::move(private_key_fetcher), SystemLogContext());
+  RetryUntilOk([&manager = *manager] { return manager.Start(); },
+               "InitialKeyFetch", [](const absl::Status&, int) {});
 
   return manager;
 }

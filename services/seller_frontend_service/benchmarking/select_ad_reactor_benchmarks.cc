@@ -108,9 +108,8 @@ absl::Status BuyerFrontEndAsyncClientStub::ExecuteInternal(
   auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
   switch (buyer_mock_type_) {
     case BuyerMockType::DEBUG_REPORTING: {
-      AdWithBid bid =
-          BuildNewAdWithBid(ad_render_url_, "testIG", /*bid_value=*/1.0,
-                            /*enable_event_level_debug_reporting=*/true);
+      AdWithBid bid = BuildNewAdWithBid(
+          ad_render_url_, {.enable_event_level_debug_reporting = true});
       auto* debug_report_urls = bid.mutable_debug_report_urls();
       *debug_report_urls->mutable_auction_debug_loss_url() =
           std::string(kDebugUrlLength, 'C');
@@ -268,7 +267,7 @@ class KeyFetcherManagerStub : public server_common::KeyFetcherManagerInterface {
 
   // Queues key refresh jobs on the class' executor as often as defined by
   // 'key_refresh_period'.
-  void Start() noexcept override;
+  absl::Status Start() noexcept override;
 };
 
 absl::StatusOr<google::cmrt::sdk::public_key_service::v1::PublicKey>
@@ -289,7 +288,9 @@ std::optional<server_common::PrivateKey> KeyFetcherManagerStub::GetPrivateKey(
 
 // Queues key refresh jobs on the class' executor as often as defined by
 // 'key_refresh_period'.
-void KeyFetcherManagerStub::Start() noexcept {}
+absl::Status KeyFetcherManagerStub::Start() noexcept {
+  return absl::OkStatus();
+}
 
 class ScoringSignalsProviderStub
     : public AsyncProvider<ScoringSignalsRequest, ScoringSignals> {
@@ -363,10 +364,10 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
   config_client.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
   config_client.SetOverride(kFalse, ENABLE_TKV_V2_BROWSER);
   config_client.SetOverride(kFalse, ENABLE_CHAFFING);
-  ClientRegistry clients{scoring_provider,
+  ClientRegistry clients{&scoring_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_async_client,
+                         &kv_async_client,
                          key_fetcher_manager,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
@@ -421,10 +422,10 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
   config_client.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
   config_client.SetOverride(kTrue, ENABLE_TKV_V2_BROWSER);
   config_client.SetOverride(kFalse, ENABLE_CHAFFING);
-  ClientRegistry clients{scoring_provider,
+  ClientRegistry clients{&scoring_provider,
                          scoring_client,
                          buyer_clients,
-                         kv_async_client,
+                         &kv_async_client,
                          key_fetcher_manager,
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};

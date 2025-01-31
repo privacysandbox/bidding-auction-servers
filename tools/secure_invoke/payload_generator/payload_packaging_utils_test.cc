@@ -131,6 +131,7 @@ TEST(PackageBuyerInputsForBrowserTest, GeneratesAValidBuyerInputMap) {
 // SelectAdReactor is correctly parsed by UnpackageAuctionResult.
 TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   AuctionResult expected = MakeARandomSingleSellerAuctionResult();
+  std::string nonce = MakeARandomString();
 
   ScoreAdsResponse::AdScore input;
   input.set_interest_group_owner(expected.interest_group_owner());
@@ -139,9 +140,9 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   input.set_render(expected.ad_render_url());
 
   // Encode.
-  auto encoded_data =
-      Encode(input, expected.bidding_groups(), expected.update_groups(),
-             /*error=*/std::nullopt, [](const grpc::Status& status) {});
+  auto encoded_data = Encode(
+      input, expected.bidding_groups(), expected.update_groups(),
+      /*error=*/std::nullopt, [](const grpc::Status& status) {}, nonce);
   ASSERT_TRUE(encoded_data.ok()) << encoded_data.status();
 
   // Compress.
@@ -166,15 +167,16 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
           kBiddingAuctionOhttpRequestLabel);
   ASSERT_TRUE(encrypted_response.ok()) << encrypted_response.status();
 
-  absl::StatusOr<AuctionResult> actual =
-      UnpackageAuctionResult(*encrypted_response, CLIENT_TYPE_BROWSER,
-                             input_ctxt_pair->second, keyset);
+  absl::StatusOr<std::pair<AuctionResult, std::string>> actual =
+      UnpackageAuctionResultAndNonce(*encrypted_response, CLIENT_TYPE_BROWSER,
+                                     input_ctxt_pair->second, keyset);
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   google::protobuf::util::MessageDifferencer diff;
   std::string difference;
   diff.ReportDifferencesToString(&difference);
-  EXPECT_TRUE(diff.Compare(*actual, expected)) << difference;
+  EXPECT_TRUE(diff.Compare(actual->first, expected)) << difference;
+  EXPECT_EQ(actual->second, nonce);
 }
 
 TEST(PackagePayloadForAppTest, GeneratesAValidAppPayload) {
@@ -265,15 +267,16 @@ TEST(UnpackageAppAuctionResultTest, GeneratesAValidResponse) {
           input_ctxt_pair->second, kBiddingAuctionOhttpRequestLabel);
   ASSERT_TRUE(encrypted_response.ok()) << encrypted_response.status();
 
-  absl::StatusOr<AuctionResult> actual =
-      UnpackageAuctionResult(*encrypted_response, CLIENT_TYPE_ANDROID,
-                             input_ctxt_pair->second, keyset);
+  absl::StatusOr<std::pair<AuctionResult, std::string>> actual =
+      UnpackageAuctionResultAndNonce(*encrypted_response, CLIENT_TYPE_ANDROID,
+                                     input_ctxt_pair->second, keyset);
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   google::protobuf::util::MessageDifferencer diff;
   std::string difference;
   diff.ReportDifferencesToString(&difference);
-  EXPECT_TRUE(diff.Compare(*actual, expected)) << difference;
+  EXPECT_TRUE(diff.Compare(actual->first, expected)) << difference;
+  EXPECT_TRUE(actual->second.empty());
 }
 
 TEST(PackageServerComponentAuctionResultTest, GeneratesAValidResponse) {

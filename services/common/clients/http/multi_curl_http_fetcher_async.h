@@ -64,7 +64,8 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // probe after keepalive_interval_sec.
   explicit MultiCurlHttpFetcherAsync(server_common::Executor* executor,
                                      int64_t keepalive_interval_sec = 2,
-                                     int64_t keepalive_idle_sec = 2);
+                                     int64_t keepalive_idle_sec = 2,
+                                     std::string ca_cert = "/etc/roots.pem");
 
   // Cleans up all sessions and errors out any pending open HTTP calls.
   // Please note: Any class using this must ensure that the instance is only
@@ -274,6 +275,9 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // The multi session used for performing HTTP calls.
   MultiCurlRequestManager multi_curl_request_manager_;
   Event multi_timer_event_;  // Controlled by multi libcurl stack.
+
+  // Path to CA cert roots.pem
+  std::string ca_cert_;
 
   // Makes sure only one execution loop runs at a time.
   absl::Mutex in_loop_mu_;

@@ -25,8 +25,13 @@
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 
-// Adds a metric to the provided PredictResponse object.
+// Adds a metric of type int32 to the provided PredictResponse object.
 void AddMetric(PredictResponse& response, const std::string& key, int32_t value,
+               std::optional<std::string> partition = std::nullopt);
+
+// Adds a metric of type double to the provided RegisterModelResponse object.
+void AddMetric(RegisterModelResponse& response, const std::string& key,
+               double value,
                std::optional<std::string> partition = std::nullopt);
 
 // Extracts the error code from the error message for Error Reporting.

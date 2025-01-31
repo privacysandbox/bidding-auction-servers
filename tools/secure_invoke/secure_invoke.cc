@@ -91,11 +91,14 @@ int main(int argc, char** argv) {
       .key_id = static_cast<uint8_t>(stoi(id)),
   };
 
-  bool enable_debug_reporting = absl::GetFlag(FLAGS_enable_debug_reporting);
+  std::optional<bool> enable_debug_reporting =
+      absl::GetFlag(FLAGS_enable_debug_reporting);
   std::optional<bool> enable_debug_info =
       absl::GetFlag(FLAGS_enable_debug_info);
   std::optional<bool> enable_unlimited_egress =
       absl::GetFlag(FLAGS_enable_unlimited_egress);
+  const bool enforce_kanon = absl::GetFlag(FLAGS_enforce_kanon);
+
   if (op == "encrypt") {
     if (target_service == kSfe) {
       json_input_str =
@@ -104,7 +107,7 @@ int main(int argc, char** argv) {
       std::cout << privacy_sandbox::bidding_auction_servers::
               PackagePlainTextSelectAdRequestToJson(
                   json_input_str, client_type, keyset, enable_debug_reporting,
-                  enable_debug_info, enable_unlimited_egress);
+                  enable_debug_info, enable_unlimited_egress, enforce_kanon);
     } else {
       std::cout << privacy_sandbox::bidding_auction_servers::
               PackagePlainTextGetBidsRequestToJson(
@@ -115,7 +118,7 @@ int main(int argc, char** argv) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToSfe(
               client_type, keyset, enable_debug_reporting, enable_debug_info,
-              enable_unlimited_egress);
+              enable_unlimited_egress, enforce_kanon);
       CHECK(status.ok()) << status;
     } else if (target_service == kBfe) {
       const auto status =

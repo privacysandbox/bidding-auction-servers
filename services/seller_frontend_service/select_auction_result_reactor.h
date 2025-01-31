@@ -52,7 +52,9 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
-      bool enable_cancellation = false);
+      bool enable_cancellation = false,
+      bool enable_buyer_private_aggregate_reporting = false,
+      bool enable_kanon = false);
   virtual ~SelectAuctionResultReactor() = default;
 
   // SelectAuctionResultReactor is neither copyable nor movable.
@@ -102,6 +104,8 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
 
   const bool enable_cancellation_;
 
+  const bool enable_kanon_;
+
   // Encryption context needed throughout the lifecycle of the request.
   std::unique_ptr<OhttpHpkeDecryptedMessage> decrypted_request_;
 
@@ -110,6 +114,9 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
 
   // Keeps track of the client contexts used for RPC calls
   ClientContexts client_contexts_;
+
+  // Should the debug data be exported based on reply from auction
+  bool should_export_debug_ = false;
 
   // Finishes the RPC call with a status and publishes metrics.
   void FinishWithStatus(const grpc::Status& status);

@@ -81,7 +81,8 @@ PackageBuyerInputsForApp(
 // to be provided for decrypting the response.
 // Note: This method consumes `auction_result_ciphertext` input and hence should
 // not be used by the caller afterwards.
-absl::StatusOr<AuctionResult> UnpackageAuctionResult(
+absl::StatusOr<std::pair<AuctionResult, std::string>>
+UnpackageAuctionResultAndNonce(
     std::string& auction_result_ciphertext, ClientType client_type,
     quiche::ObliviousHttpRequest::Context& oblivious_request_context,
     const HpkeKeyset& keyset);

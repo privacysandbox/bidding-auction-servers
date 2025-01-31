@@ -14,6 +14,8 @@
 
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
 
+#include <utility>
+
 #include "gtest/gtest.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -26,7 +28,7 @@ constexpr absl::string_view kValidDomain = "example.com";
 
 TEST(GetDomainFromUrlTest, ReturnsDomainFromUrl) {
   std::string input = absl::StrCat(kValidUrl);
-  absl::StatusOr<absl::string_view> actual = GetDomainFromUrl(input);
+  auto actual = GetDomainFromUrl(std::move(input));
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(kValidDomain, *actual);
 }
@@ -37,28 +39,28 @@ TEST(GetDomainFromUrlTest, ReturnsDomainFromUrlWithPath) {
     input += "/";
     input += std::to_string(i);
   }
-  absl::StatusOr<absl::string_view> actual = GetDomainFromUrl(input);
+  auto actual = GetDomainFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(kValidDomain, *actual);
 }
 
 TEST(GetDomainFromUrlTest, ReturnsDomainFromUrlWithQuery) {
   std::string input = absl::StrCat(kValidUrl, "?foo=bar");
-  absl::StatusOr<absl::string_view> actual = GetDomainFromUrl(input);
+  auto actual = GetDomainFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(kValidDomain, *actual);
 }
 
 TEST(GetDomainFromUrlTest, ReturnsDomainFromUrlWithFragment) {
   std::string input = absl::StrCat(kValidUrl, "#foo");
-  absl::StatusOr<absl::string_view> actual = GetDomainFromUrl(input);
+  auto actual = GetDomainFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(kValidDomain, *actual);
 }
 
 TEST(GetDomainFromUrlTest, ReturnsDomainFromComplexUrl) {
   std::string input = absl::StrCat(kValidUrl, "/path/to/2?query=1&2#fragment");
-  absl::StatusOr<absl::string_view> actual = GetDomainFromUrl(input);
+  auto actual = GetDomainFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(kValidDomain, *actual);
 }
@@ -66,53 +68,48 @@ TEST(GetDomainFromUrlTest, ReturnsDomainFromComplexUrl) {
 TEST(GetDomainFromUrlTest, ReturnsDomainFromComplexUrlWithNoProtocol) {
   std::string input =
       absl::StrCat(kValidDomain, "/path/to/2?query=1&2#fragment");
-  absl::StatusOr<absl::string_view> actual = GetDomainFromUrl(input);
+  auto actual = GetDomainFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(kValidDomain, *actual);
 }
 
 TEST(GetDomainFromUrlTest, ReturnsErrorForMalformedUrl) {
   std::string input = absl::StrCat(kInvalidUrl);
-  absl::StatusOr<absl::string_view> actual = GetDomainFromUrl(input);
+  auto actual = GetDomainFromUrl(input);
   EXPECT_FALSE(actual.ok());
 }
 
 TEST(StripQueryAndFragmentsFromUrlTest, ReturnsUrlWithoutQuery) {
   std::string input = absl::StrCat(kValidUrl, "/path/to/2?query=1&2");
-  absl::StatusOr<absl::string_view> actual =
-      StripQueryAndFragmentsFromUrl(input);
+  auto actual = StripQueryAndFragmentsFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(absl::StrCat(kValidDomain, "/path/to/2"), *actual);
 }
 
 TEST(StripQueryAndFragmentsFromUrlTest, ReturnsUrlWithoutFragment) {
   std::string input = absl::StrCat(kValidUrl, "/path/to/2#fragment");
-  absl::StatusOr<absl::string_view> actual =
-      StripQueryAndFragmentsFromUrl(input);
+  auto actual = StripQueryAndFragmentsFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(absl::StrCat(kValidDomain, "/path/to/2"), *actual);
 }
 
 TEST(StripQueryAndFragmentsFromUrlTest, ReturnsUrlWithoutQueryAndFragment) {
   std::string input = absl::StrCat(kValidUrl, "/path/to/2?query=1&2#fragment");
-  absl::StatusOr<absl::string_view> actual =
-      StripQueryAndFragmentsFromUrl(input);
+  auto actual = StripQueryAndFragmentsFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(absl::StrCat(kValidDomain, "/path/to/2"), *actual);
 }
 
 TEST(StripQueryAndFragmentsFromUrlTest, ReturnsUrlWithoutPathQueryAndFragment) {
   std::string input = absl::StrCat(kValidUrl, "?query=1&2#fragment");
-  absl::StatusOr<absl::string_view> actual =
-      StripQueryAndFragmentsFromUrl(input);
+  auto actual = StripQueryAndFragmentsFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(absl::StrCat(kValidDomain, "/"), *actual);
 }
 
 TEST(StripQueryAndFragmentsFromUrlTest, ReturnsDomainForSimpleUrl) {
   std::string input = absl::StrCat(kValidUrl);
-  absl::StatusOr<absl::string_view> actual =
-      StripQueryAndFragmentsFromUrl(input);
+  auto actual = StripQueryAndFragmentsFromUrl(input);
   ASSERT_TRUE(actual.ok()) << actual.status();
   EXPECT_EQ(absl::StrCat(kValidDomain, "/"), *actual);
 }

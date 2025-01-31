@@ -36,6 +36,7 @@
 #include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
+#include "services/common/clients/code_dispatcher/request_context.h"
 #include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/encryption/crypto_client_wrapper_interface.h"
@@ -140,7 +141,7 @@ class ScoreAdsReactor
       std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      const AsyncReporter* async_reporter,
+      const AsyncReporter& async_reporter,
       const AuctionServiceRuntimeConfig& runtime_config);
 
   // Initiates the asynchronous execution of the ScoreAdsRequest.
@@ -163,6 +164,11 @@ class ScoreAdsReactor
   // response to be sent back to SFE.
   void PopulateRelevantFieldsInResponse(int index,
                                         std::vector<ScoredAdData>& parsed_ads);
+
+  // Adds the k-anon join candidate to the scored winner/ghost winners. This
+  // is needed for top level server orchestrated auctio
+  void MayAddKAnonJoinCandidate(absl::string_view request_id,
+                                ScoreAdsResponse::AdScore& ad_score);
 
   // Filters out invalid Roma responses while updating the corresponding error
   // metrics.
@@ -197,16 +203,28 @@ class ScoreAdsReactor
   absl::btree_map<std::string, std::string> GetLoggingContext(
       const ScoreAdsRequest::ScoreAdsRawRequest& score_ads_request);
 
-  // Performs debug reporting for all scored ads by the seller.
-  void PerformDebugReporting(
-      const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
+  // Performs debug reporting for all scored ads by the seller, except for the
+  // winning ad in component auctions.
+  // These objects are expected to be set before the function call:
+  // - ad_scores_
+  // - post_auction_signals_
+  void PerformDebugReporting();
 
+  // Populates the debug report urls in the response, only for the winning
+  // interest group in component auctions, when debug reporting is enabled.
+  void PopulateDebugReportUrlsForComponentAuctionWinner();
+
+  // These objects are expected to be set before the function call:
+  // - post_auction_signals_
+  // - component_level_reporting_data_ (For top level auctions)
   void DispatchReportingRequestForPA(
       absl::string_view dispatch_id,
       const ScoreAdsResponse::AdScore& winning_ad_score,
       const std::shared_ptr<std::string>& auction_config,
       const BuyerReportingMetadata& buyer_reporting_metadata);
 
+  // These objects are expected to be set before the function call:
+  // - post_auction_signals_
   void DispatchReportingRequestForPAS(
       const ScoreAdsResponse::AdScore& winning_ad_score,
       const std::shared_ptr<std::string>& auction_config,
@@ -216,9 +234,10 @@ class ScoreAdsReactor
 
   void DispatchReportingRequest(
       const ReportingDispatchRequestData& dispatch_request_data);
+
   [[deprecated(
       "DEPRECATED for Protected Audience. Please use "
-      "PerformReportingWithSellerAndBuyerCodeIsolation instead")]]
+      "PerformReportingWithSellerAndBuyerCodeIsolation instead.")]]
   void PerformReporting(const ScoreAdsResponse::AdScore& winning_ad_score,
                         absl::string_view id);
 
@@ -230,38 +249,50 @@ class ScoreAdsReactor
   // Initializes buyer_reporting_dispatch_request_data_ and
   // raw_response_ with buyer reporting IDs included in
   // AdWithBidMetadata.
-  void SetBuyerReportingIdsInRawResponse(
+  void SetReportingIdsInRawResponseAndDispatchRequestData(
       const std::unique_ptr<AdWithBidMetadata>& ad);
 
   // Performs reportResult and reportWin udf execution with seller and buyer
-  // code isolation
+  // code isolation.
+  // These objects are expected to be set before the function call:
+  // - buyer_reporting_dispatch_request_data_
+  // - ad_data_ / protected_app_signals_ad_data_
   void PerformReportingWithSellerAndBuyerCodeIsolation(
       const ScoreAdsResponse::AdScore& winning_ad_score, absl::string_view id);
 
+  // Performs Private Aggregation Reporting for contribution objects.
+  // These objects are expected to be set before the function call:
+  // - ad_data_
+  // - post_auction_signals_
+  // - paapi_contributions_docs_
+  void PerformPrivateAggregationReporting(
+      absl::string_view most_desirable_ad_score_id);
+
   // Dispatches request to reportResult() udf with seller and buyer udf
   // isolation.
-  // These global objects are expected to be set before
-  // DispatchReportResultRequest call:
+  // These objects are expected to be set before the function call:
   // - buyer_reporting_dispatch_request_data_
   // - post_auction_signals_
   // - reporting_dispatch_request_config_
-  // - raw_response_
-  void DispatchReportResultRequest(
-      const ScoreAdsResponse::AdScore& winning_ad_score);
+  void DispatchReportResultRequest();
+
   // Dispatches request to reportResult() udf with seller and buyer udf
   // isolation for component auctions.
-  // These global objects are expected to be set before
-  // DispatchReportResultRequest call:
+  // These objects are expected to be set before the function call:
   // - buyer_reporting_dispatch_request_data_
   // - post_auction_signals_
   // - reporting_dispatch_request_config_
-  // - raw_response_
   void DispatchReportResultRequestForComponentAuction(
       const ScoreAdsResponse::AdScore& winning_ad_score);
+
   // Dispatches request to reportResult() udf with seller and buyer udf
   // isolation for top level auctions.
+  // These objects are expected to be set before the function call:
+  // - raw_response_
+  // - post_auction_signals_
+  // - component_level_reporting_data_
+  // - reporting_dispatch_request_config_
   void DispatchReportResultRequestForTopLevelAuction(
-      const ScoreAdsResponse::AdScore& winning_ad_score,
       absl::string_view dispatch_id);
 
   // Publishes metrics and Finishes the RPC call with a status.
@@ -276,44 +307,85 @@ class ScoreAdsReactor
   // Function called after reportResult udf execution.
   void CancellableReportResultCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
+
+  // Function called after reportWin udf execution.
   void ReportWinCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
+
+  // Adds private aggregation contributions to the response.
+  void SetPrivateAggregationContributionsInResponse(
+      PrivateAggregateReportingResponse pagg_response);
+
   // Creates and populates dispatch requests using AdWithBidMetadata objects
   // in the input proto for single seller and component auctions.
   void PopulateProtectedAudienceDispatchRequests(
+      std::vector<DispatchRequest>& dispatch_requests,
       bool enable_debug_reporting,
       absl::Nullable<
           const absl::flat_hash_map<std::string, rapidjson::StringBuffer>*>
           scoring_signals,
       const std::shared_ptr<std::string>& auction_config,
-      google::protobuf::RepeatedPtrField<AdWithBidMetadata>& ads);
+      google::protobuf::RepeatedPtrField<AdWithBidMetadata>& ads,
+      RomaRequestSharedContext& shared_context);
+
+  // Builds score Ad dispatch requests for the component ghost winner ads and
+  // adds the requests to `dispatch_requests`.
+  //
+  // Also stores the relative AdWithBidMetadata in `ad_data_`.
+  void BuildScoreAdRequestForComponentGhostWinners(
+      bool enable_debug_reporting,
+      const std::shared_ptr<std::string>& auction_config,
+      AuctionResult& auction_result,
+      std::vector<DispatchRequest>& dispatch_requests,
+      RomaRequestSharedContext& shared_context);
+
+  // Builds a score Ad dispatch request for the component winner ad and adds the
+  // request to `dispatch_requests`.
+  //
+  // Also stores the relative AdWithBidMetadata in `ad_data_` as well as the
+  // component level reporting data in `component_level_reporting_data_`.
+  void BuildScoreAdRequestForComponentWinner(
+      bool enable_debug_reporting,
+      const std::shared_ptr<std::string>& auction_config,
+      AuctionResult& auction_result,
+      std::vector<DispatchRequest>& dispatch_requests,
+      RomaRequestSharedContext& shared_context);
 
   // Creates and populates dispatch requests using ComponentAuctionResult
   // objects in the input proto for top-level auctions.
-  absl::Status PopulateTopLevelAuctionDispatchRequests(
+  absl::StatusOr<std::vector<DispatchRequest>>
+  PopulateTopLevelAuctionDispatchRequests(
       bool enable_debug_reporting,
       const std::shared_ptr<std::string>& auction_config,
       google::protobuf::RepeatedPtrField<AuctionResult>&
-          component_auction_results);
+          component_auction_results,
+      RomaRequestSharedContext& shared_context);
 
   // Creates and populates dispatch requests using
   // ProtectedAppSignalsAdWithBidMetadata objects
   // in the input proto for single seller auctions auctions
   // if the feature flag is enabled.
   void MayPopulateProtectedAppSignalsDispatchRequests(
+      std::vector<DispatchRequest>& dispatch_requests,
       bool enable_debug_reporting,
       absl::Nullable<
           const absl::flat_hash_map<std::string, rapidjson::StringBuffer>*>
           scoring_signals,
       const std::shared_ptr<std::string>& auction_config,
       google::protobuf::RepeatedPtrField<ProtectedAppSignalsAdWithBidMetadata>&
-          protected_app_signals_ad_bids);
+          protected_app_signals_ad_bids,
+      RomaRequestSharedContext& shared_context);
 
   // Validates the ad returned by Roma ScoreAd Response (e.g. validates
   // currency) and sets a rejection reason if the ad is not valid.
   OptionalAdRejectionReason GetAdRejectionReason(
       const rapidjson::Document& response_json,
       const ScoreAdsResponse::AdScore& ad_score);
+
+  // Sets post_auction_signals_ based on the winning ad.
+  // These objects are expected to be set before the function call:
+  // - raw_response_
+  void SetPostAuctionSignals();
 
   // Adds winner ad to the GRPC response.
   void AddWinnerToResponse(int winner_index, ScoringData& scoring_data,
@@ -324,9 +396,9 @@ class ScoreAdsReactor
                                  std::vector<ScoredAdData>& parsed_responses);
 
   // Performs win and debug reporting (forDebuggingOnly).
-  void DoWinAndDebugReporting(
-      bool enable_debug_reporting, int winner_index,
-      const std::vector<ScoredAdData>& parsed_responses);
+  void DoWinAndDebugReporting(bool enable_debug_reporting, int winner_index,
+                              const std::vector<ScoredAdData>& parsed_responses,
+                              absl::string_view id);
 
   CLASS_CANCELLATION_WRAPPER(ReportResultCallback, enable_cancellation_,
                              context_, FinishWithStatus)
@@ -336,7 +408,6 @@ class ScoreAdsReactor
   // Dispatches execution requests to a library that runs V8 workers in
   // separate processes.
   V8DispatchClient& dispatcher_;
-  std::vector<DispatchRequest> dispatch_requests_;
 
   // The key is the id of the DispatchRequest, and the value is the ad
   // used to create the dispatch request. This map is used to amend each ad's
@@ -346,6 +417,11 @@ class ScoreAdsReactor
       std::string,
       std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>>
       ad_data_;
+
+  // The key is the id of the DispatchRequest and the value is the k-anon join
+  // candidate belonging to the scoring dispatch request. This map is used
+  // during top-level multi seller auction.
+  absl::flat_hash_map<std::string, KAnonJoinCandidate> ad_k_anon_join_cand_;
 
   // Map of dispatch id to component level reporting data in a component auction
   // result.
@@ -360,6 +436,7 @@ class ScoreAdsReactor
   bool enable_seller_debug_url_generation_;
   std::string roma_timeout_ms_;
   RequestLogContext log_context_;
+  RomaRequestContextFactory roma_request_context_factory_;
 
   // Used to log metric, same life time as reactor.
   std::unique_ptr<metric::AuctionContext> metric_context_;
@@ -368,11 +445,21 @@ class ScoreAdsReactor
   absl::flat_hash_map<std::string, std::unique_ptr<ScoreAdsResponse::AdScore>>
       ad_scores_;
 
+  // Used for private aggregation reporting. Keyed on Roma dispatch ID.
+  absl::flat_hash_map<std::string, rapidjson::Document>
+      paapi_contributions_docs_;
+
+  // Used for private aggregation reporting. Map of ghost winner's
+  // interest_group_owner (key), interest_group_name (value).
+  absl::flat_hash_map<std::string, std::string>
+      ghost_winner_interest_group_data_;
+
   // Flags needed to be passed as input to the code which wraps AdTech provided
   // code.
   bool enable_adtech_code_logging_;
   bool enable_report_result_url_generation_;
   const bool enable_protected_app_signals_;
+  bool enable_private_aggregate_reporting_;
   bool enable_report_win_input_noising_;
   std::string seller_origin_;
   int max_allowed_size_debug_url_chars_;
@@ -401,6 +488,7 @@ class ScoreAdsReactor
   absl::flat_hash_set<std::string> buyers_with_report_win_enabled_;
   absl::flat_hash_set<std::string>
       protected_app_signals_buyers_with_report_win_enabled_;
+  std::string winning_ad_dispatch_id_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 #endif  // SERVICES_AUCTION_SERVICE_SCORE_ADS_REACTOR_H_

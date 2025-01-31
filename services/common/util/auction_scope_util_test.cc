@@ -109,5 +109,15 @@ TEST(AuctionScopeUtil,
   EXPECT_EQ(output, AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER);
 }
 
+TEST(AuctionScopeUtil, IsComponentAuction) {
+  EXPECT_TRUE(IsComponentAuction(
+      AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER));
+  EXPECT_TRUE(IsComponentAuction(
+      AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER));
+  EXPECT_FALSE(
+      IsComponentAuction(AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER));
+  EXPECT_FALSE(IsComponentAuction(AuctionScope::AUCTION_SCOPE_SINGLE_SELLER));
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -14,7 +14,6 @@
 // limitations under the License.
 
 #include "api/udf/generate_bid_udf_interface.pb.h"
-#include "google/protobuf/any.pb.h"
 #include "google/protobuf/util/delimited_message_util.h"
 
 using ::google::protobuf::io::FileInputStream;
@@ -26,20 +25,16 @@ using ::privacy_sandbox::bidding_auction_servers::roma_service::
     GenerateProtectedAudienceBidResponse;
 
 GenerateProtectedAudienceBidRequest ReadRequestFromFd(int fd) {
-  google::protobuf::Any any;
-  FileInputStream stream(fd);
-  google::protobuf::util::ParseDelimitedFromZeroCopyStream(&any, &stream,
-                                                           nullptr);
   GenerateProtectedAudienceBidRequest req;
-  any.UnpackTo(&req);
+  FileInputStream stream(fd);
+  google::protobuf::util::ParseDelimitedFromZeroCopyStream(&req, &stream,
+                                                           nullptr);
   return req;
 }
 
 void WriteResponseToFd(int fd,
                        const GenerateProtectedAudienceBidResponse& resp) {
-  google::protobuf::Any any;
-  any.PackFrom(resp);
-  google::protobuf::util::SerializeDelimitedToFileDescriptor(any, fd);
+  google::protobuf::util::SerializeDelimitedToFileDescriptor(resp, fd);
 }
 
 int main(int argc, char* argv[]) {

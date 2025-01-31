@@ -90,7 +90,7 @@ source "amazon-ebs" "dataserver" {
   ami_regions   = var.regions
   source_ami_filter {
     filters = {
-      name                = "al2023-ami-2023.6.20241010.0-kernel-6.1-x86_64"
+      name                = "al2023-ami-20*-kernel-*-x86_64"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }

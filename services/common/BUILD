@@ -13,8 +13,21 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load(
+    "@rules_pkg//pkg:mappings.bzl",
+    "pkg_attributes",
+    "pkg_files",
+)
 
 package(default_visibility = ["//visibility:public"])
+
+pkg_files(
+    name = "roots_pem",
+    srcs = ["@com_github_grpc_grpc//:etc/roots.pem"],
+    attributes = pkg_attributes(mode = "0555"),
+    prefix = "/etc/",
+    visibility = ["//visibility:public"],
+)
 
 cc_library(
     name = "feature_flags",

@@ -124,7 +124,10 @@ absl::Status BuyerCodeFetchManager::InitializeLocalCodeFetch() {
   PS_ASSIGN_OR_RETURN(auto adtech_code_blob,
                       GetFileContent(udf_config_.bidding_js_path(),
                                      /*log_on_error=*/true));
-  adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, {});
+  BuyerCodeWrapperConfig wrapper_config = {
+      .enable_private_aggregate_reporting =
+          udf_config_.enable_private_aggregate_reporting()};
+  adtech_code_blob = GetBuyerWrappedCode(adtech_code_blob, wrapper_config);
   return loader_.LoadSync(kProtectedAudienceGenerateBidBlobVersion,
                           std::move(adtech_code_blob));
 }

@@ -64,3 +64,14 @@ variable "traffic_weights" {
   description = "a map with environment as key, the value is traffic_weight between 0~1000"
   type        = map(number)
 }
+
+variable "experiment_match_rules" {
+  description = "a map with environment as key, the value is a list header match_rules, which has OR semantics: the request matches when any of the header match_rules are satisfied. Only one of exactMatch, prefixMatch, or presentMatch must be specified. see more: https://cloud.google.com/compute/docs/reference/rest/v1/urlMaps"
+  type = map(list(object({
+    header_name   = string
+    exact_match   = string
+    prefix_match  = string
+    present_match = bool
+  })))
+  default = {}
+}

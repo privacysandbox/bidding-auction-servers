@@ -24,6 +24,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "services/auction_service/auction_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/loggers/request_log_context.h"
@@ -79,6 +80,8 @@ inline constexpr char kAdCostTag[] = "adCost";
 inline constexpr char kBuyerReportingIdTag[] = "buyerReportingId";
 inline constexpr char kBuyerAndSellerReportingIdTag[] =
     "buyerAndSellerReportingId";
+inline constexpr char kSelectedBuyerAndSellerReportingIdTag[] =
+    "selectedBuyerAndSellerReportingId";
 inline constexpr char kMadeHighestScoringOtherBid[] =
     "madeHighestScoringOtherBid";
 inline constexpr char kInteractionReportingUrlsWrapperResponse[] =
@@ -88,7 +91,9 @@ inline constexpr char kInterestGroupOwnerTag[] = "interestGroupOwner";
 inline constexpr char kInterestGroupNameTag[] = "interestGroupName";
 inline constexpr char kJoinCountTag[] = "joinCount";
 inline constexpr char kRecencyTag[] = "recency";
+inline constexpr char kKAnonStatusTag[] = "kAnonStatus";
 constexpr int kStochasticalRoundingBits = 8;
+inline constexpr char kPAggContributions[] = "paapiContributions";
 
 // [[deprecated("DEPRECATED. Please use
 // SellerReportingDispatchRequestData or BuyerReportingDispatchRequestData
@@ -180,6 +185,8 @@ struct SellerReportingDispatchRequestData {
   std::string_view publisher_hostname;
   ComponentReportingMetadata component_reporting_metadata;
   RequestLogContext& log_context;
+  std::optional<std::string> buyer_and_seller_reporting_id;
+  std::optional<std::string> selected_buyer_and_seller_reporting_id;
 };
 
 struct BuyerReportingDispatchRequestData {
@@ -193,6 +200,7 @@ struct BuyerReportingDispatchRequestData {
   double ad_cost;
   std::optional<std::string> buyer_reporting_id;
   std::optional<std::string> buyer_and_seller_reporting_id;
+  std::optional<std::string> selected_buyer_and_seller_reporting_id;
   uint32_t data_version;
   bool made_highest_scoring_other_bid;
   RequestLogContext& log_context;
@@ -201,6 +209,7 @@ struct BuyerReportingDispatchRequestData {
   std::string winning_ad_render_url;
   std::optional<absl::string_view> egress_payload;
   std::optional<absl::string_view> temporary_unlimited_egress_payload;
+  std::string k_anon_status = kNotCalculatedKAnonStatus;
 };
 
 inline const std::string kDefaultBuyerReportingMetadata = absl::StrFormat(

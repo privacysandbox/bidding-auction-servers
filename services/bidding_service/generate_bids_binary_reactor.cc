@@ -28,7 +28,8 @@ using RawRequest = GenerateBidsRequest::GenerateBidsRawRequest;
 using IGForBidding =
     GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding;
 
-inline constexpr int kDefaultGenerateBidExecutionTimeoutMs = 1000;
+inline constexpr absl::Duration kDefaultGenerateBidExecutionTimeout =
+    absl::Seconds(1);
 
 roma_service::GenerateProtectedAudienceBidRequest
 BuildProtectedAudienceBidRequest(RawRequest& raw_request,
@@ -88,6 +89,9 @@ BuildProtectedAudienceBidRequest(RawRequest& raw_request,
     }
     *browser_signals->mutable_prev_wins() = std::move(
         *ig_for_bidding.mutable_browser_signals()->mutable_prev_wins());
+    browser_signals->set_multi_bid_limit(raw_request.multi_bid_limit() > 0
+                                             ? raw_request.multi_bid_limit()
+                                             : kDefaultMultiBidLimit);
   }
 
   // Populate server metadata.
@@ -103,7 +107,7 @@ BuildProtectedAudienceBidRequest(RawRequest& raw_request,
 std::vector<AdWithBid> ParseProtectedAudienceBids(
     google::protobuf::RepeatedPtrField<roma_service::ProtectedAudienceBid>&
         bids,
-    absl::string_view ig_name) {
+    absl::string_view ig_name, bool debug_reporting_enabled) {
   // Reserve memory to prevent reallocation.
   std::vector<AdWithBid> ads_with_bids;
   if (bids.size() == 0) {
@@ -126,7 +130,7 @@ std::vector<AdWithBid> ParseProtectedAudienceBids(
   ad_with_bid.set_interest_group_name(
       ig_name);  // Cannot move since it can be shared by multiple bids
   ad_with_bid.set_ad_cost(bid.ad_cost());
-  if (bid.has_debug_report_urls()) {
+  if (bid.has_debug_report_urls() && debug_reporting_enabled) {
     *(ad_with_bid.mutable_debug_report_urls()
           ->mutable_auction_debug_win_url()) =
         std::move(
@@ -138,8 +142,18 @@ std::vector<AdWithBid> ParseProtectedAudienceBids(
   }
   ad_with_bid.set_modeling_signals(bid.modeling_signals());
   *ad_with_bid.mutable_bid_currency() = std::move(*bid.mutable_bid_currency());
-  *ad_with_bid.mutable_buyer_reporting_id() =
-      std::move(*bid.mutable_buyer_reporting_id());
+  if (!bid.mutable_buyer_reporting_id()->empty()) {
+    *ad_with_bid.mutable_buyer_reporting_id() =
+        std::move(*bid.mutable_buyer_reporting_id());
+  }
+  if (!bid.mutable_buyer_and_seller_reporting_id()->empty()) {
+    *ad_with_bid.mutable_buyer_and_seller_reporting_id() =
+        std::move(*bid.mutable_buyer_and_seller_reporting_id());
+  }
+  if (!bid.mutable_selected_buyer_and_seller_reporting_id()->empty()) {
+    *ad_with_bid.mutable_selected_buyer_and_seller_reporting_id() =
+        std::move(*bid.mutable_selected_buyer_and_seller_reporting_id());
+  }
   ads_with_bids.emplace_back(std::move(ad_with_bid));
 
   return ads_with_bids;
@@ -159,6 +173,15 @@ void ExportLogsByType(
   }
 }
 
+size_t EstimateNumBids(
+    const std::vector<std::vector<AdWithBid>>& ads_with_bids_by_ig) {
+  size_t num_bids = 0;
+  for (const auto& ads_with_bids : ads_with_bids_by_ig) {
+    num_bids += ads_with_bids.size();
+  }
+  return num_bids;
+}
+
 void HandleLogMessages(absl::string_view ig_name,
                        const roma_service::LogMessages& log_messages,
                        RequestLogContext& log_context) {
@@ -174,7 +197,7 @@ absl::Duration StringMsToAbslDuration(const std::string& string_ms) {
   if (absl::ParseDuration(string_ms, &duration)) {
     return duration;
   }
-  return absl::Milliseconds(kDefaultGenerateBidExecutionTimeoutMs);
+  return kDefaultGenerateBidExecutionTimeout;
 }
 }  // namespace
 
@@ -256,14 +279,16 @@ void GenerateBidsBinaryReactor::ExecuteForInterestGroup(int ig_index) {
           raw_request_,
           *raw_request_.mutable_interest_group_for_bidding(ig_index),
           enable_adtech_code_logging_ || !server_common::log::IsProd());
-  std::string ig_name = bid_request.interest_group().name();
-  bool logging_enabled = bid_request.server_metadata().logging_enabled();
+  const std::string ig_name = bid_request.interest_group().name();
+  const bool logging_enabled = bid_request.server_metadata().logging_enabled();
+  const bool debug_reporting_enabled =
+      bid_request.server_metadata().debug_reporting_enabled();
 
   // Make asynchronous execute call using the BYOB client.
   PS_VLOG(kNoisyInfo) << "Starting UDF execution for IG: " << ig_name;
   absl::Status execute_status = byob_client_->Execute(
       std::move(bid_request), roma_timeout_duration_,
-      [this, ig_index, ig_name, logging_enabled](
+      [this, ig_index, ig_name, logging_enabled, debug_reporting_enabled](
           absl::StatusOr<roma_service::GenerateProtectedAudienceBidResponse>
               bid_response_status) mutable {
         // Error response.
@@ -313,8 +338,8 @@ void GenerateBidsBinaryReactor::ExecuteForInterestGroup(int ig_index) {
         }
         // Populate list of AdsWithBids for this interest group from the bid
         // response returned by UDF.
-        ads_with_bids_by_ig_[ig_index] =
-            ParseProtectedAudienceBids(*bid_response.mutable_bids(), ig_name);
+        ads_with_bids_by_ig_[ig_index] = ParseProtectedAudienceBids(
+            *bid_response.mutable_bids(), ig_name, debug_reporting_enabled);
         // Print log messages if present if logging enabled.
         if (logging_enabled && bid_response.has_log_messages()) {
           HandleLogMessages(ig_name, bid_response.log_messages(), log_context_);
@@ -348,7 +373,7 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
     LogIfError(
         metric_context_->LogHistogram<metric::kBiddingFailedToBidPercent>(1.0));
     LogIfError(
-        metric_context_->LogUpDownCounter<metric::kBiddingTotalBidsCount>(0));
+        metric_context_->LogHistogram<metric::kBiddingTotalBidsCount>(0));
     PS_LOG(WARNING, log_context_)
         << "No successful bids returned by the adtech UDF";
     EncryptResponseAndFinish(grpc::Status(
@@ -370,6 +395,8 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
   int zero_bid_count = 0;
   int total_debug_urls_count = 0;
   long total_debug_urls_chars = 0;
+  int rejected_component_bid_count = 0;
+  raw_response_.mutable_bids()->Reserve(EstimateNumBids(ads_with_bids_by_ig_));
   for (std::vector<AdWithBid>& ads_with_bids : ads_with_bids_by_ig_) {
     if (ads_with_bids.empty()) {
       failed_to_bid_count += 1;
@@ -383,6 +410,10 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
         PS_VLOG(kNoisyInfo, log_context_) << validation_status.message();
         if (validation_status.code() == absl::StatusCode::kInvalidArgument) {
           zero_bid_count += 1;
+        } else if (validation_status.code() ==
+                   absl::StatusCode::kPermissionDenied) {
+          // Received allowComponentAuction=false.
+          ++rejected_component_bid_count;
         }
       } else {
         DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
@@ -400,13 +431,18 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
   LogIfError(metric_context_->LogHistogram<metric::kBiddingFailedToBidPercent>(
       (static_cast<double>(failed_to_bid_count)) /
       ads_with_bids_by_ig_.size()));
-  LogIfError(metric_context_->LogUpDownCounter<metric::kBiddingTotalBidsCount>(
+  LogIfError(metric_context_->LogHistogram<metric::kBiddingTotalBidsCount>(
       received_bid_count));
   if (received_bid_count > 0) {
     LogIfError(metric_context_->LogUpDownCounter<metric::kBiddingZeroBidCount>(
         zero_bid_count));
     LogIfError(metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
         (static_cast<double>(zero_bid_count)) / received_bid_count));
+  }
+  if (rejected_component_bid_count > 0) {
+    LogIfError(
+        metric_context_->LogUpDownCounter<metric::kBiddingBidRejectedCount>(
+            rejected_component_bid_count));
   }
   LogIfError(metric_context_->LogUpDownCounter<metric::kBiddingDebugUrlCount>(
       total_debug_urls_count));
@@ -416,13 +452,15 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
 }
 
 void GenerateBidsBinaryReactor::EncryptResponseAndFinish(grpc::Status status) {
+  raw_response_.set_bidding_export_debug(log_context_.ShouldExportEvent());
   if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
     PS_VLOG(kPlain, log_context_)
         << "GenerateBidsRawResponse exported in EventMessage if consented";
     log_context_.SetEventMessageField(raw_response_);
   }
   // ExportEventMessage before encrypt response
-  log_context_.ExportEventMessage(/*if_export_consented=*/true);
+  log_context_.ExportEventMessage(
+      /*if_export_consented=*/true, log_context_.ShouldExportEvent());
 
   if (!EncryptResponse()) {
     PS_LOG(ERROR, log_context_)

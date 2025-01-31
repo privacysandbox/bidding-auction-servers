@@ -295,8 +295,9 @@ TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForBrowser) {
   GenerateBidsRawRequest raw_request;
   IGForBidding ig_for_bidding = MakeARandomInterestGroupForBiddingFromBrowser();
   ig_for_bidding.mutable_browser_signals()->clear_recency_ms();
-  BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
-                              kTestBuyerSignals, raw_request, false, false);
+  BuildGenerateBidsRawRequest(
+      {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
+      /*enable_debug_reporting=*/false, /*logging_enabled=*/false);
   ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
   ASSERT_TRUE(raw_request.interest_group_for_bidding(0).has_browser_signals());
   ASSERT_FALSE(raw_request.interest_group_for_bidding(0)
@@ -315,6 +316,7 @@ TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForBrowser) {
             EXPECT_TRUE(request.has_browser_signals());
             EXPECT_EQ(request.browser_signals().top_window_hostname(),
                       raw_request.publisher_name());
+            EXPECT_EQ(request.browser_signals().multi_bid_limit(), 2);
             EXPECT_EQ(request.browser_signals().seller(), raw_request.seller());
             EXPECT_TRUE(request.browser_signals().top_level_seller().empty());
             EXPECT_EQ(request.browser_signals().join_count(),
@@ -336,8 +338,9 @@ TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForBrowser) {
 TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForBrowserWithRecencyMs) {
   GenerateBidsRawRequest raw_request;
   IGForBidding ig_for_bidding = MakeARandomInterestGroupForBiddingFromBrowser();
-  BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
-                              kTestBuyerSignals, raw_request, true, true);
+  BuildGenerateBidsRawRequest(
+      {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
+      /*enable_debug_reporting=*/true, /*logging_enabled=*/true);
   ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
   ASSERT_TRUE(raw_request.interest_group_for_bidding(0).has_browser_signals());
   ASSERT_TRUE(raw_request.interest_group_for_bidding(0)
@@ -466,8 +469,9 @@ TEST_F(GenerateBidsBinaryReactorTest,
 TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForAndroid) {
   GenerateBidsRawRequest raw_request;
   IGForBidding ig_for_bidding = MakeARandomInterestGroupForBiddingFromAndroid();
-  BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
-                              kTestBuyerSignals, raw_request, false, true);
+  BuildGenerateBidsRawRequest(
+      {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
+      /*enable_debug_reporting=*/false, /*logging_enabled=*/true);
   ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
   ASSERT_TRUE(raw_request.interest_group_for_bidding(0).has_android_signals());
   ASSERT_TRUE(raw_request.top_level_seller().empty());
@@ -521,8 +525,9 @@ TEST_F(GenerateBidsBinaryReactorTest,
 TEST_F(GenerateBidsBinaryReactorTest, LoggingIsEnabledForConsentedDebug) {
   GenerateBidsRawRequest raw_request;
   IGForBidding ig_for_bidding = MakeARandomInterestGroupForBiddingFromBrowser();
-  BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
-                              kTestBuyerSignals, raw_request, false, true);
+  BuildGenerateBidsRawRequest(
+      {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
+      /*enable_debug_reporting=*/false, /*logging_enabled=*/true);
   ASSERT_TRUE(raw_request.consented_debug_config().is_consented());
 
   GenerateBidsRawResponse expected_raw_response;
@@ -666,14 +671,16 @@ TEST_F(GenerateBidsBinaryReactorTest, GeneratesBidsDespiteLoggingEnabled) {
   ASSERT_GT(bid_response.log_messages().logs_size(), 0);
 
   GenerateBidsRawRequest raw_request;
-  BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
-                              kTestBuyerSignals, raw_request, false, true);
+  BuildGenerateBidsRawRequest(
+      {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
+      /*enable_debug_reporting=*/false, /*logging_enabled=*/true);
   ASSERT_TRUE(raw_request.consented_debug_config().is_consented());
 
   GenerateBidsRawResponse expected_raw_response;
   for (AdWithBid& expected_bid : expected_bids) {
     *expected_raw_response.add_bids() = std::move(expected_bid);
   }
+  expected_raw_response.set_bidding_export_debug(true);
 
   EXPECT_CALL(byob_client_, Execute)
       .WillOnce(
@@ -784,7 +791,8 @@ TEST_F(GenerateBidsBinaryReactorTest, GeneratesBidsWithoutDebugUrls) {
 
   GenerateBidsRawRequest raw_request;
   BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
-                              kTestBuyerSignals, raw_request, false);
+                              kTestBuyerSignals, raw_request,
+                              /*enable_debug_reporting=*/false);
   ASSERT_FALSE(raw_request.enable_debug_reporting());
 
   GenerateBidsRawResponse expected_raw_response;
@@ -817,8 +825,47 @@ TEST_F(GenerateBidsBinaryReactorTest, GeneratesBidsWithDebugUrls) {
 
   GenerateBidsRawRequest raw_request;
   BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
-                              kTestBuyerSignals, raw_request, true);
+                              kTestBuyerSignals, raw_request,
+                              /*enable_debug_reporting=*/true);
   ASSERT_TRUE(raw_request.enable_debug_reporting());
+
+  GenerateBidsRawResponse expected_raw_response;
+  for (AdWithBid& expected_bid : expected_bids) {
+    *expected_raw_response.add_bids() = std::move(expected_bid);
+  }
+
+  EXPECT_CALL(byob_client_, Execute)
+      .WillOnce(
+          [bid_response = std::move(bid_response)](
+              const roma_service::GenerateProtectedAudienceBidRequest& request,
+              absl::Duration timeout, PABidCallback callback) mutable {
+            std::move(callback)(std::move(bid_response));
+            return absl::OkStatus();
+          });
+
+  CheckGenerateBids(raw_request, expected_raw_response);
+}
+
+TEST_F(GenerateBidsBinaryReactorTest,
+       GeneratesBidsWithoutDebugUrlsWhenDebugReportingDisabled) {
+  roma_service::GenerateProtectedAudienceBidResponse bid_response;
+  auto [ig_for_bidding, expected_bids] =
+      GetRandomIGAndAdWithBidsForSingleIG(&bid_response);
+  ASSERT_EQ(bid_response.bids_size(), 1);
+  bid_response.mutable_bids(0)
+      ->mutable_debug_report_urls()
+      ->set_auction_debug_loss_url(MakeARandomString());  // Should be filtered
+  bid_response.mutable_bids(0)
+      ->mutable_debug_report_urls()
+      ->set_auction_debug_win_url(MakeARandomString());  // Should be filtered
+  ASSERT_EQ(expected_bids.size(), 1);
+  ASSERT_FALSE(expected_bids[0].has_debug_report_urls());
+
+  GenerateBidsRawRequest raw_request;
+  BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
+                              kTestBuyerSignals, raw_request,
+                              /*enable_debug_reporting=*/false);
+  ASSERT_FALSE(raw_request.enable_debug_reporting());
 
   GenerateBidsRawResponse expected_raw_response;
   for (AdWithBid& expected_bid : expected_bids) {
@@ -844,7 +891,8 @@ TEST_F(GenerateBidsBinaryReactorTest, GeneratesBidsWithoutLargeDebugUrls) {
   ASSERT_EQ(bid_response.bids_size(), 1);
   bid_response.mutable_bids(0)
       ->mutable_debug_report_urls()
-      ->set_auction_debug_loss_url(MakeARandomStringOfLength(65538));
+      ->set_auction_debug_loss_url(
+          MakeARandomStringOfLength(65538));  // Should be filtered
   ASSERT_EQ(expected_bids.size(), 1);
   ASSERT_TRUE(expected_bids[0].has_debug_report_urls());
   expected_bids[0].mutable_debug_report_urls()->clear_auction_debug_loss_url();
@@ -912,7 +960,8 @@ TEST_F(GenerateBidsBinaryReactorTest, GeneratesBidsWithDebugUrlsWithinMaxSize) {
 
   GenerateBidsRawRequest raw_request;
   BuildGenerateBidsRawRequest(igs_for_bidding, kTestAuctionSignals,
-                              kTestBuyerSignals, raw_request, true);
+                              kTestBuyerSignals, raw_request,
+                              /*enable_debug_reporting=*/true);
   ASSERT_TRUE(raw_request.enable_debug_reporting());
 
   int i = 0;
@@ -970,6 +1019,33 @@ TEST_F(GenerateBidsBinaryReactorTest, TimeoutIsCorreclyPassedToByobClient) {
 
   CheckGenerateBids(raw_request, expected_raw_response,
                     {.roma_timeout_ms = "2000ms"});
+}
+
+TEST_F(GenerateBidsBinaryReactorTest, GeneratesBidWithReportingIds) {
+  roma_service::GenerateProtectedAudienceBidResponse bid_response;
+  auto [ig_for_bidding, expected_bids] =
+      GetRandomIGAndAdWithBidsForSingleIG(&bid_response);
+  ASSERT_EQ(expected_bids.size(), 1);
+  ASSERT_TRUE(expected_bids[0].has_buyer_and_seller_reporting_id());
+  ASSERT_TRUE(expected_bids[0].has_selected_buyer_and_seller_reporting_id());
+
+  GenerateBidsRawRequest raw_request;
+  BuildGenerateBidsRawRequest({ig_for_bidding}, kTestAuctionSignals,
+                              kTestBuyerSignals, raw_request);
+
+  GenerateBidsRawResponse expected_raw_response;
+  *expected_raw_response.add_bids() = std::move(expected_bids[0]);
+
+  EXPECT_CALL(byob_client_, Execute)
+      .WillOnce(
+          [bid_response = std::move(bid_response)](
+              const roma_service::GenerateProtectedAudienceBidRequest& request,
+              absl::Duration timeout, PABidCallback callback) mutable {
+            std::move(callback)(std::move(bid_response));
+            return absl::OkStatus();
+          });
+
+  CheckGenerateBids(raw_request, expected_raw_response);
 }
 
 }  // namespace

@@ -619,6 +619,10 @@ AdWithBid MakeARandomAdWithBid(int64_t seed, bool debug_reporting_enabled,
   bid.set_modeling_signals(seed);
   bid.set_bid_currency("USD");
   bid.set_buyer_reporting_id(absl::StrFormat("id_%s", random_string));
+  bid.set_buyer_and_seller_reporting_id(
+      absl::StrFormat("id_%s", random_string));
+  bid.set_selected_buyer_and_seller_reporting_id(
+      absl::StrFormat("id_%s", random_string));
   if (debug_reporting_enabled) {
     bid.mutable_debug_report_urls()->set_auction_debug_win_url(
         absl::StrFormat("%s/win", random_url));
@@ -646,6 +650,10 @@ roma_service::ProtectedAudienceBid MakeARandomRomaProtectedAudienceBid(
   bid.set_modeling_signals(seed);
   bid.set_bid_currency("USD");
   bid.set_buyer_reporting_id(absl::StrFormat("id_%s", random_string));
+  bid.set_buyer_and_seller_reporting_id(
+      absl::StrFormat("id_%s", random_string));
+  bid.set_selected_buyer_and_seller_reporting_id(
+      absl::StrFormat("id_%s", random_string));
   if (debug_reporting_enabled) {
     bid.mutable_debug_report_urls()->set_auction_debug_win_url(
         absl::StrFormat("%s/win", random_url));

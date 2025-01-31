@@ -32,13 +32,18 @@ inline constexpr char kEgressArgs[] =
 // - registerAdBeacon() API to register the interation reporting urls/ Fenced
 //   frame reporting urls.
 constexpr absl::string_view kReportWinWrapperFunction = R"JS_CODE(
-
+var ps_response = {
+    response: {},
+    logs: [],
+    errors: [],
+    warnings: []
+  }
 function reportWinEntryFunction(
     auctionConfig, perBuyerSignals, signalsForWinner, buyerReportingSignals,
     directFromSellerSignals, enable_logging, $extraArgs) {
   ps_sendReportToInvoked = false
   ps_registerAdBeaconInvoked = false
-  const ps_report_win_response = {
+  ps_response.response = {
     reportWinUrl: '',
     interactionReportingUrls: {},
   };
@@ -46,9 +51,9 @@ function reportWinEntryFunction(
   const ps_errors = [];
   const ps_warns = [];
   if (enable_logging) {
-    console.log = (...args) => ps_logs.push(JSON.stringify(args));
-    console.warn = (...args) => ps_warns.push(JSON.stringify(args));
-    console.error = (...args) => ps_errors.push(JSON.stringify(args));
+    console.log = (...args) => ps_response.logs.push(JSON.stringify(args));
+    console.warn = (...args) => ps_response.warnings.push(JSON.stringify(args));
+    console.error = (...args) => ps_response.errors.push(JSON.stringify(args));
   } else {
     console.log = console.warn = console.error = function() {};
   }
@@ -56,7 +61,7 @@ function reportWinEntryFunction(
     if (ps_sendReportToInvoked) {
       throw new Error('sendReportTo function invoked more than once');
     }
-    ps_report_win_response.reportWinUrl = url;
+    ps_response.response.reportWinUrl = url;
     ps_sendReportToInvoked = true;
   };
   globalThis.registerAdBeacon = function registerAdBeacon(eventUrlMap) {
@@ -64,7 +69,7 @@ function reportWinEntryFunction(
       throw new Error(
           'registerAdBeaconInvoked function invoked more than once');
     }
-    ps_report_win_response.interactionReportingUrls = eventUrlMap;
+    ps_response.response.interactionReportingUrls = eventUrlMap;
     ps_registerAdBeaconInvoked = true;
   };
   try {
@@ -74,12 +79,7 @@ function reportWinEntryFunction(
   } catch (ex) {
     console.error(ex.message);
   }
-  return {
-    response: ps_report_win_response,
-    logs: ps_logs,
-    errors: ps_errors,
-    warnings: ps_warns
-  };
+  return ps_response;
 }
 )JS_CODE";
 
@@ -88,8 +88,9 @@ function reportWinEntryFunction(
 // The wrapper supports:
 // - Generation of event level reporting urls for buyer
 // - Exporting console.logs from the AdTech execution.
-std::string GetBuyerWrappedCode(absl::string_view buyer_js_code,
-                                bool enable_protected_app_signals = false);
+std::string GetBuyerWrappedCode(
+    absl::string_view buyer_js_code, bool enable_protected_app_signals = false,
+    bool enable_private_aggregate_reporting = false);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

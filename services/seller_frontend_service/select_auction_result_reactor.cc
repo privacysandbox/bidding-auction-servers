@@ -19,6 +19,7 @@
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/util/cancellation_wrapper.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/seller_frontend_service/k_anon/k_anon_utils.h"
 #include "services/seller_frontend_service/util/validation_utils.h"
 #include "src/util/status_macro/status_util.h"
 
@@ -172,27 +173,47 @@ void SelectAuctionResultReactor::OnScoreAdsDone(
   } else {
     // Map AdScore to AuctionResult
     const auto& score_ad_response = *response;
+    should_export_debug_ = score_ad_response->auction_export_debug();
     if (score_ad_response->has_debug_info()) {
       server_common::DebugInfo& auction_log =
           *response_->mutable_debug_info()->add_downstream_servers();
       auction_log = std::move(*score_ad_response->mutable_debug_info());
       auction_log.set_server_name("auction");
     }
-    if (score_ad_response->has_ad_score() &&
-        score_ad_response->ad_score().buyer_bid() > 0) {
-      // Set metric signals for winner, used to collect
-      // metrics for requests with winners.
-      metric_context_->SetCustomState(kWinningAuctionAd, "");
+    const bool has_winner = score_ad_response->has_ad_score() &&
+                            score_ad_response->ad_score().buyer_bid() > 0;
+    const bool has_ghost_winners =
+        !score_ad_response->ghost_winning_ad_scores().empty();
+    PS_VLOG(5, log_context_) << "has_winner: " << has_winner
+                             << ", has_ghost_winners: " << has_ghost_winners
+                             << ", enable_kanon_: " << enable_kanon_;
+    if (has_winner || (enable_kanon_ && has_ghost_winners)) {
+      if (has_winner) {
+        // Set metric signals for winner, used to collect
+        // metrics for requests with winners.
+        metric_context_->SetCustomState(kWinningAuctionAd, "");
+      }
 
-      FinishWithResponse(CreateWinningAuctionResultCiphertext(
+      std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr;
+      if (enable_kanon_ && has_ghost_winners) {
+        kanon_data =
+            std::make_unique<KAnonAuctionResultData>(GetKAnonAuctionResultData(
+                has_winner ? score_ad_response->mutable_ad_score() : nullptr,
+                *score_ad_response->mutable_ghost_winning_ad_scores(),
+                log_context_));
+      }
+
+      FinishWithResponse(CreateNonChaffAuctionResultCiphertext(
+          request_->auction_config().ad_auction_result_nonce(),
           score_ad_response->ad_score(),
           GetBuyerIgsWithBidsMap(component_auction_bidding_groups_),
           component_auction_update_groups_, request_->client_type(),
-          *decrypted_request_, log_context_));
+          *decrypted_request_, log_context_, std::move(kanon_data)));
       return;
     }
   }
   FinishWithResponse(CreateChaffAuctionResultCiphertext(
+      request_->auction_config().ad_auction_result_nonce(),
       request_->client_type(), *decrypted_request_, log_context_));
 }
 
@@ -210,7 +231,8 @@ void SelectAuctionResultReactor::FinishWithStatus(const grpc::Status& status) {
     LogIfError(metric_context_->LogHistogram<metric::kSfeWithWinnerTimeMs>(
         static_cast<int>((absl::Now() - start_) / absl::Milliseconds(1))));
   }
-  log_context_.ExportEventMessage(/*if_export_consented=*/true);
+  log_context_.ExportEventMessage(/*if_export_consented=*/true,
+                                  should_export_debug_);
   Finish(status);
 }
 
@@ -234,9 +256,9 @@ void SelectAuctionResultReactor::FinishWithClientVisibleErrors(
   AuctionResult::Error auction_error;
   auction_error.set_code(static_cast<int>(ErrorCode::CLIENT_SIDE));
   auction_error.set_message(message);
-  FinishWithResponse(
-      CreateErrorAuctionResultCiphertext(auction_error, request_->client_type(),
-                                         *decrypted_request_, log_context_));
+  FinishWithResponse(CreateErrorAuctionResultCiphertext(
+      request_->auction_config().ad_auction_result_nonce(), auction_error,
+      request_->client_type(), *decrypted_request_, log_context_));
 }
 
 void SelectAuctionResultReactor::FinishWithServerVisibleErrors(
@@ -359,7 +381,8 @@ void SelectAuctionResultReactor::OnCancel() { client_contexts_.CancelAll(); }
 SelectAuctionResultReactor::SelectAuctionResultReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool enable_cancellation)
+    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    bool enable_buyer_private_aggregate_reporting, bool enable_kanon)
     : request_context_(context),
       request_(request),
       response_(response),
@@ -370,7 +393,8 @@ SelectAuctionResultReactor::SelectAuctionResultReactor(
       log_context_({}, server_common::ConsentedDebugConfiguration(),
                    [this]() { return response_->mutable_debug_info(); }),
       error_accumulator_(&log_context_),
-      enable_cancellation_(enable_cancellation) {
+      enable_cancellation_(enable_cancellation),
+      enable_kanon_(enable_kanon) {
   seller_domain_ = config_client_.GetStringParameter(SELLER_ORIGIN_DOMAIN);
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,

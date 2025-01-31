@@ -46,6 +46,11 @@ constexpr char kDebugReportUrlsPropertyForScoreAd[] = "debugReportUrls";
 constexpr char kScoreAdBlobVersion[] = "v1";
 constexpr char kIGOwnerPropertyForScoreAd[] = "interestGroupOwner";
 constexpr char kTopWindowHostnamePropertyForScoreAd[] = "topWindowHostname";
+constexpr char kBuyerReportingIdForScoreAd[] = "buyerReportingId";
+constexpr char kBuyerAndSellerReportingIdForScoreAd[] =
+    "buyerAndSellerReportingId";
+constexpr char kSelectedBuyerAndSellerReportingIdForScoreAd[] =
+    "selectedBuyerAndSellerReportingId";
 
 // TODO(b/306257710): Update to differentiate from kScoreAdBlobVersion.
 constexpr char kReportingBlobVersion[] = "v1";
@@ -56,6 +61,11 @@ constexpr int kArgSizeWithWrapper = 7;
 // because this is thousandths-of-a-cent,
 // which seems like an irrelevantly small amount for US Dollars.
 constexpr float kCurrencyFloatComparisonEpsilon = 0.00001f;
+
+// k-anon status enums used to populate kAnonStatus field in browserSignals of
+// reportWin().
+constexpr char kPassedAndEnforcedKAnonStatus[] = "passedAndEnforced";
+constexpr char kNotCalculatedKAnonStatus[] = "notCalculated";
 
 // See ScoreAdInput for more detail on each field.
 enum class ScoreAdArgs : std::uint8_t {

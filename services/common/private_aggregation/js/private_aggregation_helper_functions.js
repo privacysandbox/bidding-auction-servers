@@ -57,6 +57,7 @@ class PrivateAggregationUtilImpl {
   isUnsigned128BitInteger(number) {
     return false;
   }
+
   /**
    * Converts a 128-bit unsigned integer to an array of two 64-bit integers.
    *
@@ -64,14 +65,25 @@ class PrivateAggregationUtilImpl {
    * @return {Array<number>} An array of two 64-bit integers representing the 128-bit integer.
    * The first element of the array is the high 64 bits of the 128-bit integer, and the second
    * element is the low 64 bits of the 128-bit integer.
+   * @throws {TypeError} If bucket type is unrecognized.
    * @override
    */
   convertTo128BitArray(bucket) {
-    //Assume that the type of the bucket is BigInt. The type cannot be checked since
-    // closure_js_test does not support any features >ES6 including the BigInt type.
-    const highBits = bucket >>> 64; // Right shift 64 bits (zero-fill)
-    const lowBits = bucket & 0xffffffffffffffff; // Mask to get the lower 64 bits
-    return [highBits, lowBits];
+    if (typeof bucket === 'number') {
+      const highBits = bucket >>> 64; // Right shift 64 bits (zero-fill)
+      const lowBits = bucket & 0xffffffffffffffff; // Mask to get the lower 64 bits
+      return [highBits, lowBits];
+    } else if (typeof bucket === 'bigint') {
+      // Get the high and low bits as BigInts
+      const highBits = bucket >> BigInt(64);
+      const lowBits = bucket & BigInt('0xffffffffffffffff');
+      // Convert the BigInts back to regular numbers
+      const highBitsNumber = Number(highBits);
+      const lowBitsNumber = Number(lowBits);
+      return [highBitsNumber, lowBitsNumber];
+    } else {
+      throw new TypeError('bucket type not supported.');
+    }
   }
   /**
    * Converts numerical offset to BucketOffset.
@@ -247,10 +259,8 @@ class PrivateAggregationUtilImpl {
     // TODO(b/355034881): Add validation of SignalBucket and SignalValue's fields.
     /**
      * @const {?Object}
-     * @property {?number} bucket_128_bit
-     * @property {?Object} signal_bucket
-     * @property {?number} int_value
-     * @property {?Object} extended_value
+     * @property {?Object} bucket
+     * @property {?Object} value
      */
     const contribution = {
       bucket: {},

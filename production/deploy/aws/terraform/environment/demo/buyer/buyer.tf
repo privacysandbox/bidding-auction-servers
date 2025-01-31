@@ -15,7 +15,6 @@
  */
 
 locals {
-  region      = "" # Example: ["us-central1", "us-west1"]
   environment = "" # Must be <= 3 characters. Example: "abc"
 
   buyer_root_domain = "" # Example: "buyer.com"
@@ -41,45 +40,6 @@ locals {
   use_service_mesh = true
   # Whether to use TLS-encrypted communication between service mesh envoy sidecars. Defaults to false, as comms take place within a VPC and the critical payload is HPKE-encrypted, and said encryption is terminated inside a TEE.
   use_tls_with_mesh = false
-}
-
-provider "aws" {
-  region = local.region
-}
-
-module "buyer" {
-  source                                      = "../../../modules/buyer"
-  environment                                 = local.environment
-  region                                      = local.region
-  enclave_debug_mode                          = false # Example: false, set to true for extended logs
-  root_domain                                 = local.buyer_root_domain
-  root_domain_zone_id                         = "" # Example: "Z1011487GET92S4MN4CM"
-  certificate_arn                             = "" # Example: "arn:aws:acm:us-west-1:57473821111:certificate/59ebdcbe-2475-4b70-9079-7a360f5c1111"
-  operator                                    = local.buyer_operator
-  bfe_instance_ami_id                         = ""    # Example: "ami-0ea7735ce85ec9cf5"
-  bidding_instance_ami_id                     = ""    # Example: "ami-0f2f28fc0914f6575"
-  bfe_instance_type                           = ""    # Example: "c6i.2xlarge"
-  bidding_instance_type                       = ""    # Example: "c6i.2xlarge"
-  bfe_enclave_cpu_count                       = 6     # Example: 6
-  bfe_enclave_memory_mib                      = 12000 # Example: 12000
-  bidding_enclave_cpu_count                   = 6     # Example: 6
-  bidding_enclave_memory_mib                  = 12000 # Example: 12000
-  bfe_autoscaling_desired_capacity            = 3     # Example: 3
-  bfe_autoscaling_max_size                    = 5     # Example: 5
-  bfe_autoscaling_min_size                    = 1     # Example: 1
-  bidding_autoscaling_desired_capacity        = 3     # Example: 3
-  bidding_autoscaling_max_size                = 5     # Example: 5
-  bidding_autoscaling_min_size                = 1     # Example: 1
-  country_for_cert_auth                       = ""    # Example: "US"
-  business_org_for_cert_auth                  = ""    # Example: "Privacy Sandbox"
-  state_for_cert_auth                         = ""    # Example: "California"
-  org_unit_for_cert_auth                      = ""    # Example: "Bidding and Auction Servers"
-  locality_for_cert_auth                      = ""    # Example: "Mountain View"
-  kv_server_virtual_service_name              = local.tee_kv_server_exists ? "${local.tee_kv_server_domain}" : "PLACEHOLDER"
-  ad_retrieval_kv_server_virtual_service_name = local.tee_ad_retrieval_kv_server_exists ? "${local.tee_ad_retrieval_kv_server_domain}" : "PLACEHOLDER"
-  use_service_mesh                            = local.use_service_mesh
-  use_tls_with_mesh                           = local.use_tls_with_mesh
-  tee_kv_servers_port                         = local.tee_kv_servers_port
 
   runtime_flags = {
     BIDDING_PORT                      = "50051" # Do not change unless you are modifying the default AWS architecture.
@@ -110,7 +70,7 @@ module "buyer" {
     ENABLE_BIDDING_COMPRESSION                            = "" # Example: "true"
     TELEMETRY_CONFIG                                      = "" # Example: "mode: EXPERIMENT"
     ENABLE_OTEL_BASED_LOGGING                             = "" # Example: "true"
-    CONSENTED_DEBUG_TOKEN                                 = "" # Example: "123456"
+    CONSENTED_DEBUG_TOKEN                                 = "" # Example: "123456". Consented debugging requests increase server load in production. A high QPS of these requests can lead to unhealthy servers.
     DEBUG_SAMPLE_RATE_MICRO                               = "0"
     TEST_MODE                                             = "" # Example: "false"
     BUYER_CODE_FETCH_CONFIG                               = "" # Example:
@@ -144,9 +104,7 @@ module "buyer" {
     #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
     #    "enablePrivateAggregateReporting": false,
     #  }"
-    UDF_NUM_WORKERS     = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count, and should be equal for best performance.
-    JS_WORKER_QUEUE_LEN = "" # Example: "100".
-    ROMA_TIMEOUT_MS     = "" # Example: "10000"
+    ROMA_TIMEOUT_MS = "" # Example: "10000"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
@@ -172,7 +130,7 @@ module "buyer" {
     INFERENCE_SIDECAR_BINARY_PATH    = "" # Example: "/server/bin/inference_sidecar_<module_name>"
     INFERENCE_MODEL_BUCKET_NAME      = "" # Example: "<bucket_name>"
     INFERENCE_MODEL_CONFIG_PATH      = "" # Example: "model_config.json"
-    INFERENCE_MODEL_FETCH_PERIOD_MS  = "" # Example: "60000"
+    INFERENCE_MODEL_FETCH_PERIOD_MS  = "" # Example: "300000"
     INFERENCE_SIDECAR_RUNTIME_CONFIG = "" # Example:
     # "{
     #    "num_interop_threads": 4,
@@ -193,6 +151,80 @@ module "buyer" {
 
     ENABLE_CHAFFING        = "false"
     ENABLE_PRIORITY_VECTOR = "false"
+    # Possible values:
+    # NOT_FETCHED: No call to KV server is made. All interest groups are sent to generateBid().
+    # FETCHED_BUT_OPTIONAL: Call to KV server is made and must not fail. All interest groups are sent to generateBid() irrespective of whether they have bidding signals or not.
+    # Any other value/REQUIRED (default): Call to KV server is made and must not fail. Only those interest groups are sent to generateBid() that have at least one bidding signals key for which non-empty bidding signals are fetched.
+    BIDDING_SIGNALS_FETCH_MODE = "REQUIRED"
   }
-  consented_request_s3_bucket = "" # Example: ${name of a s3 bucket}
+}
+
+provider "aws" {
+  region = "us-east-1"
+  alias  = "us-east-1"
+}
+
+module "buyer-us-east-1" {
+  # --- Params in upper section are expected to change between regions. ---
+
+  providers = {
+    aws = aws.us-east-1
+  }
+  region          = "us-east-1"
+  certificate_arn = "" # Example: "arn:aws:acm:us-west-1:57473821111:certificate/59ebdcbe-2475-4b70-9079-7a360f5c1111"
+
+  # AMIs
+  bfe_instance_ami_id     = "" # Example: "ami-0ea7735ce85ec9cf5"
+  bidding_instance_ami_id = "" # Example: "ami-0f2f28fc0914f6575"
+
+  # Machine sizing
+  bfe_instance_type          = ""    # Example: "c6i.2xlarge"
+  bidding_instance_type      = ""    # Example: "c6i.2xlarge"
+  bfe_enclave_cpu_count      = 6     # Example: 6
+  bfe_enclave_memory_mib     = 12000 # Example: 12000
+  bidding_enclave_cpu_count  = 6     # Example: 6
+  bidding_enclave_memory_mib = 12000 # Example: 12000
+  runtime_flags = merge(local.runtime_flags, {
+    UDF_NUM_WORKERS     = "" # Example: "48" Must be <=vCPUs in bidding_enclave_cpu_count, and should be equal for best performance.
+    JS_WORKER_QUEUE_LEN = "" # Example: "100".
+  })
+
+  # Autoscaling
+  bfe_autoscaling_desired_capacity     = 3 # Example: 3
+  bfe_autoscaling_max_size             = 5 # Example: 5
+  bfe_autoscaling_min_size             = 1 # Example: 1
+  bidding_autoscaling_desired_capacity = 3 # Example: 3
+  bidding_autoscaling_max_size         = 5 # Example: 5
+  bidding_autoscaling_min_size         = 1 # Example: 1
+
+
+  # --- Params below are not generally expected to change between regions. ---
+
+  source              = "../../../modules/buyer"
+  environment         = local.environment
+  enclave_debug_mode  = false # Example: false, set to true for extended logs
+  root_domain         = local.buyer_root_domain
+  root_domain_zone_id = "" # Example: "Z1011487GET92S4MN4CM"
+  operator            = local.buyer_operator
+
+  # Certificate authority
+  country_for_cert_auth      = "" # Example: "US"
+  business_org_for_cert_auth = "" # Example: "Privacy Sandbox"
+  state_for_cert_auth        = "" # Example: "California"
+  org_unit_for_cert_auth     = "" # Example: "Bidding and Auction Servers"
+  locality_for_cert_auth     = "" # Example: "Mountain View"
+
+  # Trusted Key-Value Server Parameters; required for PAS.
+  kv_server_virtual_service_name              = local.tee_kv_server_exists ? "${local.tee_kv_server_domain}" : "PLACEHOLDER"
+  ad_retrieval_kv_server_virtual_service_name = local.tee_ad_retrieval_kv_server_exists ? "${local.tee_ad_retrieval_kv_server_domain}" : "PLACEHOLDER"
+  # NOTE THAT THE ONLY PORT ALLOWED HERE WHEN RUNNING WITH MESH IS 50051!
+  tee_kv_servers_port = local.tee_kv_servers_port
+
+  # Service Mesh (deprecated by AWS)
+  use_service_mesh  = local.use_service_mesh
+  use_tls_with_mesh = local.use_tls_with_mesh
+
+  # The value is required for "awss3" exporter defined in production/packaging/aws/common/ami/otel_collector_config.yaml.
+  # Alternatively, "awss3" must not be used in otel_collector_config.yaml.
+  consented_request_s3_bucket = "" # Example: ${name of a s3 bucket}.
 }

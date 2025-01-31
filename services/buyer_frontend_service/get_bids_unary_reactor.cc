@@ -54,7 +54,8 @@ void HandleSingleBidCompletion(
     absl::AnyInvocable<void(const absl::Status&) &&> on_error_response,
     absl::AnyInvocable<void() &&> on_empty_response,
     absl::AnyInvocable<void(std::unique_ptr<T>) &&> on_successful_response,
-    GetBidsResponse::GetBidsRawResponse& get_bid_raw_response) {
+    GetBidsResponse::GetBidsRawResponse& get_bid_raw_response,
+    bool& should_export_debug) {
   // Handle errors
   if (!raw_response.ok()) {
     std::move(on_error_response)(raw_response.status());
@@ -62,6 +63,7 @@ void HandleSingleBidCompletion(
   }
 
   auto response = *std::move(raw_response);
+  should_export_debug = response->bidding_export_debug();
   if (response->has_debug_info()) {
     server_common::DebugInfo& downstream_debug_info =
         *get_bid_raw_response.mutable_debug_info()->add_downstream_servers();
@@ -131,7 +133,8 @@ void LogIgMetric(const GetBidsRequest::GetBidsRawRequest& raw_request,
 GetBidsUnaryReactor::GetBidsUnaryReactor(
     grpc::CallbackServerContext& context,
     const GetBidsRequest& get_bids_request, GetBidsResponse& get_bids_response,
-    const BiddingSignalsAsyncProvider& bidding_signals_async_provider,
+    absl::Nullable<const BiddingSignalsAsyncProvider* const>
+        bidding_signals_async_provider,
     BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
     ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
@@ -147,7 +150,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
                                                  kBuyerKVMetadata)),
       bidding_metadata_(GrpcMetadataToRequestMetadata(context.client_metadata(),
                                                       kBiddingMetadata)),
-      bidding_signals_async_provider_(&bidding_signals_async_provider),
+      bidding_signals_async_provider_(bidding_signals_async_provider),
       kv_async_client_(kv_async_client),
       bidding_async_client_(&bidding_async_client),
       protected_app_signals_bidding_async_client_(pas_bidding_async_client),
@@ -178,7 +181,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
                           }),
       enable_cancellation_(config.enable_cancellation),
       enable_enforce_kanon_(config.enable_kanon &&
-                            raw_request_.enforce_kanon()) {
+                            raw_request_.enforce_kanon()),
+      bidding_signals_fetch_mode_(config.bidding_signals_fetch_mode) {
   if (enable_benchmarking) {
     std::string request_id = FormatTime(absl::Now());
     benchmarking_logger_ =
@@ -206,7 +210,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
 GetBidsUnaryReactor::GetBidsUnaryReactor(
     grpc::CallbackServerContext& context,
     const GetBidsRequest& get_bids_request, GetBidsResponse& get_bids_response,
-    BiddingSignalsAsyncProvider& bidding_signals_async_provider,
+    absl::Nullable<const BiddingSignalsAsyncProvider* const>
+        bidding_signals_async_provider,
     BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client, KVAsyncClient* kv_async_client,
@@ -241,7 +246,8 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
     log_context_.SetEventMessageField(*get_bids_raw_response_);
   }
   // ExportEventMessage before encrypt response
-  log_context_.ExportEventMessage(/*if_export_consented=*/true);
+  log_context_.ExportEventMessage(/*if_export_consented=*/true,
+                                  should_export_debug_);
   if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
     PS_LOG(ERROR, log_context_) << "Failed to encrypt the response";
     benchmarking_logger_->End();
@@ -561,7 +567,7 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
                          async_task_tracker_]() {  // OnCancel
                       async_task_tracker_.TaskCompleted(TaskStatus::CANCELLED);
                     }),
-                *get_bids_raw_response_);
+                *get_bids_raw_response_, should_export_debug_);
           },
           absl::Milliseconds(
               config_.protected_app_signals_generate_bid_timeout_ms));
@@ -581,6 +587,16 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
 
 void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV1(
     const BiddingSignalsRequest& bidding_signals_request) {
+  if (bidding_signals_fetch_mode_ == BiddingSignalsFetchMode::NOT_FETCHED) {
+    FinishWithStatus(grpc::Status(grpc::StatusCode::INTERNAL,
+                                  kCheckBiddingSignalsFetchFlagV1ErrorMsg));
+    return;
+  }
+  if (bidding_signals_async_provider_ == nullptr) {
+    FinishWithStatus(grpc::Status(grpc::StatusCode::INTERNAL,
+                                  kCheckBiddingSignalsProviderV1ErrorMsg));
+    return;
+  }
   auto kv_request =
       metric::MakeInitiatedRequest(metric::kKv, metric_context_.get())
           .release();
@@ -644,12 +660,22 @@ void GetBidsUnaryReactor::HandleV2Failure(const absl::Status& status,
 
 void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
     const BiddingSignalsRequest& bidding_signals_request) {
+  if (bidding_signals_fetch_mode_ == BiddingSignalsFetchMode::NOT_FETCHED) {
+    FinishWithStatus(grpc::Status(grpc::StatusCode::INTERNAL,
+                                  kCheckBiddingSignalsFetchFlagV2ErrorMsg));
+    return;
+  }
+  if (kv_async_client_ == nullptr) {
+    FinishWithStatus(grpc::Status(grpc::StatusCode::INTERNAL,
+                                  kCheckBiddingSignalsProviderV2ErrorMsg));
+    return;
+  }
   auto kv_request =
       metric::MakeInitiatedRequest(metric::kKv, metric_context_.get())
           .release();
   grpc::ClientContext* client_context = client_contexts_.Add();
-  auto maybe_bidding_signals_request =
-      CreateV2BiddingRequest(bidding_signals_request);
+  auto maybe_bidding_signals_request = CreateV2BiddingRequest(
+      bidding_signals_request, config_.propagate_buyer_signals_to_tkv);
   if (!maybe_bidding_signals_request.ok()) {
     PS_VLOG(kNoisyWarn, log_context_) << "Failed creating TKV bidding request. "
                                       << maybe_bidding_signals_request.status();
@@ -713,11 +739,15 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
     return;
   }
 
-  BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
-  UseKvV2(raw_request_.client_type(), config_.is_tkv_v2_browser_enabled,
-          config_.test_mode, config_.tkv_v2_address_empty)
-      ? MayGetProtectedAudienceBidsV2(bidding_signals_request)
-      : MayGetProtectedAudienceBidsV1(bidding_signals_request);
+  if (bidding_signals_fetch_mode_ != BiddingSignalsFetchMode::NOT_FETCHED) {
+    BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
+    UseKvV2(raw_request_.client_type(), config_.is_tkv_v2_browser_enabled,
+            config_.test_mode, config_.tkv_v2_address_empty)
+        ? MayGetProtectedAudienceBidsV2(bidding_signals_request)
+        : MayGetProtectedAudienceBidsV1(bidding_signals_request);
+  } else {
+    PrepareAndGenerateProtectedAudienceBid(std::make_unique<BiddingSignals>());
+  }
 }
 
 // Process Outputs from Actions to prepare bidding request.
@@ -729,27 +759,30 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
   absl::StatusOr<BiddingSignalJsonComponents> parsed_bidding_signals =
       ParseTrustedBiddingSignals(std::move(bidding_signals),
                                  raw_request_.buyer_input());
-  if (!parsed_bidding_signals.ok()) {
+  if (parsed_bidding_signals.ok()) {
+    get_bids_raw_response_->mutable_update_interest_group_list()->Swap(
+        &(parsed_bidding_signals->update_igs));
+
+    PS_VLOG(kStats, log_context_)
+        << "\nTrusted Bidding Signals Deserialize Time: "
+        << ToInt64Microseconds((absl::Now() - start_deserialize_time))
+        << " microseconds for " << (*parsed_bidding_signals).raw_size
+        << " bytes.";
+
+    bidding_signal_json_components_ = std::move(*parsed_bidding_signals);
+  } else if (bidding_signals_fetch_mode_ == BiddingSignalsFetchMode::REQUIRED) {
     PS_LOG(ERROR, log_context_) << parsed_bidding_signals.status();
     if (parsed_bidding_signals.status().code() ==
         absl::StatusCode::kInvalidArgument) {
       async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
     } else {
-      async_task_tracker_.TaskCompleted(TaskStatus::ERROR);
+      async_task_tracker_.TaskCompleted(
+          TaskStatus::ERROR, [this, &parsed_bidding_signals]() {
+            bid_errors_.push_back(parsed_bidding_signals.status().ToString());
+          });
     }
     return;
   }
-
-  get_bids_raw_response_->mutable_update_interest_group_list()->Swap(
-      &(parsed_bidding_signals->update_igs));
-
-  PS_VLOG(kStats, log_context_)
-      << "\nTrusted Bidding Signals Deserialize Time: "
-      << ToInt64Microseconds((absl::Now() - start_deserialize_time))
-      << " microseconds for " << (*parsed_bidding_signals).raw_size
-      << " bytes.";
-
-  bidding_signal_json_components_ = std::move(*parsed_bidding_signals);
 
   PriorityVectorConfig pv_config = {
       .priority_vector_enabled = config_.priority_vector_enabled,
@@ -757,12 +790,16 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
       .per_ig_priority_vectors =
           bidding_signal_json_components_.per_ig_priority_vectors};
 
+  PrepareGenerateBidsRequestResult result = PrepareGenerateBidsRequest(
+      raw_request_, std::move(bidding_signal_json_components_.bidding_signals),
+      bidding_signal_json_components_.raw_size, data_version, pv_config,
+      {.enable_kanon = enable_enforce_kanon_,
+       .require_bidding_signals =
+           bidding_signals_fetch_mode_ == BiddingSignalsFetchMode::REQUIRED});
+  LogIfError(metric_context_->LogHistogram<metric::kPercentIgsFiltered>(
+      static_cast<double>(result.percent_igs_filtered)));
   std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
-      raw_bidding_input = CreateGenerateBidsRawRequest(
-          raw_request_,
-          std::move(bidding_signal_json_components_.bidding_signals),
-          bidding_signal_json_components_.raw_size, data_version, pv_config,
-          enable_enforce_kanon_);
+      raw_bidding_input = std::move(result.raw_request);
   raw_bidding_input->set_is_sampled_for_debug(is_sampled_for_debug_);
   PS_VLOG(kOriginated, log_context_) << "GenerateBidsRequest:\n"
                                      << raw_bidding_input->ShortDebugString();
@@ -828,7 +865,7 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
                 [&async_task_tracker_ = async_task_tracker_]() {  // OnCancel
                   async_task_tracker_.TaskCompleted(TaskStatus::CANCELLED);
                 }),
-            *get_bids_raw_response_);
+            *get_bids_raw_response_, should_export_debug_);
       },
       absl::Milliseconds(config_.generate_bid_timeout_ms));
   if (!execute_result.ok()) {

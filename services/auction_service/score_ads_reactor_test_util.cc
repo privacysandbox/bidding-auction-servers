@@ -111,7 +111,7 @@ ScoreAdsResponse ScoreAdsReactorTestHelper::ExecuteScoreAds(
   ScoreAdsReactor reactor(&context, dispatcher, &request_, &response,
                           std::move(benchmarkingLogger_),
                           key_fetcher_manager_.get(), &crypto_client_,
-                          async_reporter.get(), runtime_config);
+                          *async_reporter, runtime_config);
   reactor.Execute();
   return response;
 }

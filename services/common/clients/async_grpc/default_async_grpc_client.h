@@ -156,6 +156,7 @@ class DefaultAsyncGrpcClient
 
   server_common::KeyFetcherManagerInterface* key_fetcher_manager_;
   CryptoClientWrapperInterface* crypto_client_;
+  std::string ca_cert_;
 
   server_common::CloudPlatform cloud_platform_;
 };
@@ -170,7 +171,8 @@ std::shared_ptr<grpc::Channel> CreateChannel(
     // Const string reference to prevent copies. string_view cannot be casted
     // to argument for grpc::CreateChannel.
     absl::string_view server_addr, bool compression = false, bool secure = true,
-    absl::string_view grpc_arg_default_authority = "");
+    absl::string_view grpc_arg_default_authority = "",
+    absl::string_view ca_cert = "/etc/roots.pem");
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

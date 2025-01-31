@@ -22,23 +22,25 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
-constexpr char kTestHash1[] = "hash1";
-constexpr char kTestHash2[] = "hash2";
+constexpr char kTestKey1[] = "key1";
+constexpr char kTestKey2[] = "key2";
 
 class DoublyLinkedListTest : public ::testing::Test {
  protected:
-  DoublyLinkedList dll_;
+  DoublyLinkedList<std::string, std::string> dll_;
 
-  std::unique_ptr<KAnonHashData> TestHashData1() {
-    return std::make_unique<KAnonHashData>(KAnonHashData{
-        .hash = kTestHash1,
-    });
+  std::unique_ptr<KAnonHashData<std::string, std::string>> TestHashData1() {
+    return std::make_unique<KAnonHashData<std::string, std::string>>(
+        KAnonHashData<std::string, std::string>{
+            .key = kTestKey1,
+        });
   }
 
-  std::unique_ptr<KAnonHashData> TestHashData2() {
-    return std::make_unique<KAnonHashData>(KAnonHashData{
-        .hash = kTestHash2,
-    });
+  std::unique_ptr<KAnonHashData<std::string, std::string>> TestHashData2() {
+    return std::make_unique<KAnonHashData<std::string, std::string>>(
+        KAnonHashData<std::string, std::string>{
+            .key = kTestKey2,
+        });
   }
 };
 
@@ -47,10 +49,10 @@ TEST_F(DoublyLinkedListTest, EmptyList) { EXPECT_EQ(dll_.Tail(), nullptr); }
 TEST_F(DoublyLinkedListTest, CanAddNode) {
   auto* node = dll_.InsertAtFront(TestHashData1());
   ASSERT_NE(node, nullptr);
-  EXPECT_EQ(node->data->hash, kTestHash1);
+  EXPECT_EQ(node->data->key, kTestKey1);
 
   ASSERT_NE(dll_.Tail(), nullptr);
-  EXPECT_EQ(dll_.Tail()->data->hash, kTestHash1);
+  EXPECT_EQ(dll_.Tail()->data->key, kTestKey1);
 }
 
 TEST_F(DoublyLinkedListTest, CanRemoveNode) {
@@ -58,7 +60,7 @@ TEST_F(DoublyLinkedListTest, CanRemoveNode) {
 
   auto* node = dll_.InsertAtFront(TestHashData1());
   ASSERT_NE(node, nullptr);
-  EXPECT_EQ(node->data->hash, kTestHash1);
+  EXPECT_EQ(node->data->key, kTestKey1);
 
   ASSERT_NE(dll_.Tail(), nullptr);
   dll_.Remove(dll_.Tail());
@@ -70,15 +72,15 @@ TEST_F(DoublyLinkedListTest, InsertsInOrder) {
   ASSERT_EQ(dll_.Tail(), nullptr) << "Expected no item in an empty list";
 
   dll_.InsertAtFront(TestHashData1());
-  EXPECT_EQ(dll_.Tail()->data->hash, kTestHash1);
+  EXPECT_EQ(dll_.Tail()->data->key, kTestKey1);
 
   dll_.InsertAtFront(TestHashData2());
-  // Tail node still has hash1
-  EXPECT_EQ(dll_.Tail()->data->hash, kTestHash1);
+  // Tail node still has key1.
+  EXPECT_EQ(dll_.Tail()->data->key, kTestKey1);
 
-  // Remove the tail node and the new tail node should now contain hash2
+  // Remove the tail node and the new tail node should now contain key2.
   dll_.Remove(dll_.Tail());
-  EXPECT_EQ(dll_.Tail()->data->hash, kTestHash2);
+  EXPECT_EQ(dll_.Tail()->data->key, kTestKey2);
 
   // Remove tail node again and there should be no node remaining in the list.
   dll_.Remove(dll_.Tail());
@@ -89,15 +91,15 @@ TEST_F(DoublyLinkedListTest, MovesToFront) {
   ASSERT_EQ(dll_.Tail(), nullptr) << "Expected no item in an empty list";
 
   dll_.InsertAtFront(TestHashData1());
-  EXPECT_EQ(dll_.Tail()->data->hash, kTestHash1);
+  EXPECT_EQ(dll_.Tail()->data->key, kTestKey1);
 
   dll_.InsertAtFront(TestHashData2());
-  // Tail node still has hash1
-  EXPECT_EQ(dll_.Tail()->data->hash, kTestHash1);
+  // Tail node still has key1.
+  EXPECT_EQ(dll_.Tail()->data->key, kTestKey1);
 
   // Move the tail node to front.
   dll_.MoveToFront(dll_.Tail());
-  EXPECT_EQ(dll_.Tail()->data->hash, kTestHash2);
+  EXPECT_EQ(dll_.Tail()->data->key, kTestKey2);
 }
 
 }  // namespace

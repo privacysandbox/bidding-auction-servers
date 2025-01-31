@@ -54,11 +54,13 @@ constexpr char bar_browser_signals[] =
 constexpr char kExpectedBrowserSignalsWithRecencyMs[] =
     R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1868"],[1,"1954"]],"dataVersion":1787})json";
 absl::string_view kComponentBrowserSignals =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787,"multiBidLimit":2})json";
 absl::string_view kComponentBrowserSignalsWithRecencyMs =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787})json";
-
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787,"multiBidLimit":2})json";
+absl::string_view kComponentBrowserSignalsWithMultiBidLimit =
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787,"multiBidLimit":3})json";
 using ::google::protobuf::TextFormat;
+
 using ::google::protobuf::util::MessageToJsonString;
 
 using Request = GenerateBidsRequest;
@@ -135,29 +137,36 @@ std::string GetTestResponseWithPAgg(
                           render, bid, json_contribution);
 }
 
-std::string GetTestResponseWithBuyerReportingId(
+std::string GetTestResponseWithReportingIds(
     absl::string_view render, float bid, absl::string_view buyer_reporting_id,
+    absl::string_view bas_reporting_id, absl::string_view sbas_reporting_id,
     bool enable_adtech_code_logging = false) {
   if (enable_adtech_code_logging) {
     return absl::Substitute(R"JSON({
       "response": [{
         "render": "$0",
         "bid": $1,
-        "buyerReportingId": "$2"
+        "buyerReportingId": "$2",
+        "buyerAndSellerReportingId": "$3",
+        "selectedBuyerAndSellerReportingId": "$4"
       }],
       "logs": [],
       "errors": [],
       "warnings":[]
     })JSON",
-                            render, bid, buyer_reporting_id);
+                            render, bid, buyer_reporting_id, bas_reporting_id,
+                            sbas_reporting_id);
   }
 
   return absl::Substitute(R"JSON([{
     "render": "$0",
     "bid": $1,
-    "buyerReportingId": "$2"
+    "buyerReportingId": "$2",
+    "buyerAndSellerReportingId": "$3",
+    "selectedBuyerAndSellerReportingId": "$4"
   }])JSON",
-                          render, bid, buyer_reporting_id);
+                          render, bid, buyer_reporting_id, bas_reporting_id,
+                          sbas_reporting_id);
 }
 
 std::string GetTestResponseWithUnknownField(
@@ -437,6 +446,7 @@ TEST_F(GenerateBidsReactorTest, GenerateBidSuccessfulWithCodeWrapper) {
 
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   *raw_response.add_bids() = GetAdWithBidFromIgBar(kTestRenderUrl, 1);
+  raw_response.set_bidding_export_debug(true);
   Response ads;
   *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
   std::vector<IGForBidding> igs;
@@ -466,6 +476,7 @@ TEST_F(GenerateBidsReactorTest, PrivateAggregationObjectSetInResponse) {
   *bid.add_private_aggregation_contributions() = std::move(pAggContribution);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   *raw_response.add_bids() = std::move(bid);
+  raw_response.set_bidding_export_debug(true);
   Response ads;
   *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
   std::vector<IGForBidding> igs;
@@ -482,12 +493,16 @@ TEST_F(GenerateBidsReactorTest, PrivateAggregationObjectSetInResponse) {
                     ads);
 }
 
-TEST_F(GenerateBidsReactorTest, BuyerReportingIdSetInResponse) {
+TEST_F(GenerateBidsReactorTest, ReportingIdsSetInResponse) {
   bool enable_adtech_code_logging = true;
-  std::string response_json = GetTestResponseWithBuyerReportingId(
-      kTestRenderUrl, 1, kTestBuyerReportingId, enable_adtech_code_logging);
+  std::string response_json = GetTestResponseWithReportingIds(
+      kTestRenderUrl, 1, kTestBuyerReportingId, kTestBuyerAndSellerReportingId,
+      kTestSelectedBuyerAndSellerReportingId, enable_adtech_code_logging);
   AdWithBid bid = GetAdWithBidFromIgBar(kTestRenderUrl, 1);
   bid.set_buyer_reporting_id(kTestBuyerReportingId);
+  bid.set_buyer_and_seller_reporting_id(kTestBuyerAndSellerReportingId);
+  bid.set_selected_buyer_and_seller_reporting_id(
+      kTestSelectedBuyerAndSellerReportingId);
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   *raw_response.add_bids() = bid;
   Response ads;
@@ -823,6 +838,46 @@ TEST_F(GenerateBidsReactorTest,
                         .interest_groups_to_add = std::move(igs),
                     }),
                     ads);
+}
+
+TEST_F(GenerateBidsReactorTest,
+       CreatesGenerateBidInputsCorrectlyForComponentAuctionWithMultiBidLimit) {
+  std::string json = GetComponentAuctionResponse(
+      kTestRenderUrl, /*bid=*/1, /*allow_component_auction=*/true);
+  InterestGroupForBidding ig = GetIGForBiddingFoo();
+  AdWithBid bid = GetAdWithBidFromIgFoo(kTestRenderUrl, 1);
+  bid.set_allow_component_auction(true);
+  Response ads;
+  GenerateBidsResponse::GenerateBidsRawResponse raw_response;
+  *raw_response.add_bids() = bid;
+  *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
+  std::vector<IGForBidding> igs{ig};
+
+  EXPECT_CALL(dispatcher_, BatchExecute)
+      .WillOnce([&json, &ig](std::vector<DispatchRequest>& batch,
+                             BatchDispatchDoneCallback batch_callback) {
+        // Test setup check.
+        CHECK_EQ(batch.size(), 1)
+            << absl::InternalError("Test setup error. Batch size must be 1.");
+        auto input = batch.at(0).input;
+        CHECK_EQ(batch.size(), 1)
+            << absl::InternalError("Test setup error. Input size must be 6.");
+        CheckCorrectnessOfIg(*input[ArgIndex(GenerateBidArgs::kInterestGroup)],
+                             ig);
+        EXPECT_EQ(*input[ArgIndex(GenerateBidArgs::kAuctionSignals)],
+                  R"JSON({"auction_signal": "test 1"})JSON");
+        EXPECT_EQ(*input[ArgIndex(GenerateBidArgs::kBuyerSignals)],
+                  R"JSON({"buyer_signal": "test 2"})JSON");
+        EXPECT_EQ(*input[ArgIndex(GenerateBidArgs::kTrustedBiddingSignals)],
+                  kTestTrustedBiddingSignals);
+        EXPECT_EQ(*input[ArgIndex(GenerateBidArgs::kDeviceSignals)],
+                  kComponentBrowserSignalsWithMultiBidLimit);
+        return FakeExecute(batch, std::move(batch_callback), json);
+      });
+  CheckGenerateBids(
+      BuildRawRequestForComponentAuction(
+          {.interest_groups_to_add = std::move(igs), .multi_bid_limit = 3}),
+      ads);
 }
 
 TEST_F(GenerateBidsReactorTest,

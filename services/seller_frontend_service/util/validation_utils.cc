@@ -144,7 +144,8 @@ bool ValidateComponentAuctionResult(
         auction_result.auction_params().component_seller());
     // The PerComponentSellerConfig is optional.
     if (per_component_seller_config_itr != per_component_seller_configs.end()) {
-      auto component_seller_config = per_component_seller_config_itr->second;
+      const auto& component_seller_config =
+          per_component_seller_config_itr->second;
       // Check if a particular currency is expected.
       if (!component_seller_config.expected_currency().empty()) {
         expected_component_seller_currency =

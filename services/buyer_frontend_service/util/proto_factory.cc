@@ -14,6 +14,8 @@
 
 #include "services/buyer_frontend_service/util/proto_factory.h"
 
+#include <algorithm>
+
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 #include "services/common/util/json_util.h"
@@ -125,12 +127,12 @@ void CopyIGFromDeviceToIGForBidding(
   }
 }
 
-std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
+PrepareGenerateBidsRequestResult PrepareGenerateBidsRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
     std::unique_ptr<rapidjson::Value> bidding_signals_obj,
     const size_t signal_size, uint32_t data_version,
     const PriorityVectorConfig& priority_vector_config,
-    const bool enable_kanon) {
+    const PrepareGenerateBidsRequestOptions& options) {
   auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
   const BuyerInput& buyer_input = get_bids_raw_request.buyer_input();
 
@@ -142,48 +144,69 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
   }
 
   // 1. Set interest groups (IGs) for bidding.
+  int num_filtered_igs = 0;
   if (buyer_input.interest_groups_size() > 0) {
     long avg_signal_size_per_ig =
         signal_size / buyer_input.interest_groups_size();
+
     // Iterate through each IG from device.
     for (int i = 0; i < buyer_input.interest_groups_size(); i++) {
-      // Skip IG if it has no name or bidding signals keys.
       const auto& ig_from_device = buyer_input.interest_groups(i);
+
+      // Skip IG if it has no name or if bidding signals are required but the IG
+      // has no bidding signals keys.
       if (ig_from_device.name().empty() ||
-          ig_from_device.bidding_signals_keys().empty()) {
+          (options.require_bidding_signals &&
+           ig_from_device.bidding_signals_keys().empty())) {
         continue;
       }
 
+      // Filter IGs with negative priority when PV is enabled.
       if (priority_vector_config.priority_vector_enabled &&
           interest_group_priorities[ig_from_device.name()] < 0) {
         PS_VLOG(8) << absl::StrFormat(
             "Filtered out IG from bid generation: (IG name: %s, priority: %f)",
             ig_from_device.name(),
             interest_group_priorities[ig_from_device.name()]);
+        num_filtered_igs++;
         continue;
       }
 
       // Get parsed trusted bidding signals for this IG.
-      absl::StatusOr<ParsedTrustedBiddingSignals> parsed_signals =
-          GetSignalsForIG(ig_from_device.bidding_signals_keys(),
-                          *bidding_signals_obj, avg_signal_size_per_ig);
-      // Skip IG if it has no parsed trusted bidding signals.
-      if (!parsed_signals.ok() || parsed_signals->json.empty()) {
+      absl::StatusOr<ParsedTrustedBiddingSignals> parsed_signals;
+      if (bidding_signals_obj) {
+        parsed_signals =
+            GetSignalsForIG(ig_from_device.bidding_signals_keys(),
+                            *bidding_signals_obj, avg_signal_size_per_ig);
+      }
+
+      // Skip IG if bidding signals are required but the IG has no parsed
+      // trusted bidding signals.
+      bool has_parsed_signals =
+          parsed_signals.ok() && !parsed_signals->json.empty();
+      if (options.require_bidding_signals && !has_parsed_signals) {
         continue;
       }
+
       // Initialize IG for bidding.
       auto mutable_ig_for_bidding =
           generate_bids_raw_request->mutable_interest_group_for_bidding()
               ->Add();
-      // Only add trusted bidding signals keys that are parsed.
-      // TODO(b/308793587): Optimize.
-      for (const std::string& key : parsed_signals->keys) {
-        mutable_ig_for_bidding->add_trusted_bidding_signals_keys(key);
+      if (has_parsed_signals) {
+        // Only add trusted bidding signals keys that are parsed.
+        // TODO(b/308793587): Optimize.
+        for (const std::string& key : parsed_signals->keys) {
+          mutable_ig_for_bidding->add_trusted_bidding_signals_keys(key);
+        }
+        // Set trusted bidding signals to include only those signals that are
+        // parsed.
+        mutable_ig_for_bidding->set_trusted_bidding_signals(
+            std::move(parsed_signals->json));
+      } else {
+        mutable_ig_for_bidding->set_trusted_bidding_signals(
+            kNullBiddingSignalsJson);
       }
-      // Set trusted bidding signals to include only those signals that are
-      // parsed.
-      mutable_ig_for_bidding->set_trusted_bidding_signals(
-          std::move(parsed_signals->json));
+
       // Copy other properties from IG from device to IG for bidding.
       CopyIGFromDeviceToIGForBidding(ig_from_device, mutable_ig_for_bidding);
     }
@@ -236,7 +259,7 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
 
   // 11. Set multi bid limit.
   generate_bids_raw_request->set_multi_bid_limit(kDefaultMultiBidLimit);
-  if (enable_kanon) {
+  if (options.enable_kanon) {
     generate_bids_raw_request->set_enforce_kanon(
         get_bids_raw_request.enforce_kanon());
     int bid_limit = get_bids_raw_request.multi_bid_limit();
@@ -251,7 +274,10 @@ std::unique_ptr<GenerateBidsRawRequest> CreateGenerateBidsRawRequest(
         get_bids_raw_request.blob_versions();
   }
 
-  return generate_bids_raw_request;
+  double percent_igs_filtered = static_cast<double>(num_filtered_igs) /
+                                std::max(1, buyer_input.interest_groups_size());
+  return {.raw_request = std::move(generate_bids_raw_request),
+          .percent_igs_filtered = percent_igs_filtered};
 }
 
 std::unique_ptr<GenerateProtectedAppSignalsBidsRawRequest>

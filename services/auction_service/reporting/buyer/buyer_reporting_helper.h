@@ -21,6 +21,7 @@
 #include "absl/status/statusor.h"
 #include "rapidjson/document.h"
 #include "services/auction_service/reporting/reporting_helper.h"
+#include "services/common/private_aggregation/private_aggregation_post_auction_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 /* Generates buyerDeviceSignals json input for reportWin() execution.
@@ -42,11 +43,12 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
 // Parses response from reportWin() udf execution
 absl::StatusOr<ReportWinResponse> ParseReportWinResponse(
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    absl::string_view response, RequestLogContext& log_context);
+    absl::string_view response, const BaseValues& base_values,
+    RequestLogContext& log_context);
 
 // Sets buyerReportingId, buyerAndSellerReportingId,
-// or IG name as necessary
-void SetBuyerReportingIds(
+// selectedBuyerAndSellerReportingId, or IG name as necessary
+void SetReportingIds(
     const BuyerReportingDispatchRequestData& buyer_reporting_metadata,
     rapidjson::Document& seller_device_signals);
 }  // namespace privacy_sandbox::bidding_auction_servers

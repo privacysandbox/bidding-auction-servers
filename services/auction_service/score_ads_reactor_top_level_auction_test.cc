@@ -12,7 +12,9 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+#include "api/bidding_auction_servers_cc_proto_builder.h"
 #include "gmock/gmock.h"
+#include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
@@ -22,6 +24,7 @@
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/test_init.h"
+#include "src/core/test/utils/proto_test_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -38,8 +41,37 @@ constexpr char kTestComponentEvent[] = "click";
 constexpr char kTestComponentInteractionReportingUrl[] =
     "http://componentInteraction.com";
 constexpr char kTestComponentSeller[] = "http://componentSeller.com";
+constexpr char kTestIgName[] = "TestIg";
+constexpr char kTestIgOwner[] = "TestIgOwner";
+constexpr char kTestAdRenderUrl[] = "http://test-ad-render-url.com";
+constexpr char kTestGhostWinnerAdRenderUrl[] =
+    "http://ghost-winner-ad-render-url.com";
+constexpr float kTestScore = 1.92;
+constexpr char kTestAdComponentRenderUrl[] =
+    "http://test-ad-component-render-url";
+constexpr int kTestIgIndex = 1;
+constexpr float kTestGhostWinnerBid = 2.0;
+constexpr float kTestWinnerBid = 1.0;
+constexpr char kTestBidCurrency[] = "testCurrency";
+constexpr char kTestAdMetadata[] = "testAdMetadata";
+constexpr char kTestSelectedBuyerAndSellerReportingId[] =
+    "testSelectedBuyerAndSellerReportingId";
+constexpr char kTestAdComponentAdRenderUrl[] =
+    "http://ad-component-render-url.com";
+constexpr char kTestGhostWinnerIgOwner[] = "TestGhostWinnerIgOwner";
+constexpr char kTestGhostWinnerIgOrigin[] = "TestGhostWinnerIgOrigin";
+constexpr char kTestGhostWinnerIgName[] = "TestGhostWinnerIgName";
+constexpr char kTestAdRenderUrlHash[] = "TestAdRenderUrlHash";
+constexpr char kTestAdComponentRenderUrlsHash[] =
+    "TestAdComponentRenderUrlsHash";
+constexpr char kTestReportingIdHash[] = "TestReportingIdHash";
+constexpr char kTestWinnerAdRenderUrlHash[] = "TestWinnerAdRenderUrlHash";
+constexpr char kTestWinnerAdComponentRenderUrlsHash[] =
+    "TestWinnerAdComponentRenderUrlsHash";
+constexpr char kTestWinnerReportingIdHash[] = "TestWinnerReportingIdHash";
 
 using RawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
+using google::scp::core::test::EqualsProto;
 
 RawRequest BuildTopLevelAuctionRawRequest(
     const std::vector<AuctionResult>& component_auctions,
@@ -463,6 +495,298 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest, DoesNotPerformDebugReporting) {
   ScoreAdsReactorTestHelper test_helper;
   EXPECT_CALL(*test_helper.async_reporter, DoReport).Times(0);
   test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+}
+
+TEST_F(ScoreAdsReactorTopLevelAuctionTest, ScoresKAnonWinnerAndGhostWinners) {
+  auto win_reporting_urls =
+      WinReportingUrlsBuilder()
+          .SetBuyerReportingUrls(
+              WinReportingUrls_ReportingUrlsBuilder()
+                  .SetReportingUrl(kTestComponentWinReportingUrl)
+                  .InsertInteractionReportingUrls(
+                      {kTestComponentEvent,
+                       kTestComponentInteractionReportingUrl}))
+
+          .SetComponentSellerReportingUrls(
+              WinReportingUrls_ReportingUrlsBuilder()
+                  .SetReportingUrl(kTestComponentWinReportingUrl)
+                  .InsertInteractionReportingUrls(
+                      {kTestComponentEvent,
+                       kTestComponentInteractionReportingUrl}));
+  auto ghost_winner_for_top_level =
+      AuctionResult_KAnonGhostWinner_GhostWinnerForTopLevelAuctionBuilder()
+          .SetAdRenderUrl(kTestGhostWinnerAdRenderUrl)
+          .SetModifiedBid(kTestGhostWinnerBid)
+          .SetBidCurrency(kTestBidCurrency)
+          .SetAdMetadata(kTestAdMetadata)
+          .SetBuyerReportingId(kTestBuyerReportingId)
+          .SetSelectedBuyerAndSellerReportingId(
+              kTestSelectedBuyerAndSellerReportingId)
+          .SetBuyerAndSellerReportingId(kTestBuyerAndSellerReportingId)
+          .AddAdComponentRenderUrls(kTestAdComponentAdRenderUrl);
+  auto kanon_ghost_winner =
+      AuctionResult_KAnonGhostWinnerBuilder()
+          .SetInterestGroupIndex(kTestIgIndex)
+          .SetOwner(kTestGhostWinnerIgOwner)
+          .SetOrigin(kTestGhostWinnerIgOrigin)
+          .SetIgName(kTestGhostWinnerIgName)
+          .SetGhostWinnerForTopLevelAuction(
+              std::move(ghost_winner_for_top_level))
+          .SetKAnonJoinCandidates(
+              KAnonJoinCandidateBuilder()
+                  .SetAdRenderUrlHash(kTestAdRenderUrlHash)
+                  .AddAdComponentRenderUrlsHash(kTestAdComponentRenderUrlsHash)
+                  .SetReportingIdHash(kTestReportingIdHash));
+
+  AuctionResult component_auction_result =
+      AuctionResultBuilder()
+          .SetTopLevelSeller(kTestTopLevelSeller)
+          .SetAdRenderUrl(kTestAdRenderUrl)
+          .SetInterestGroupName(kTestIgName)
+          .SetInterestGroupOwner(kTestIgOwner)
+          .SetScore(kTestScore)
+          .SetAdType(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD)
+          .SetAuctionParams(AuctionResult_AuctionParamsBuilder()
+                                .SetCiphertextGenerationId(kTestGenerationId)
+                                .SetComponentSeller(kTestComponentSeller))
+          .SetWinReportingUrls(win_reporting_urls)
+          .AddAdComponentRenderUrls(kTestAdComponentRenderUrl)
+          .SetBid(kTestWinnerBid)
+          .AddKAnonGhostWinners(kanon_ghost_winner)
+          .SetKAnonWinnerJoinCandidates(
+              KAnonJoinCandidateBuilder()
+                  .SetAdRenderUrlHash(kTestWinnerAdRenderUrlHash)
+                  .AddAdComponentRenderUrlsHash(
+                      kTestWinnerAdComponentRenderUrlsHash)
+                  .SetReportingIdHash(kTestWinnerReportingIdHash));
+  ASSERT_GT(kTestGhostWinnerBid, kTestWinnerBid)
+      << "Ghost winner bid expected to "
+      << " be greater than winner bid (since same scores are used for the ads)";
+  RawRequest raw_request = BuildTopLevelAuctionRawRequest(
+      {component_auction_result}, kTestSellerSignals, kTestAuctionSignals,
+      kTestPublisherHostname);
+  raw_request.set_enforce_kanon(true);
+  raw_request.set_num_allowed_ghost_winners(1);
+  MockV8DispatchClient dispatcher;
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        std::vector<std::string> response;
+        for (const auto& request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportResultEntryFunction) == 0) {
+            response.emplace_back(kTestReportResultResponseJson);
+          } else {
+            response.push_back(
+                R"JSON(
+                {
+                    "response" : {
+                        "ad": {"key1":"adMetadata"},
+                        "desirability" : 1,
+                        "bid" : 0.1,
+                        "allowComponentAuction" : true
+                    },
+                    "logs":[]
+                }
+              )JSON");
+          }
+        }
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
+                           false);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = false,
+      .enable_adtech_code_logging = false,
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true,
+      .enable_kanon = true};
+  ScoreAdsReactorTestHelper test_helper;
+  PS_VLOG(5) << "Score Ad raw request: " << raw_request.DebugString();
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  PS_VLOG(5) << "Score Ad raw response: " << raw_response.DebugString();
+
+  ScoreAdsResponse::ScoreAdsRawResponse expected_raw_response;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        ad_score {
+          desirability: 1
+          render: "http://test-ad-render-url.com"
+          component_renders: "http://test-ad-component-render-url"
+          interest_group_name: "TestIg"
+          buyer_bid: 1
+          interest_group_owner: "TestIgOwner"
+          win_reporting_urls {
+            buyer_reporting_urls {
+              reporting_url: "http://componentReportingUrl.com"
+              interaction_reporting_urls {
+                key: "click"
+                value: "http://componentInteraction.com"
+              }
+            }
+            component_seller_reporting_urls {
+              reporting_url: "http://componentReportingUrl.com"
+              interaction_reporting_urls {
+                key: "click"
+                value: "http://componentInteraction.com"
+              }
+            }
+            top_level_seller_reporting_urls {
+              reporting_url: "http://reportResultUrl.com"
+              interaction_reporting_urls {
+                key: "click"
+                value: "http://event.com"
+              }
+            }
+          }
+          ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
+          buyer_reporting_id: ""
+          buyer_and_seller_reporting_id: ""
+          k_anon_join_candidate {
+            ad_render_url_hash: "TestWinnerAdRenderUrlHash"
+            ad_component_render_urls_hash: "TestWinnerAdComponentRenderUrlsHash"
+            reporting_id_hash: "TestWinnerReportingIdHash"
+          }
+        }
+        ghost_winning_ad_scores {
+          desirability: 1
+          render: "http://ghost-winner-ad-render-url.com"
+          component_renders: "http://ad-component-render-url.com"
+          interest_group_name: "TestGhostWinnerIgName"
+          buyer_bid: 2
+          interest_group_owner: "TestGhostWinnerIgOwner"
+          ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
+          buyer_bid_currency: "testCurrency"
+          k_anon_join_candidate {
+            ad_render_url_hash: "TestAdRenderUrlHash"
+            ad_component_render_urls_hash: "TestAdComponentRenderUrlsHash"
+            reporting_id_hash: "TestReportingIdHash"
+          }
+        }
+      )pb",
+      &expected_raw_response));
+  EXPECT_THAT(raw_response, EqualsProto(expected_raw_response));
+}
+
+TEST_F(ScoreAdsReactorTopLevelAuctionTest,
+       StillScoresGhostWinnerWhenThereIsNoWinner) {
+  auto win_reporting_urls =
+      WinReportingUrlsBuilder()
+          .SetBuyerReportingUrls(
+              WinReportingUrls_ReportingUrlsBuilder()
+                  .SetReportingUrl(kTestComponentWinReportingUrl)
+                  .InsertInteractionReportingUrls(
+                      {kTestComponentEvent,
+                       kTestComponentInteractionReportingUrl}))
+          .SetComponentSellerReportingUrls(
+              WinReportingUrls_ReportingUrlsBuilder()
+                  .SetReportingUrl(kTestComponentWinReportingUrl)
+                  .InsertInteractionReportingUrls(
+                      {kTestComponentEvent,
+                       kTestComponentInteractionReportingUrl}));
+  auto ghost_winner_for_top_level_auction =
+      AuctionResult_KAnonGhostWinner_GhostWinnerForTopLevelAuctionBuilder()
+          .SetAdRenderUrl(kTestGhostWinnerAdRenderUrl)
+          .SetModifiedBid(kTestGhostWinnerBid)
+          .SetBidCurrency(kTestBidCurrency)
+          .SetAdMetadata(kTestAdMetadata)
+          .SetBuyerReportingId(kTestBuyerReportingId)
+          .SetSelectedBuyerAndSellerReportingId(
+              kTestSelectedBuyerAndSellerReportingId)
+          .SetBuyerAndSellerReportingId(kTestBuyerAndSellerReportingId)
+          .AddAdComponentRenderUrls(kTestAdComponentAdRenderUrl);
+  auto kanon_ghost_winner =
+      AuctionResult_KAnonGhostWinnerBuilder()
+          .SetInterestGroupIndex(kTestIgIndex)
+          .SetOwner(kTestGhostWinnerIgOwner)
+          .SetOrigin(kTestGhostWinnerIgOrigin)
+          .SetIgName(kTestGhostWinnerIgName)
+          .SetGhostWinnerForTopLevelAuction(
+              std::move(ghost_winner_for_top_level_auction))
+          .SetKAnonJoinCandidates(
+              KAnonJoinCandidateBuilder()
+                  .SetAdRenderUrlHash(kTestAdRenderUrlHash)
+                  .AddAdComponentRenderUrlsHash(kTestAdComponentRenderUrlsHash)
+                  .SetReportingIdHash(kTestReportingIdHash));
+
+  AuctionResult component_auction_result =
+      AuctionResultBuilder()
+          .SetTopLevelSeller(kTestTopLevelSeller)
+          .SetIsChaff(false)
+          .SetAuctionParams(AuctionResult_AuctionParamsBuilder()
+                                .SetCiphertextGenerationId(kTestGenerationId)
+                                .SetComponentSeller(kTestComponentSeller))
+          .AddKAnonGhostWinners(kanon_ghost_winner);
+  RawRequest raw_request = BuildTopLevelAuctionRawRequest(
+      {component_auction_result}, kTestSellerSignals, kTestAuctionSignals,
+      kTestPublisherHostname);
+  raw_request.set_enforce_kanon(true);
+  raw_request.set_num_allowed_ghost_winners(1);
+  MockV8DispatchClient dispatcher;
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        std::vector<std::string> response;
+        for (const auto& request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportResultEntryFunction) == 0) {
+            response.emplace_back(kTestReportResultResponseJson);
+          } else {
+            response.push_back(
+                R"JSON(
+                {
+                    "response" : {
+                        "ad": {"key1":"adMetadata"},
+                        "desirability" : 1,
+                        "bid" : 0.1,
+                        "allowComponentAuction" : true
+                    },
+                    "logs":[]
+                }
+              )JSON");
+          }
+        }
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
+                           false);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = false,
+      .enable_adtech_code_logging = false,
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true,
+      .enable_kanon = true};
+  ScoreAdsReactorTestHelper test_helper;
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  PS_VLOG(5) << "Score Ad raw response: " << raw_response.DebugString();
+
+  ScoreAdsResponse::ScoreAdsRawResponse expected_raw_response;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        ghost_winning_ad_scores {
+          desirability: 1
+          render: "http://ghost-winner-ad-render-url.com"
+          component_renders: "http://ad-component-render-url.com"
+          interest_group_name: "TestGhostWinnerIgName"
+          buyer_bid: 2
+          interest_group_owner: "TestGhostWinnerIgOwner"
+          ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
+          buyer_bid_currency: "testCurrency"
+          k_anon_join_candidate {
+            ad_render_url_hash: "TestAdRenderUrlHash"
+            ad_component_render_urls_hash: "TestAdComponentRenderUrlsHash"
+            reporting_id_hash: "TestReportingIdHash"
+          }
+        }
+      )pb",
+      &expected_raw_response));
+  EXPECT_THAT(raw_response, EqualsProto(expected_raw_response));
 }
 
 }  // namespace

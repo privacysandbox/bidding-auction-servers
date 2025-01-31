@@ -187,6 +187,10 @@ TEST_F(KeyValueAsyncHttpClientTest,
                     absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
                         done_callback) {
         EXPECT_TRUE(expected_urls.contains(request.url));
+        EXPECT_TRUE(std::find(request.include_headers.begin(),
+                              request.include_headers.end(),
+                              kDataVersionResponseHeaderName) !=
+                    request.include_headers.end());
         HTTPResponse actual_http_response;
         actual_http_response.body = actual_response_body_json_string;
         // Add a valid header.
@@ -459,7 +463,8 @@ TEST_F(KeyValueAsyncHttpClientTest,
   callback_invoked.WaitForNotification();
 }
 
-TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
+TEST_F(KeyValueAsyncHttpClientTest,
+       MakesDSPUrlCorrectlyWithDuplicateKeyAndContainsDVInIncludeHeaders) {
   const GetBuyerValuesInput get_values_client_input = {
       {"url1", "url1", "url1"}, {}, "www.usatoday.com"};
   std::unique_ptr<GetBuyerValuesInput> input =
@@ -467,11 +472,16 @@ TEST_F(KeyValueAsyncHttpClientTest, MakesDSPUrlCorrectlyWithDuplicateKey) {
   const std::string expected_url =
       absl::StrCat(hostname_, "?hostname=www.usatoday.com&keys=url1");
   EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
-      .WillOnce(
-          [expected_url](
-              const HTTPRequest& request, int timeout_ms,
-              absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
-                  done_callback) { EXPECT_EQ(expected_url, request.url); });
+      .WillOnce([expected_url](
+                    const HTTPRequest& request, int timeout_ms,
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
+                        done_callback) {
+        EXPECT_EQ(expected_url, request.url);
+        EXPECT_TRUE(std::find(request.include_headers.begin(),
+                              request.include_headers.end(),
+                              kDataVersionResponseHeaderName) !=
+                    request.include_headers.end());
+      });
   CheckGetValuesFromKeysViaHttpClient(std::move(input));
 }
 

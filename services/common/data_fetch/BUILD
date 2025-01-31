@@ -87,11 +87,43 @@ cc_library(
 )
 
 cc_library(
+    name = "periodic_bucket_fetcher_metrics",
+    hdrs = ["periodic_bucket_fetcher_metrics.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//services/auction_service/udf_fetcher:auction_code_fetch_config_cc_proto",
+        "//services/bidding_service:bidding_code_fetch_config_cc_proto",
+        "//services/bidding_service:egress_schema_fetch_config_cc_proto",
+        "//services/common/data_fetch:version_util",
+        "//services/common/metric:server_definition",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "periodic_bucket_fetcher_metrics_test",
+    srcs = ["periodic_bucket_fetcher_metrics_test.cc"],
+    deps = [
+        ":periodic_bucket_fetcher_metrics",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "periodic_bucket_fetcher",
     srcs = ["periodic_bucket_fetcher.cc"],
     hdrs = ["periodic_bucket_fetcher.h"],
     deps = [
         ":fetcher_interface",
+        ":periodic_bucket_fetcher_metrics",
+        "//services/common/data_fetch:version_util",
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/functional:any_invocable",

@@ -26,11 +26,22 @@ cc_library(
     ],
     deps = [
         "//api:bidding_auction_servers_cc_proto",
+        "//services/common/compression:gzip",
         "//services/common/loggers:request_log_context",
         "//services/common/private_aggregation:private_aggregation_post_auction_util",
+        "//services/common/util:data_util",
         "//services/common/util:reporting_util",
+        "//services/common/util:scoped_cbor",
         "//services/seller_frontend_service/data:seller_frontend_data",
+        "//services/seller_frontend_service/util:cbor_common_util",
+        "@com_google_absl//absl/base:endian",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/communication:compression",
         "@google_privacysandbox_servers_common//src/logger:request_context_impl",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@libcbor//:cbor",
     ],
 )
 
@@ -43,11 +54,15 @@ cc_test(
     deps = [
         ":private_aggregation_helper",
         "//services/common/private_aggregation:private_aggregation_test_util",
+        "//services/common/test/utils:cbor_test_utils",
         "//services/common/test/utils:test_init",
+        "//services/common/util:request_response_constants",
         "//services/seller_frontend_service",
         "//services/seller_frontend_service/data:seller_frontend_data",
+        "//services/seller_frontend_service/util:cbor_common_util",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
     ],
 )

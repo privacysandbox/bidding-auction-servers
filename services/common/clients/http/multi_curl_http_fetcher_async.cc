@@ -110,7 +110,7 @@ static struct timeval OneSecond = {1, 0};
 
 MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
     server_common::Executor* executor, int64_t keepalive_interval_sec,
-    int64_t keepalive_idle_sec)
+    int64_t keepalive_idle_sec, std::string ca_cert)
     : executor_(executor),
       keepalive_idle_sec_(keepalive_idle_sec),
       keepalive_interval_sec_(keepalive_interval_sec),
@@ -130,14 +130,12 @@ MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
       multi_timer_event_(Event(
           event_base_.get(), /*fd=*/-1, /*event_type=*/0,
           /*event_callback=*/multi_curl_request_manager_.MultiTimerCallback,
-          /*arg=*/&multi_curl_request_manager_)) {
+          /*arg=*/&multi_curl_request_manager_)),
+      ca_cert_(std::move(ca_cert)) {
   multi_curl_request_manager_.Configure([this]() { PerformCurlUpdate(); },
                                         multi_timer_event_.get());
   // Start execution loop.
-  executor_->Run([this]() {
-    PS_VLOG(5) << "libevent scheduled the event loop";
-    event_base_dispatch(event_base_.get());
-  });
+  executor_->Run([this]() { event_base_dispatch(event_base_.get()); });
 }
 
 void MultiCurlHttpFetcherAsync::ShutdownEventLoop(int fd, short event_type,
@@ -147,7 +145,6 @@ void MultiCurlHttpFetcherAsync::ShutdownEventLoop(int fd, short event_type,
     return;
   }
 
-  PS_VLOG(5) << "Shutting down the event loop";
   event_base_loopbreak(self->event_base_.get());
   self->shutdown_complete_.Notify();
 }
@@ -306,6 +303,8 @@ MultiCurlHttpFetcherAsync::CreateCurlRequest(
     curl_easy_setopt(req_handle, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(req_handle, CURLOPT_PROXY_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(req_handle, CURLOPT_PROXY_SSL_VERIFYHOST, 0L);
+  } else {
+    curl_easy_setopt(req_handle, CURLOPT_CAINFO, ca_cert_.c_str());
   }
   // Set HTTP headers.
   if (!request.headers.empty()) {
@@ -453,7 +452,6 @@ void MultiCurlHttpFetcherAsync::PerformCurlUpdate()
   // Check for updates (provide computation for Libcurl to perform I/O).
   int msgs_left = -1;
   while (CURLMsg* msg = multi_curl_request_manager_.GetUpdate(&msgs_left)) {
-    PS_VLOG(10) << __func__ << ": A curl handle completed transfer";
     // Get data for completed message.
     auto [status, data_ptr] = GetResultFromMsg(msg);
     multi_curl_request_manager_.Remove(msg->easy_handle);
@@ -508,7 +506,6 @@ void MultiCurlHttpFetcherAsync::PerformCurlUpdate()
       }
       // invoke callback for handle.
       if (status.ok()) {
-        PS_VLOG(10) << "Invoking callback for successful curl operation";
         std::move(curl_request_data_ptr->done_callback)(
             std::move(curl_request_data_ptr->response_with_metadata));
       } else {

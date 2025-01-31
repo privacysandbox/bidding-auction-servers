@@ -14,93 +14,19 @@
 
 #include "pytorch_parser.h"
 
-#include <limits>
 #include <string>
 #include <vector>
 
-#include <rapidjson/writer.h>
 #include <torch/script.h>
 
 #include "rapidjson/document.h"
 #include "src/util/status_macro/status_macros.h"
 #include "utils/error.h"
+#include "utils/json_util.h"
+#include "utils/request_parser.h"
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
-
-// Template specialization for different data types
-template <typename T>
-absl::StatusOr<T> Convert(const std::string& str);
-
-template <>
-absl::StatusOr<float> Convert<float>(const std::string& str) {
-  float result;
-  if (absl::SimpleAtof(str, &result)) {
-    return result;
-  } else {
-    return absl::FailedPreconditionError("Error in float conversion");
-  }
-}
-
-template <>
-absl::StatusOr<double> Convert<double>(const std::string& str) {
-  double result;
-  if (absl::SimpleAtod(str, &result)) {
-    return result;
-  } else {
-    return absl::FailedPreconditionError("Error in double conversion");
-  }
-}
-
-template <>
-absl::StatusOr<int8_t> Convert<int8_t>(const std::string& str) {
-  int result;
-  if (absl::SimpleAtoi(str, &result)) {
-    if (result < std::numeric_limits<int8_t>::min() ||
-        result > std::numeric_limits<int8_t>::max()) {
-      return absl::FailedPreconditionError(
-          "The number is outside of bounds of int8_t.");
-    }
-    return result;  // Implicit conversion to int8_t.
-  } else {
-    return absl::FailedPreconditionError("Error in int8 conversion");
-  }
-}
-
-template <>
-absl::StatusOr<int16_t> Convert<int16_t>(const std::string& str) {
-  int result;
-  if (absl::SimpleAtoi(str, &result)) {
-    if (result < std::numeric_limits<int16_t>::min() ||
-        result > std::numeric_limits<int16_t>::max()) {
-      return absl::FailedPreconditionError(
-          "The number is outside of bounds of int16_t.");
-    }
-    return result;  // Implicit conversion to int16_t.
-  } else {
-    return absl::FailedPreconditionError("Error in int16 conversion");
-  }
-}
-
-template <>
-absl::StatusOr<int> Convert<int>(const std::string& str) {
-  int result;
-  if (absl::SimpleAtoi(str, &result)) {
-    return result;
-  } else {
-    return absl::FailedPreconditionError("Error in int32 conversion");
-  }
-}
-
-template <>
-absl::StatusOr<int64_t> Convert<int64_t>(const std::string& str) {
-  int64_t result;
-  if (absl::SimpleAtoi(str, &result)) {
-    return result;
-  } else {
-    return absl::FailedPreconditionError("Error in int64 conversion");
-  }
-}
 
 template <typename T>
 absl::StatusOr<torch::Tensor> ConvertFlatArrayToTensorInternal(
@@ -115,16 +41,6 @@ absl::StatusOr<torch::Tensor> ConvertFlatArrayToTensorInternal(
       torch::tensor(data_array, torch::dtype<T>()).view(tensor.tensor_shape);
 
   return py_torch_tensor;
-}
-
-// Converts rapidjson::Value& to a string
-absl::StatusOr<std::string> SerializeJsonDoc(const rapidjson::Value& document) {
-  rapidjson::StringBuffer string_buffer;
-  rapidjson::Writer<rapidjson::StringBuffer> writer(string_buffer);
-  if (document.Accept(writer)) {
-    return std::string(string_buffer.GetString());
-  }
-  return absl::InternalError("Error converting inner Json to String.");
 }
 
 // Converts a pytorch tensor to rapidjson::Value.

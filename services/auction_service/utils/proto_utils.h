@@ -36,9 +36,17 @@
 #include "services/common/loggers/request_log_context.h"
 #include "src/util/status_macro/status_macros.h"
 
-constexpr absl::string_view kEmptyScoringSignalsJson = "null";
+// Scoring signals are set to null when KV lookup fails. This is to maintain
+// parity with Chrome.
+constexpr absl::string_view kNullScoringSignalsJson = "null";
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+struct ReportingIdsParamForBidMetadata {
+  std::optional<absl::string_view> buyer_reporting_id;
+  std::optional<absl::string_view> buyer_and_seller_reporting_id;
+  std::optional<absl::string_view> selected_buyer_and_seller_reporting_id;
+};
 
 std::string MakeBidMetadata(
     absl::string_view publisher_hostname,
@@ -46,7 +54,8 @@ std::string MakeBidMetadata(
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
     absl::string_view top_level_seller, absl::string_view bid_currency,
-    const uint32_t seller_data_version);
+    const uint32_t seller_data_version,
+    ReportingIdsParamForBidMetadata reporting_ids = {});
 
 std::string MakeBidMetadataForTopLevelAuction(
     absl::string_view publisher_hostname,
@@ -75,8 +84,8 @@ void MayLogScoreAdsInput(const std::vector<std::shared_ptr<std::string>>& input,
                          RequestLogContext& log_context);
 
 absl::StatusOr<rapidjson::Document> ParseAndGetScoreAdResponseJson(
-    bool enable_ad_tech_code_logging, const std::string& response,
-    RequestLogContext& log_context);
+    bool enable_ad_tech_code_logging, RequestLogContext& log_context,
+    const rapidjson::Document& score_ads_wrapper_response);
 
 ScoreAdsResponse::AdScore::AdRejectionReason BuildAdRejectionReason(
     absl::string_view interest_group_owner,
@@ -100,13 +109,26 @@ constexpr int ScoreArgIndex(ScoreAdArgs arg) {
 }
 
 /**
+ * Maps GhostWinnerForTopLevelAuction object to AdWithBidMetadata object for
+ * creating dispatch requests and performing post auction operations.
+ * The ghost_winner object is invalidated after this method is called
+ * since this method will try to move values rather than copy.
+ */
+std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>
+MapKAnonGhostWinnerToAdWithBidMetadata(
+    absl::string_view owner, absl::string_view ig_name,
+    AuctionResult::KAnonGhostWinner::GhostWinnerForTopLevelAuction&
+        ghost_winner);
+
+/**
  * Maps component auction result object to AdWithBidMetadata object for
  * creating dispatch requests and performing post auction operations.
  * The auction result object is invalidated after this method is called
  * since this method will try to move values rather than copy.
  */
 std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>
-MapAuctionResultToAdWithBidMetadata(AuctionResult& auction_result);
+MapAuctionResultToAdWithBidMetadata(AuctionResult& auction_result,
+                                    bool k_anon_status = false);
 
 /**
  * Builds the ScoreAdInput, following the description here:

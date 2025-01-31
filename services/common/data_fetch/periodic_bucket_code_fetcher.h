@@ -52,10 +52,11 @@ class PeriodicBucketCodeFetcher : public PeriodicBucketFetcher {
  protected:
   // Handles the fetch context (containing the version as well as the data
   // fetched) by loading it into Roma.
-  bool OnFetch(const google::scp::core::AsyncContext<
-               google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
-               google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&
-                   context) override;
+  absl::Status OnFetch(
+      const google::scp::core::AsyncContext<
+          google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
+          google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&
+          context) override;
 
  private:
   // List the blobs in bucket_name_.

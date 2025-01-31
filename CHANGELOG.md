@@ -2,6 +2,81 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.6.0 (2025-01-29)
+
+
+### Features
+
+* [Private Aggregation] Add a helper function to parse contributions for winning ig
+* [Private Aggregation] Add helper function to group PrivateAggregateContributions by AdTech
+* [Private Aggregation] Append Private Aggregation wrapper to reportWin wrapper when enabled
+* [Private Aggregation] Cbor serialize igContributions
+* [Private Aggregation] Cbor serialize paggEventContribtions
+* [Private Aggregation] cbor serialize paggResponse
+* [Private Aggregation] Integrate Private Aggregation Manager to ScoreAdsReactor
+* [Private Aggregation] Integrate utils to cbor encode paggResponse with web_utils
+* [Private Aggregation] Modify reportResult js wrapper to use a global ps_response object
+* [Private Aggregation] Parse PAgg contributions from reportResult execution response
+* [Private Aggregation] Parse PAgg contributions from reportWin execution response
+* [Private Aggregation] Populate buyer PAgg contributions in AuctionResult
+* [Private Aggregation] Populate ig_idx in PrivateAggregateContributions for Seller
+* [Private Aggregation] Populate PAgg contributions from reportResult in ScoreAdsResponse
+* [Private Aggregation] Populate PAgg contributions from reportWin in ScoreAdsResponse
+* [Private Aggregation] Serialize list of PrivateAggregateContributions
+* Add Data Version Header Checking to an SUT
+* Add DebugReports proto and adtech_origin_debug_urls_map to SFE response
+* Add flag to skip call to buyer KV entirely
+* Add internal versions of customer supplied protos
+* add metrics for all periodic bucket fetches
+* Add per buyer signals
+* add seller flag to pass headers from sfe request to bfe request
+* add thread count metric for inference sidecar (AWS)
+* add thread count metric for inference sidecar (GCP)
+* add thread count metric for inference sidecar (GCP)
+* Clear seller debug urls in AdScore for single-seller auctions
+* Control whether bidding signals are required for generating bids via a flag
+* Demo multi region terraform example
+* Disable debug reporting on Android
+* Disallow inference model fetch period less than 1 min
+* Disallow TensorFlow stateful ops
+* Divert traffic at frontend load balancer with http header
+* Enable k-anon feature
+* Example multiregion terraform for AWS
+* Flag to skip call to seller KV entirely
+* Publish metrics when UDF returns allowComponentAuction=false
+* Refactor AWS Terraform in prep for multi-region
+* SFE response includes nonce passed in auction config
+* Skip buyer debug pings & populate debugReports for component winning IG
+* Skip KV or make signals optional via BIDDING/SCORING_SIGNALS_FETCH_MODE flags
+* Skip seller debug pings & return debug urls in AdScore for component winning IG
+* Support Egress IPv6 in AWS
+
+
+### Bug Fixes
+
+* Ad metadata string is properly escaped for scoreAd JS
+* allow periodically fetched bucket blobs to be nested in directories
+* BYOB - reserve memory for expected num bids in response.
+* Do not override enable_debug_reporting in secure_invoke
+* Don't accumulate inference reset count with bad input
+* DV Response Header should now be Parsed
+* if PAS is not enabled, dont check egress schema fetch configs
+* Modify Copybara Config to Include Cost Deps
+* Populate bid currency values in Debug Reporting
+* Prevent inclusion of empty ad metadata in chrome response
+* Randomize chaff request candidates
+* Request parsing - prevent batch failure on single request error
+* Set model fetcher metrics early to handle early return
+* sfe sends blob_versions to bfe
+* use latest al2023 image to build enclave parent
+
+
+### Documentation
+
+* Adds nonce field to select ad for mixed mode
+* component_seller will be returned from top level auction
+* Update comment on modified bid field in AdScore
+
 ## 4.5.0 (2024-12-03)
 
 
@@ -170,7 +245,7 @@ All notable changes to this project will be documented in this file. See [commit
 * Enable model validation for PyTorch
 * Enable TCMalloc for B&A inference
 * Export all available models as metric
-* Freeze a TensorFlow model ([bcc798c]( )), closes [#7]( )
+* Freeze a TensorFlow model
 * Implement a PyTorch model validator
 * Implement a TensorFlow model validator
 * Rename JS_NUM_WORKERS to UDF_NUM_WORKERS
@@ -248,7 +323,7 @@ All notable changes to this project will be documented in this file. See [commit
 * Add tee-container-log-redirect option in terraform
 * Add ToBaseValue Helper Function to convert corresponding base value strings to BaseValue Enum
 * Add ToEventTypeString for converting EventType enum into its corresponding string in JSON object returned by ROMA
-* Add utility function to calculate Signal Bucket's final value post auction ([3da9ab5]( )), closes [1#L192]( )
+* Add utility function to calculate Signal Bucket's final value post auction
 * Add utility function to parse and return BucketOffset from rapidjson document
 * Add wrapper and test files with method headers for contributeToHistogramOnEvent for bidding service
 * Added `isValidCustomEvent` validation function for common.privateAggregation
@@ -332,7 +407,7 @@ All notable changes to this project will be documented in this file. See [commit
 * Adds domain equality validations to buyer reporting UDF URL
 * Align plaintext buyer request for basic SUT with encrypted version
 * Allow up to 15 buyers when chaffing enabled
-* chaffing bugs ([027d5bb]( )), closes [/github.com/abseil/abseil-cpp/blob/master/absl/container/internal/raw_hash_set.h#L1572]( )
+* chaffing bugs
 * Changed base value string to be converted in ToBaseValue function and test cases
 * Changed raw string delimiter JSCODE to JS_CODE for consistency
 * Changed the input format of HandlePrivateAggregationReporting, added support for parsing PAgg bucket,  and add the logic for getting required BaseValues (winning-bid, highest-scoring-other-bid, rejection-reason).
@@ -473,7 +548,7 @@ All notable changes to this project will be documented in this file. See [commit
 * Adds domain equality validations to buyer reporting UDF URL
 * Align plaintext buyer request for basic SUT with encrypted version
 * Allow up to 15 buyers when chaffing enabled
-* chaffing bugs ([027d5bb]( )), closes [/github.com/abseil/abseil-cpp/blob/master/absl/container/internal/raw_hash_set.h#L1572]( )
+* chaffing bugs
 * Changed raw string delimiter JSCODE to JS_CODE for consistency
 * clean up log verbosity 3
 * Correct output_filter typo

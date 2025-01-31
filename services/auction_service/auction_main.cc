@@ -25,6 +25,7 @@
 #include "absl/debugging/symbolize.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/functional/bind_front.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
@@ -44,10 +45,13 @@
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/constants/common_constants.h"
+#include "services/common/data_fetch/periodic_bucket_fetcher_metrics.h"
 #include "services/common/data_fetch/version_util.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/feature_flags.h"
+#include "services/common/metric/udf_metric.h"
 #include "services/common/telemetry/configure_telemetry.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
@@ -84,9 +88,10 @@ ABSL_FLAG(std::optional<int64_t>, auction_tcmalloc_max_total_thread_cache_bytes,
           std::nullopt,
           "Maximum amount of cached memory in bytes across all threads (or "
           "logical CPUs)");
-ABSL_FLAG(std::optional<bool>, require_scoring_signals_for_scoring,
-          std::nullopt,
-          "Require scoring signals to exist for an AdWithBid to be scored.");
+ABSL_FLAG(
+    std::optional<std::string>, scoring_signals_fetch_mode, std::nullopt,
+    "Specifies whether KV lookup for scoring signals is made or not, and if "
+    "so, whether scoring signals are required for scoring ads or not.");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -96,6 +101,41 @@ using ::google::scp::cpio::CpioOptions;
 using ::google::scp::cpio::LogOption;
 using ::grpc::Server;
 using ::grpc::ServerBuilder;
+
+class ScoreAdsReactorCreator {
+ public:
+  ScoreAdsReactorCreator(server_common::Executor* executor,
+                         V8Dispatcher& v8_dispatcher,
+                         bool enable_auction_service_benchmark)
+      : v8_dispatch_client_(v8_dispatcher),
+        async_reporter_(std::make_unique<MultiCurlHttpFetcherAsync>(executor)),
+        enable_auction_service_benchmark_(enable_auction_service_benchmark) {
+    // TODO(b/334909636) : AsyncReporter should not own HttpFetcher,
+    // this needs to be decoupled so we can test different configurations.
+  }
+
+  std::unique_ptr<ScoreAdsReactor> Create(
+      grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
+      ScoreAdsResponse* response,
+      server_common::KeyFetcherManagerInterface* key_fetcher_manager,
+      CryptoClientWrapperInterface* crypto_client,
+      const AuctionServiceRuntimeConfig& runtime_config) {
+    std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarking_logger =
+        enable_auction_service_benchmark_
+            ? std::make_unique<ScoreAdsBenchmarkingLogger>(
+                  FormatTime(absl::Now()))
+            : std::make_unique<ScoreAdsNoOpLogger>();
+    return std::make_unique<ScoreAdsReactor>(
+        context, v8_dispatch_client_, request, response,
+        std::move(benchmarking_logger), key_fetcher_manager, crypto_client,
+        async_reporter_, runtime_config);
+  }
+
+ private:
+  V8DispatchClient v8_dispatch_client_;
+  AsyncReporter async_reporter_;
+  const bool enable_auction_service_benchmark_;
+};
 
 absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
     absl::string_view config_param_prefix) {
@@ -158,8 +198,8 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       AUCTION_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_auction_tcmalloc_max_total_thread_cache_bytes,
                         AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
-  config_client.SetFlag(FLAGS_require_scoring_signals_for_scoring,
-                        REQUIRE_SCORING_SIGNALS_FOR_SCORING);
+  config_client.SetFlag(FLAGS_scoring_signals_fetch_mode,
+                        SCORING_SIGNALS_FETCH_MODE);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -233,10 +273,9 @@ absl::Status RunServer() {
     config.worker_queue_max_items =
         config_client.GetIntParameter(JS_WORKER_QUEUE_LEN);
     config.number_of_workers = config_client.GetIntParameter(UDF_NUM_WORKERS);
+    config.RegisterFunctionBinding(RegisterLogCustomMetric());
     return config;
   }());
-  V8DispatchClient client(dispatcher);
-
   PS_RETURN_IF_ERROR(dispatcher.Init()) << "Could not start code dispatcher.";
 
   server_common::GrpcInit gprc_init;
@@ -286,34 +325,6 @@ absl::Status RunServer() {
   PS_RETURN_IF_ERROR(code_fetch_manager.Init())
       << "Failed to initialize UDF fetch.";
 
-  bool enable_auction_service_benchmark =
-      config_client.GetBooleanParameter(ENABLE_AUCTION_SERVICE_BENCHMARK);
-
-  // TODO(b/334909636) : AsyncReporter should not own HttpFetcher,
-  // this needs to be decoupled so we can test different configurations.
-  std::unique_ptr<AsyncReporter> async_reporter =
-      std::make_unique<AsyncReporter>(
-          std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()));
-  auto score_ads_reactor_factory =
-      [&client, &async_reporter, enable_auction_service_benchmark](
-          grpc::CallbackServerContext* context, const ScoreAdsRequest* request,
-          ScoreAdsResponse* response,
-          server_common::KeyFetcherManagerInterface* key_fetcher_manager,
-          CryptoClientWrapperInterface* crypto_client,
-          const AuctionServiceRuntimeConfig& runtime_config) {
-        std::unique_ptr<ScoreAdsBenchmarkingLogger> benchmarkingLogger;
-        if (enable_auction_service_benchmark) {
-          benchmarkingLogger = std::make_unique<ScoreAdsBenchmarkingLogger>(
-              FormatTime(absl::Now()));
-        } else {
-          benchmarkingLogger = std::make_unique<ScoreAdsNoOpLogger>();
-        }
-        return std::make_unique<ScoreAdsReactor>(
-            context, client, request, response, std::move(benchmarkingLogger),
-            key_fetcher_manager, crypto_client, async_reporter.get(),
-            runtime_config);
-      };
-
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_seller_debug_url_generation = enable_seller_debug_url_generation,
       .roma_timeout_ms = absl::StrCat(
@@ -335,18 +346,27 @@ absl::Status RunServer() {
       .enable_private_aggregate_reporting = enable_private_aggregate_reporting,
       .enable_cancellation = absl::GetFlag(FLAGS_enable_cancellation),
       .enable_kanon = absl::GetFlag(FLAGS_enable_kanon),
-      .require_scoring_signals_for_scoring = config_client.GetBooleanParameter(
-          REQUIRE_SCORING_SIGNALS_FOR_SCORING)};
+      .require_scoring_signals_for_scoring =
+          config_client.GetStringParameter(SCORING_SIGNALS_FETCH_MODE) !=
+              kSignalsNotFetched &&
+          config_client.GetStringParameter(SCORING_SIGNALS_FETCH_MODE) !=
+              kSignalsFetchedButOptional};
 
   PS_RETURN_IF_ERROR(
       code_fetch_manager.ConfigureRuntimeDefaults(runtime_config))
       << "Could not init runtime defaults for udf fetching.";
   SetBuyersEnabledForReportWinInRunTimeConfig(code_fetch_proto, runtime_config);
-
+  ScoreAdsReactorCreator reactor_creator(
+      executor.get(), dispatcher,
+      config_client.GetBooleanParameter(ENABLE_AUCTION_SERVICE_BENCHMARK));
   AuctionService auction_service(
-      std::move(score_ads_reactor_factory),
+      absl::bind_front(&ScoreAdsReactorCreator::Create, &reactor_creator),
       CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr),
       CreateCryptoClient(), std::move(runtime_config));
+
+  PS_RETURN_IF_ERROR(
+      PeriodicBucketFetcherMetrics::RegisterAuctionServiceMetrics(
+          code_fetch_proto));
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -370,6 +390,8 @@ absl::Status RunServer() {
   // Set max message size to 256 MB.
   builder.AddChannelArgument(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH,
                              256L * 1024L * 1024L);
+  // Set soft limit of metadata size to 256 KB.
+  builder.AddChannelArgument(GRPC_ARG_MAX_METADATA_SIZE, 64L * 1024L);
   builder.RegisterService(&auction_service);
 
   std::unique_ptr<Server> server(builder.BuildAndStart());

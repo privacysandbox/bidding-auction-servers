@@ -54,6 +54,28 @@ void ProcessAndAppendContributionsToPaggResponse(
   }
 }
 
+void ProcessAndAppendEventContributionsToPaggResponse(
+    absl::string_view event_name,
+    const rapidjson::GenericValue<rapidjson::UTF8<>>::ConstArray& contributions,
+    const BaseValues& base_values,
+    PrivateAggregateReportingResponse& pagg_response) {
+  for (const auto& event_obj : contributions) {
+    absl::StatusOr<PrivateAggregateContribution> new_contribution =
+        ParseAndProcessContribution(base_values, event_obj);
+    if (!new_contribution.ok()) {
+      // TODO(b/362803378): Add metrics for PAgg contributions.
+      PS_VLOG(kNoisyWarn) << "Invalid contribution: "
+                          << new_contribution.status();
+      continue;
+    }
+    PrivateAggregationEvent event;
+    event.set_event_type(EVENT_TYPE_CUSTOM);
+    event.set_event_name(event_name);
+    *new_contribution->mutable_event() = event;
+    *pagg_response.add_contributions() = std::move(new_contribution.value());
+  }
+}
+
 // Parses and processes contributions for a specific ad event type and appends
 // them to the `private_aggregation_reporting_response`.
 //
@@ -65,16 +87,15 @@ void ProcessAndAppendContributionsToPaggResponse(
 // private_aggregation_reporting_response: The PrivateAggregateReportingResponse
 //     object to append the processed contributions to.
 void HandleContribution(
-    EventType event_type, const std::string& id,
+    EventType event_type, const BaseValues& base_values,
     const rapidjson::Document& contribution_obj_doc,
-    const BaseValues& base_values,
     PrivateAggregateReportingResponse& private_aggregation_reporting_response) {
   absl::Status result = AppendAdEventContributionsToPaggResponse(
       event_type, contribution_obj_doc, base_values,
       private_aggregation_reporting_response);
   if (!result.ok()) {
-    PS_VLOG(kNoisyWarn) << "Error from Parsing Contributions from ID " << id
-                        << ": " << result;
+    PS_VLOG(kNoisyWarn) << "Error from Parsing Contributions from ID "
+                        << result;
   }
 }
 
@@ -125,25 +146,46 @@ void HandlePrivateAggregationReporting(
   // Parses contribution_obj_doc based on whether the ad won or lost
   // Use the static function instead of the lambda
   if (metadata.ad_id != metadata.most_desirable_ad_score_id) {
-    HandleContribution(EventType::EVENT_TYPE_LOSS, metadata.ad_id,
-                       contribution_obj_doc, metadata.base_values,
+    HandleContribution(EventType::EVENT_TYPE_LOSS, metadata.base_values,
+                       contribution_obj_doc,
                        private_aggregation_reporting_response);
-    HandleContribution(EventType::EVENT_TYPE_ALWAYS, metadata.ad_id,
-                       contribution_obj_doc, metadata.base_values,
+    HandleContribution(EventType::EVENT_TYPE_ALWAYS, metadata.base_values,
+                       contribution_obj_doc,
                        private_aggregation_reporting_response);
   } else {
-    HandleContribution(EventType::EVENT_TYPE_WIN, metadata.ad_id,
-                       contribution_obj_doc, metadata.base_values,
+    HandleContribution(EventType::EVENT_TYPE_WIN, metadata.base_values,
+                       contribution_obj_doc,
                        private_aggregation_reporting_response);
-    HandleContribution(EventType::EVENT_TYPE_ALWAYS, metadata.ad_id,
-                       contribution_obj_doc, metadata.base_values,
+    HandleContribution(EventType::EVENT_TYPE_ALWAYS, metadata.base_values,
+                       contribution_obj_doc,
                        private_aggregation_reporting_response);
-    HandleContribution(EventType::EVENT_TYPE_CUSTOM, metadata.ad_id,
-                       contribution_obj_doc, metadata.base_values,
+    HandleContribution(EventType::EVENT_TYPE_CUSTOM, metadata.base_values,
+                       contribution_obj_doc,
                        private_aggregation_reporting_response);
+  }
+  if (metadata.seller_origin) {
+    private_aggregation_reporting_response.set_adtech_origin(
+        *metadata.seller_origin);
   }
   score_ads_response.add_top_level_contributions()->Swap(
       &private_aggregation_reporting_response);
+}
+
+PrivateAggregateReportingResponse GetPrivateAggregateReportingResponseForWinner(
+    const BaseValues& base_values,
+    const rapidjson::Document& contribution_obj_doc) {
+  PrivateAggregateReportingResponse private_aggregation_reporting_response;
+
+  HandleContribution(EventType::EVENT_TYPE_WIN, base_values,
+                     contribution_obj_doc,
+                     private_aggregation_reporting_response);
+  HandleContribution(EventType::EVENT_TYPE_ALWAYS, base_values,
+                     contribution_obj_doc,
+                     private_aggregation_reporting_response);
+  HandleContribution(EventType::EVENT_TYPE_CUSTOM, base_values,
+                     contribution_obj_doc,
+                     private_aggregation_reporting_response);
+  return private_aggregation_reporting_response;
 }
 
 absl::Status AppendAdEventContributionsToPaggResponse(
@@ -188,8 +230,9 @@ absl::Status AppendAdEventContributionsToPaggResponse(
 
         continue;
       }
-      ProcessAndAppendContributionsToPaggResponse(event_array.GetArray(),
-                                                  base_values, pagg_response);
+      std::string event_name = member.name.GetString();
+      ProcessAndAppendEventContributionsToPaggResponse(
+          event_name, event_array.GetArray(), base_values, pagg_response);
     }
   } else {
     // Handle win, loss, always events
@@ -257,10 +300,12 @@ absl::StatusOr<PrivateAggregateContribution> ParseAndProcessContribution(
           absl::InvalidArgumentError(kInvalidPrivateAggregationBucketType));
       contribution.mutable_bucket()->mutable_signal_bucket()->Swap(
           &signal_bucket);
-    } else if (bucket_128_bit_it != bucket_it->value.MemberEnd()) {
+    } else if (bucket_128_bit_it != bucket_it->value.MemberEnd() &&
+               bucket_128_bit_it->value.IsObject()) {
       PS_ASSIGN_OR_RETURN(
           auto bucket_128_bit,
-          GetArrayMember(bucket_it->value, kSignalBucketBucket128Bit),
+          GetArrayMember(bucket_128_bit_it->value,
+                         kSignalBucketBucket128BitBucket128Bits),
           absl::InvalidArgumentError(kInvalidPrivateAggregationBucketType));
       for (auto& bit : bucket_128_bit) {
         contribution.mutable_bucket()

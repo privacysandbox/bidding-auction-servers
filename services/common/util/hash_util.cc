@@ -74,7 +74,6 @@ std::string ComputeSHA256(absl::string_view data, bool return_hex) {
     snprintf(output_buf + i_times_2, sizeof(output_buf) - i_times_2, "%02x",
              hash[i]);
   }
-
   return std::string(output_buf);
 }
 

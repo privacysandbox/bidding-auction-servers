@@ -328,6 +328,7 @@ genrule(
     ],
     outs = ["inference_sidecar_binary"],
     cmd_bash = """cat << EOF > '$@'
+rm -rf artifacts
 mkdir -p artifacts
 cp $(execpath :inference_sidecar_bin) artifacts/inference_sidecar_pytorch_v2_1_1
 EOF""",

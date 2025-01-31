@@ -134,7 +134,7 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
         auto mock = std::make_unique<MockScoreAdsReactor>(
             context_, dispatcher_, request_, response_, key_fetcher_manager,
             crypto_client_, runtime_config, std::move(benchmarkingLogger),
-            async_reporter_.get(), "");
+            *async_reporter_, "");
         EXPECT_CALL(*mock, Execute).Times(1);
         init_pending.DecrementCount();
         return mock;
@@ -220,7 +220,7 @@ TEST_F(AuctionServiceTest, SendsEmptyResponseIfNoAdIsDesirable) {
         return std::make_unique<ScoreAdsReactor>(
             context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client_, async_reporter_.get(), runtime_config);
+            crypto_client_, *async_reporter_, runtime_config);
       };
 
   config_client_.SetOverride(kTrue, TEST_MODE);
@@ -262,7 +262,7 @@ TEST_F(AuctionServiceTest, RomaExecutionErrorIsPropagated) {
         return std::make_unique<ScoreAdsReactor>(
             context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client_, async_reporter_.get(), runtime_config);
+            crypto_client_, *async_reporter_, runtime_config);
       };
 
   config_client_.SetOverride(kTrue, TEST_MODE);
@@ -300,7 +300,7 @@ TEST_F(AuctionServiceTest, AbortsIfMissingScoringSignals) {
         return std::make_unique<ScoreAdsReactor>(
             context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client_, async_reporter_.get(), runtime_config);
+            crypto_client_, *async_reporter_, runtime_config);
       };
 
   config_client_.SetOverride(kTrue, TEST_MODE);
@@ -335,7 +335,7 @@ TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
         return std::make_unique<ScoreAdsReactor>(
             context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client_, async_reporter_.get(), runtime_config);
+            crypto_client_, *async_reporter_, runtime_config);
       };
 
   config_client_.SetOverride(kTrue, TEST_MODE);
@@ -415,7 +415,7 @@ TEST_F(AuctionServiceTest, ScoresProtectedAppSignals) {
         return std::make_unique<ScoreAdsReactor>(
             context_, dispatcher_, request_, response_,
             std::make_unique<ScoreAdsNoOpLogger>(), key_fetcher_manager,
-            crypto_client_, async_reporter_.get(), runtime_config);
+            crypto_client_, *async_reporter_, runtime_config);
       };
 
   config_client_.SetOverride(kTrue, TEST_MODE);

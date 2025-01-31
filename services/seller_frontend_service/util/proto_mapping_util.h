@@ -49,7 +49,8 @@ AuctionResult AdScoreToAuctionResult(
     AuctionScope auction_scope, absl::string_view seller,
     const std::variant<ProtectedAudienceInput, ProtectedAuctionInput>&
         protected_auction_input,
-    absl::string_view top_level_seller = "");
+    absl::string_view top_level_seller = "",
+    std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr);
 
 // Builds a ScoreAdsRequest using component_auction_results.
 // This function moves the elements from component_auction_results and
@@ -64,16 +65,19 @@ CreateTopLevelScoreAdsRawRequest(
 
 // Encodes, compresses and encrypts AdScore and bidding groups map
 // as auction_result_ciphertext.
-absl::StatusOr<std::string> CreateWinningAuctionResultCiphertext(
+absl::StatusOr<std::string> CreateNonChaffAuctionResultCiphertext(
+    absl::string_view auction_result_nonce,
     const ScoreAdsResponse::AdScore& high_score,
     const std::optional<IgsWithBidsMap>& bidding_group_maps,
     const UpdateGroupMap& update_group_map, ClientType client_type,
     OhttpHpkeDecryptedMessage& decrypted_request,
-    RequestLogContext& log_context);
+    RequestLogContext& log_context,
+    std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr);
 
 // Encodes, compresses and encrypts client error
 // as auction_result_ciphertext.
 absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
+    absl::string_view auction_result_nonce,
     const AuctionResult::Error& auction_error, ClientType client_type,
     OhttpHpkeDecryptedMessage& decrypted_request,
     RequestLogContext& log_context);
@@ -81,7 +85,8 @@ absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
 // Encodes, compresses and encrypts chaff response
 // as auction_result_ciphertext.
 absl::StatusOr<std::string> CreateChaffAuctionResultCiphertext(
-    ClientType client_type, OhttpHpkeDecryptedMessage& decrypted_request,
+    absl::string_view auction_result_nonce, ClientType client_type,
+    OhttpHpkeDecryptedMessage& decrypted_request,
     RequestLogContext& log_context);
 
 // Collate all Igs that received bids from all server component auction results.

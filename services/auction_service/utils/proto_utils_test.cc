@@ -44,6 +44,11 @@ constexpr char kTestAdComponentUrl_1[] = "https://compoennt_1";
 constexpr char kTestAdComponentUrl_2[] = "https://component_2";
 constexpr char kTestBidCurrency[] = "ABC";
 constexpr uint32_t kTestSellerDataVersion = 1989;
+constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
+constexpr char kTestBuyerAndSellerReportingId[] =
+    "testBuyerAndSellerReportingId";
+constexpr char kTestSelectedReportingId[] =
+    "testSelectedBuyerAndSellerReportingId";
 
 using ::google::protobuf::util::MessageDifferencer;
 using AdWithBidMetadata =
@@ -106,6 +111,25 @@ TEST(MakeBidMetadataTest, PopulatesExpectedValuesForComponentAuction) {
   EXPECT_EQ(parsed_output["topLevelSeller"], kTestTopLevelSeller);
 }
 
+TEST(MakeBidMetadataTest, PopulatesExpectedReportingIds) {
+  ReportingIdsParamForBidMetadata reporting_ids = {
+      .buyer_reporting_id = kTestBuyerReportingId,
+      .buyer_and_seller_reporting_id = kTestBuyerAndSellerReportingId,
+      .selected_buyer_and_seller_reporting_id = kTestSelectedReportingId};
+  std::string output =
+      MakeBidMetadata(kTestPublisher, kTestIGOwner, kTestRenderUrl,
+                      MakeMockAdComponentUrls(), kTestTopLevelSeller,
+                      kTestBidCurrency, kTestSellerDataVersion, reporting_ids);
+
+  const rapidjson::Document parsed_output = ParseJson(output);
+  CheckGenericOutput(parsed_output);
+  EXPECT_EQ(parsed_output[kBuyerReportingIdForScoreAd], kTestBuyerReportingId);
+  EXPECT_EQ(parsed_output[kBuyerAndSellerReportingIdForScoreAd],
+            kTestBuyerAndSellerReportingId);
+  EXPECT_EQ(parsed_output[kSelectedBuyerAndSellerReportingIdForScoreAd],
+            kTestSelectedReportingId);
+}
+
 TEST(MapAuctionResultToAdWithBidMetadataTest, PopulatesExpectedValues) {
   AuctionResult auction_result = MakeARandomComponentAuctionResult(
       MakeARandomString(), kTestTopLevelSeller);
@@ -113,7 +137,8 @@ TEST(MapAuctionResultToAdWithBidMetadataTest, PopulatesExpectedValues) {
   // copy since this will be invalidated after this function.
   AuctionResult input;
   input.CopyFrom(auction_result);
-  auto output = MapAuctionResultToAdWithBidMetadata(input);
+  auto output =
+      MapAuctionResultToAdWithBidMetadata(input, /*k_anon_status=*/true);
 
   EXPECT_EQ(auction_result.bid(), output->bid());
   EXPECT_EQ(auction_result.ad_render_url(), output->render());
@@ -127,6 +152,7 @@ TEST(MapAuctionResultToAdWithBidMetadataTest, PopulatesExpectedValues) {
   for (auto& ad_component_url : auction_result.ad_component_render_urls()) {
     EXPECT_THAT(output->ad_components(), testing::Contains(ad_component_url));
   }
+  EXPECT_TRUE(output->k_anon_status());
 }
 
 constexpr absl::string_view kTestAdMetadataJson = R"JSON(

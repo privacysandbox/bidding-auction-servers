@@ -50,6 +50,7 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/proto_utils.h"
 #include "services/common/test/utils/test_init.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/proto_util.h"
@@ -93,7 +94,7 @@ constexpr char kSterlingIsoCode[] = "GBP";
 constexpr uint32_t kSellerDataVersion = 1989;
 constexpr char kFooComponentsRenderUrl[] =
     "fooMeOnceAds.com/render_ad?id=hasFooComp";
-constexpr absl::string_view kEmptyScoringSignalsJson = "null";
+constexpr absl::string_view kNullScoringSignalsJson = "null";
 constexpr char kTestScoreAdResponseTemplate[] = R"(
                 {
                     "response": {
@@ -181,6 +182,73 @@ constexpr char kComponentWithCurrencyAndIncomingAndRejectReasAdScore[] = R"(
       }
 )";
 
+constexpr char kTestScoreAdWithPAggResponseBucket128BitValueIntValueTemplate[] =
+    R"(
+{
+"response": {
+  "desirability":%d,
+  "bid":1.0
+},
+"paapiContributions": {
+  "win": [
+      {
+          "bucket": {
+              "bucket_128_bit": {
+                "bucket_128_bits": [1, 2]
+              }
+          },
+          "value": {
+              "int_value": 10
+          }
+        }
+    ]
+},
+"logs":["test log"]
+}
+)";
+
+constexpr char kTestScoreAdWithPAggResponseSignalObjectsTemplate[] = R"(
+{
+    "response": {
+      "desirability":%d,
+      "bid":1.0
+    },
+    "paapiContributions": {
+      "win": [
+            {
+              "bucket": {
+                  "signal_bucket": {
+                      "offset": {
+                          "value": [
+                              1,
+                              0
+                          ],
+                          "is_negative": true
+                      },
+                      "base_value": "BASE_VALUE_WINNING_BID",
+                      "scale": 2.5
+                  }
+              },
+              "value": {
+                  "extended_value": {"base_value": "BASE_VALUE_WINNING_BID","offset": 10,"scale": 2.5}
+              }
+            },
+      {
+          "bucket": {
+              "bucket_128_bit": {
+                "bucket_128_bits": [1, 2]
+              }
+          },
+          "value": {
+              "int_value": 10
+          }
+        }
+        ]
+    },
+    "logs":["test log"]
+    }
+)";
+
 // Ad Scores
 constexpr float kTestDesirability1 = 1.0;
 constexpr float kTestDesirability2 = 2.0;
@@ -235,6 +303,7 @@ using ProtectedAppSignalsAdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
 using ::google::protobuf::util::MessageDifferencer;
 using ::google::scp::core::test::EqualsProto;
+using ScoreAdsRawResponse = ScoreAdsResponse::ScoreAdsRawResponse;
 
 constexpr char kInterestGroupOwnerOfBarBidder[] = "barStandardAds.com";
 constexpr char kInterestGroupOrigin[] = "candy_smush";
@@ -251,6 +320,12 @@ constexpr char kBarRenderUrl[] = "barStandardAds.com/render_ad?id=bar";
 constexpr char kAdMetadataPropertyNameRenderUrl[] = "renderUrl";
 constexpr char kAdMetadataPropertyNameMetadata[] = "metadata";
 constexpr char kBarbecureIgName[] = "barbecue_lovers";
+constexpr absl::string_view kDebugLossUrlForZeroethIg =
+    "https://example-ssp.com/debugLoss/0";
+constexpr absl::string_view kDebugLossUrlForFirstIg =
+    "https://example-ssp.com/debugLoss/1";
+constexpr absl::string_view kDebugWinUrlForFirstIg =
+    "https://example-ssp.com/debugWin/1";
 
 struct AdWithBidMetadataParams {
   absl::string_view render_url = kTestRenderUrl;
@@ -260,7 +335,9 @@ struct AdWithBidMetadataParams {
   absl::string_view interest_group_origin = kInterestGroupOrigin;
   const double ad_cost = kTestAdCost;
   const uint32_t data_version = kTestDataVersion;
-  absl::string_view buyer_reporting_id = "";
+  std::optional<absl::string_view> buyer_reporting_id;
+  std::optional<absl::string_view> buyer_and_seller_reporting_id;
+  std::optional<absl::string_view> selected_buyer_and_seller_reporting_id;
   const int number_of_component_ads = kTestNumOfComponentAds;
   const bool k_anon_status = false;
   absl::string_view metadata_key = kTestMetadataKey;
@@ -291,7 +368,17 @@ AdWithBidMetadata BuildTestAdWithBidMetadata(
     ad_with_bid_metadata.add_ad_components(
         absl::StrCat(params.ad_component_render_url_base, i));
   }
-  ad_with_bid_metadata.set_buyer_reporting_id(params.buyer_reporting_id);
+  if (params.buyer_reporting_id) {
+    ad_with_bid_metadata.set_buyer_reporting_id(*params.buyer_reporting_id);
+  }
+  if (params.buyer_and_seller_reporting_id) {
+    ad_with_bid_metadata.set_buyer_and_seller_reporting_id(
+        *params.buyer_and_seller_reporting_id);
+  }
+  if (params.selected_buyer_and_seller_reporting_id) {
+    ad_with_bid_metadata.set_selected_buyer_and_seller_reporting_id(
+        *params.selected_buyer_and_seller_reporting_id);
+  }
   ad_with_bid_metadata.set_ad_cost(params.ad_cost);
   ad_with_bid_metadata.set_data_version(params.data_version);
   ad_with_bid_metadata.set_k_anon_status(params.k_anon_status);
@@ -327,6 +414,10 @@ void PopulateTestAdWithBidMetdata(
     ad_with_bid_metadata.set_buyer_and_seller_reporting_id(
         *buyer_dispatch_data.buyer_and_seller_reporting_id);
   }
+  if (buyer_dispatch_data.selected_buyer_and_seller_reporting_id) {
+    ad_with_bid_metadata.set_selected_buyer_and_seller_reporting_id(
+        *buyer_dispatch_data.selected_buyer_and_seller_reporting_id);
+  }
   ad_with_bid_metadata.set_interest_group_name(
       buyer_dispatch_data.interest_group_name);
   ad_with_bid_metadata.set_ad_cost(kTestAdCost);
@@ -343,15 +434,13 @@ AdWithBidMetadata GetTestAdWithBidSameComponentAsFoo() {
        .bid_currency = kUsdIsoCode});
 }
 
-AdWithBidMetadata GetTestAdWithBidBar(
-    absl::string_view buyer_reporting_id = "") {
+AdWithBidMetadata GetTestAdWithBidBar() {
   AdWithBidMetadata bar = BuildTestAdWithBidMetadata(
       {// This must have an entry in kTestScoringSignals.
        .render_url = kBarRenderUrl,
        .bid = 2,
        .interest_group_name = "ig_bar",
        .interest_group_owner = kInterestGroupOwnerOfBarBidder,
-       .buyer_reporting_id = buyer_reporting_id,
        .ad_component_render_url_base = "adComponent.com/bar_components/id=",
        .bid_currency = kUsdIsoCode,
        .make_metadata = false});
@@ -547,6 +636,66 @@ RawRequest BuildRawRequest(
   return output;
 }
 
+void VerifyPAggResponseNumericalValueInScoreAdsResponse(
+    const ScoreAdsResponse::ScoreAdsRawResponse& raw_response,
+    absl::string_view adtech_origin) {
+  const auto& scored_ad = raw_response.ad_score();
+  EXPECT_EQ(scored_ad.desirability(), kTestDesirability);
+  ScoreAdsResponse::AdScore expected_adscore;
+  PrivateAggregateReportingResponse expected_response;
+  auto contribution = expected_response.add_contributions();
+  contribution->mutable_bucket()->mutable_bucket_128_bit()->add_bucket_128_bits(
+      1);
+  contribution->mutable_bucket()->mutable_bucket_128_bit()->add_bucket_128_bits(
+      2);
+  contribution->mutable_value()->set_int_value(10);
+  expected_response.set_adtech_origin(adtech_origin);
+  expected_adscore.add_top_level_contributions()->Swap(&expected_response);
+
+  std::string difference;
+  google::protobuf::util::MessageDifferencer differencer;
+  differencer.ReportDifferencesToString(&difference);
+  EXPECT_TRUE(differencer.Compare(scored_ad.top_level_contributions(0),
+                                  expected_adscore.top_level_contributions(0)))
+      << "\n Difference:\n"
+      << difference;
+}
+
+void VerifyPAggResponseSignalObjectsInScoreAdsResponse(
+    const ScoreAdsResponse::ScoreAdsRawResponse& raw_response,
+    absl::string_view adtech_origin) {
+  const auto& scored_ad = raw_response.ad_score();
+  EXPECT_EQ(scored_ad.desirability(), kTestDesirability);
+  ScoreAdsResponse::AdScore expected_adscore;
+  PrivateAggregateReportingResponse expected_response;
+  auto contribution1 = expected_response.add_contributions();
+  contribution1->mutable_bucket()
+      ->mutable_bucket_128_bit()
+      ->add_bucket_128_bits(1);
+  contribution1->mutable_bucket()
+      ->mutable_bucket_128_bit()
+      ->add_bucket_128_bits(0);
+  contribution1->mutable_value()->set_int_value(12);
+  auto contribution2 = expected_response.add_contributions();
+  contribution2->mutable_bucket()
+      ->mutable_bucket_128_bit()
+      ->add_bucket_128_bits(1);
+  contribution2->mutable_bucket()
+      ->mutable_bucket_128_bit()
+      ->add_bucket_128_bits(2);
+  contribution2->mutable_value()->set_int_value(10);
+  expected_response.set_adtech_origin(adtech_origin);
+  expected_adscore.add_top_level_contributions()->Swap(&expected_response);
+
+  std::string difference;
+  google::protobuf::util::MessageDifferencer differencer;
+  differencer.ReportDifferencesToString(&difference);
+  EXPECT_TRUE(differencer.Compare(scored_ad.top_level_contributions(0),
+                                  expected_adscore.top_level_contributions(0)))
+      << "\n Difference:\n"
+      << difference;
+}
+
 }  // namespace
 
 void CheckInputCorrectForFoo(std::vector<std::shared_ptr<std::string>> input,
@@ -672,6 +821,7 @@ void SetupMockCryptoClientWrapper(Request request,
 class ScoreAdsReactorTest : public ::testing::Test {
  protected:
   void SetUp() override { CommonTestInit(); }
+
   ScoreAdsResponse ExecuteScoreAds(
       const RawRequest& raw_request, MockV8DispatchClient& dispatcher,
       const AuctionServiceRuntimeConfig& runtime_config,
@@ -2080,9 +2230,120 @@ TEST_F(ScoreAdsReactorTest, ParsesJsonAdMetadataInComponentAuction) {
   EXPECT_EQ(scored_ad.ad_metadata(), "{\"key1\":\"adMetadata\"}");
 }
 
-TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
+TEST_F(ScoreAdsReactorTest, SendsDebugPingsOnlyForWinnerAndNotGhostWinner) {
   MockV8DispatchClient dispatcher;
-  bool allowComponentAuction = false;
+  // Create: 1. A high scoring non-k anonymous ad which becomes a candidate for
+  // ghost winner and 2. A low scoring k-anonymous ad which becomes the winnner.
+  std::vector<float> scores = {kHighScore, kLowScore};
+  std::vector<AdWithBidMetadata> ads_with_bid_metadata = {
+      BuildTestAdWithBidMetadata(
+          {.render_url = kHighScoringRenderUrl1,
+           .bid = kHighScoredBid,
+           .interest_group_name = kHighScoringInterestGroupName1,
+           .interest_group_owner = kHighScoringInterestGroupOwner1,
+           .interest_group_origin = kHighScoringInterestGroupOrigin1,
+           .k_anon_status = false}),
+      BuildTestAdWithBidMetadata(
+          {.render_url = kLowScoringRenderUrl,
+           .bid = kLowScoredBid,
+           .interest_group_name = kLowScoringInterestGroupName,
+           .interest_group_owner = kLowScoringInterestGroupOwner,
+           .interest_group_origin = kLowScoringInterestGroupOrigin,
+           .k_anon_status = true}),
+  };
+  std::string scoring_signals = absl::Substitute(
+      R"JSON(
+      {
+        "renderUrls": {
+          "$0": [1],
+          "$1": [2]
+        }
+      })JSON",
+      kHighScoringRenderUrl1, kLowScoringRenderUrl);
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([scores, ads_with_bid_metadata](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback done_callback) {
+        absl::flat_hash_map<std::string, std::string> score_logic;
+        score_logic.reserve(scores.size());
+        for (int i = 0; i < scores.size(); ++i) {
+          const AdWithBidMetadata& ad_with_bid_metadata =
+              ads_with_bid_metadata[i];
+          score_logic[ad_with_bid_metadata.render()] = absl::Substitute(
+              R"({
+              "response" : {
+                "desirability" : $0,
+                "render": "$1",
+                "interestGroupName": "$2",
+                "interestGroupOwner": "$3",
+                "interestGrouprigin": "$4",
+                "bid" : $5,
+                "debugReportUrls": {
+                  "auctionDebugWinUrl": "$6"
+                }
+              },
+              "logs":[]})",
+              scores[i], ad_with_bid_metadata.render(),
+              ad_with_bid_metadata.interest_group_name(),
+              ad_with_bid_metadata.interest_group_owner(),
+              ad_with_bid_metadata.interest_group_origin(),
+              ad_with_bid_metadata.bid(), ad_with_bid_metadata.render());
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic));
+      });
+  RawRequest raw_request = BuildRawRequest(ads_with_bid_metadata,
+                                           {.scoring_signals = scoring_signals,
+                                            .enable_debug_reporting = true,
+                                            .seller_currency = kUsdIsoCode});
+  raw_request.set_enforce_kanon(true);
+  raw_request.set_num_allowed_ghost_winners(1);
+  raw_request.set_enable_debug_reporting(true);
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = true, .enable_kanon = true};
+  ScoreAdsReactorTestHelper test_helper;
+  bool debug_k_anon_winner_url_pinged = false;
+  bool debug_k_anon_ghost_winner_url_pinged = false;
+  EXPECT_CALL(*test_helper.async_reporter, DoReport)
+      .Times(1)
+      .WillRepeatedly(
+          [&debug_k_anon_winner_url_pinged,
+           &debug_k_anon_ghost_winner_url_pinged](
+              const HTTPRequest& reporting_request,
+              absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)&&>
+                  done_callback) {
+            if (reporting_request.url == kLowScoringRenderUrl) {
+              debug_k_anon_winner_url_pinged = true;
+            } else if (reporting_request.url == kHighScoringRenderUrl1) {
+              debug_k_anon_ghost_winner_url_pinged = true;
+            }
+          });
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  ASSERT_TRUE(raw_response.has_ad_score());
+  const auto& ad_score = raw_response.ad_score();
+  EXPECT_EQ(ad_score.desirability(), kLowScore);
+  // Debug report urls should not be present in scored ad since it is not a
+  // component auction.
+  EXPECT_FALSE(ad_score.has_debug_report_urls());
+  // Debug pings should be sent from the server for both losing and winning
+  // interest groups.
+  EXPECT_TRUE(debug_k_anon_winner_url_pinged);
+
+  EXPECT_EQ(raw_response.ghost_winning_ad_scores_size(), 1);
+  for (const auto& ghost_winner : raw_response.ghost_winning_ad_scores()) {
+    EXPECT_FALSE(ghost_winner.has_debug_report_urls());
+  }
+  // We don't want to ping the ghost winner debug report URL.
+  EXPECT_FALSE(debug_k_anon_ghost_winner_url_pinged);
+}
+
+TEST_F(ScoreAdsReactorTest,
+       SendsDebugPingsAndClearsDebugUrlsForSingleSellerAuction) {
+  MockV8DispatchClient dispatcher;
   // Setting seller currency will not trigger currency checking as the AdScores
   // have no currency.
   RawRequest raw_request = BuildRawRequest(
@@ -2090,46 +2351,128 @@ TEST_F(ScoreAdsReactorTest, CreatesDebugUrlsForAllAds) {
       {.enable_debug_reporting = true, .seller_currency = kUsdIsoCode});
 
   EXPECT_CALL(dispatcher, BatchExecute)
-      .WillRepeatedly(
-          [&allowComponentAuction](std::vector<DispatchRequest>& batch,
-                                   BatchDispatchDoneCallback done_callback) {
-            // Each original ad request (AdWithBidMetadata) is stored by its
-            // expected score and later compared to the output AdScore with the
-            // matching score.
-            std::vector<std::string> score_logic;
-            score_logic.reserve(batch.size());
-            for (int current_score = 0; current_score < batch.size();
-                 ++current_score) {
-              score_logic.push_back(absl::StrCat(
-                  "{\"response\":"
-                  "{\"desirability\": ",
-                  current_score, ", \"bid\": ", 1 + (std::rand() % 20),
-                  ", \"allowComponentAuction\": ",
-                  ((allowComponentAuction) ? "true" : "false"),
-                  ", \"debugReportUrls\": {",
-                  "    \"auctionDebugLossUrl\" : "
-                  "\"https://example-ssp.com/debugLoss\",",
-                  "    \"auctionDebugWinUrl\" : "
-                  "\"https://example-ssp.com/debugWin\"",
-                  "}}, \"logs\":[]}"));
-            }
-            return FakeExecute(batch, std::move(done_callback),
-                               std::move(score_logic), true, true);
-          });
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        score_logic.reserve(batch.size());
+        for (int current_score = 0; current_score < batch.size();
+             ++current_score) {
+          score_logic.push_back(absl::StrCat(
+              "{\"response\":"
+              "{\"desirability\": ",
+              current_score, ", \"bid\": ", current_score,
+              ", \"allowComponentAuction\": false", ", \"debugReportUrls\": {",
+              "    \"auctionDebugLossUrl\" : "
+              "\"https://example-ssp.com/debugLoss/",
+              current_score, "\",",
+              "    \"auctionDebugWinUrl\" : "
+              "\"https://example-ssp.com/debugWin/",
+              current_score, "\"", "}}, \"logs\":[]}"));
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), true, true);
+      });
   AuctionServiceRuntimeConfig runtime_config = {
       .enable_seller_debug_url_generation = true};
-  auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsReactorTestHelper test_helper;
+  bool debug_loss_url_pinged, debug_win_url_pinged;
+  EXPECT_CALL(*test_helper.async_reporter, DoReport)
+      .Times(2)
+      .WillRepeatedly(
+          [&debug_loss_url_pinged, &debug_win_url_pinged](
+              const HTTPRequest& reporting_request,
+              absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)&&>
+                  done_callback) {
+            if (reporting_request.url == kDebugLossUrlForZeroethIg) {
+              debug_loss_url_pinged = true;
+            } else if (reporting_request.url == kDebugWinUrlForFirstIg) {
+              debug_win_url_pinged = true;
+            }
+          });
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
 
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   const auto& scored_ad = raw_response.ad_score();
   // Desirability must be present but was determined by the scoring code.
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
-  EXPECT_TRUE(scored_ad.has_debug_report_urls());
+  // Debug report urls should not be present in scored ad since it is not a
+  // component auction.
+  EXPECT_FALSE(scored_ad.has_debug_report_urls());
+  // Debug pings should be sent from the server for both losing and winning
+  // interest groups.
+  EXPECT_TRUE(debug_loss_url_pinged);
+  EXPECT_TRUE(debug_win_url_pinged);
+}
+
+TEST_F(ScoreAdsReactorTest,
+       SendsOnlyLossDebugPingsAndPopulatesDebugUrlsForComponentAuction) {
+  MockV8DispatchClient dispatcher;
+  // Setting seller currency will not trigger currency checking as the AdScores
+  // have no currency.
+  RawRequest raw_request =
+      BuildRawRequest({BuildTestAdWithBidMetadata(), GetTestAdWithBidBar()},
+                      {.enable_debug_reporting = true,
+                       .top_level_seller = kTestTopLevelSeller,
+                       .seller_currency = kUsdIsoCode});
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        // Each original ad request (AdWithBidMetadata) is stored by its
+        // expected score and later compared to the output AdScore with the
+        // matching score.
+        std::vector<std::string> score_logic;
+        score_logic.reserve(batch.size());
+        for (int current_score = 0; current_score < batch.size();
+             ++current_score) {
+          score_logic.push_back(absl::StrCat(
+              "{\"response\":"
+              "{\"desirability\": ",
+              current_score, ", \"bid\": ", current_score,
+              ", \"allowComponentAuction\": true", ", \"debugReportUrls\": {",
+              "    \"auctionDebugLossUrl\" : "
+              "\"https://example-ssp.com/debugLoss/",
+              current_score, "\",",
+              "    \"auctionDebugWinUrl\" : "
+              "\"https://example-ssp.com/debugWin/",
+              current_score, "\"", "}}, \"logs\":[]}"));
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), true, true);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = true};
+  ScoreAdsReactorTestHelper test_helper;
+  EXPECT_CALL(*test_helper.async_reporter, DoReport)
+      .WillOnce([](const HTTPRequest& reporting_request,
+                   absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)&&>
+                       done_callback) {
+        // Debug pings should be sent from the server for the losing
+        // interest groups in component auction.
+        EXPECT_EQ(reporting_request.url, kDebugLossUrlForZeroethIg);
+      });
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  const auto& scored_ad = raw_response.ad_score();
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  // Debug ping should not be sent from the server for the winning interest
+  // group in a component auction. Debug report urls should be present in the
+  // response so that the client can send the correct debug ping depending on
+  // whether this interest group wins or loses the top level auction.
+  ASSERT_TRUE(scored_ad.has_debug_report_urls());
   EXPECT_EQ(scored_ad.debug_report_urls().auction_debug_loss_url(),
-            "https://example-ssp.com/debugLoss");
+            kDebugLossUrlForFirstIg);
   EXPECT_EQ(scored_ad.debug_report_urls().auction_debug_win_url(),
-            "https://example-ssp.com/debugWin");
+            kDebugWinUrlForFirstIg);
 }
 
 TEST_F(ScoreAdsReactorTest, SuccessExecutesInRomaWithLogsEnabled) {
@@ -2565,10 +2908,12 @@ TEST_F(ScoreAdsReactorTest, ReportingUrlsAndBuyerReportingIdSetInAdScore) {
   bool enable_report_result_url_generation = true;
   bool enable_report_result_win_generation = true;
   bool enable_debug_reporting = false;
+  auto ad_with_bid = GetTestAdWithBidBar();
+  ad_with_bid.set_buyer_reporting_id(kTestBuyerReportingId);
   RawRequest raw_request =
       BuildRawRequest({BuildTestAdWithBidMetadata(
                            {.buyer_reporting_id = kTestBuyerReportingId}),
-                       GetTestAdWithBidBar(kTestBuyerReportingId)},
+                       std::move(ad_with_bid)},
                       {.enable_adtech_code_logging = true});
   absl::flat_hash_map<std::string, AdWithBidMetadata> id_to_ad;
   for (const auto& ad : raw_request.ad_bids()) {
@@ -2833,8 +3178,7 @@ TEST_F(ScoreAdsReactorTest, VerifyDecryptionEncryptionSuccessful) {
   grpc::CallbackServerContext context;
   ScoreAdsReactor reactor(&context, dispatcher, &request, &response,
                           std::move(benchmarkingLogger), &key_fetcher_manager,
-                          &crypto_client, async_reporter.get(),
-                          runtime_config_);
+                          &crypto_client, *async_reporter, runtime_config_);
   reactor.Execute();
 
   EXPECT_FALSE(response.response_ciphertext().empty());
@@ -3193,7 +3537,7 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
                   "{\"auctionSignals\": {\"auction_signal\": \"test 2\"}, "
                   "\"sellerSignals\": {\"seller_signal\": \"test 1\"}}");
         EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kScoringSignals)],
-                  kEmptyScoringSignalsJson);
+                  kNullScoringSignalsJson);
         EXPECT_EQ(
             *req.input[static_cast<int>(ScoreAdArgs::kBidMetadata)],
             R"JSON({"interestGroupOwner":"https://PAS-Ad-Owner.com","topWindowHostname":"publisherName","bidCurrency":"USD","renderUrl":"testAppAds.com/render_ad?id=bar"})JSON");
@@ -3246,7 +3590,7 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
                   "{\"auctionSignals\": {\"auction_signal\": \"test 2\"}, "
                   "\"sellerSignals\": {\"seller_signal\": \"test 1\"}}");
         EXPECT_EQ(*req.input[static_cast<int>(ScoreAdArgs::kScoringSignals)],
-                  kEmptyScoringSignalsJson);
+                  kNullScoringSignalsJson);
         EXPECT_EQ(
             *req.input[static_cast<int>(ScoreAdArgs::kBidMetadata)],
             R"JSON({"interestGroupOwner":"https://PAS-Ad-Owner.com","topWindowHostname":"publisherName","bidCurrency":"USD","renderUrl":"testAppAds.com/render_ad?id=bar"})JSON");
@@ -3263,7 +3607,7 @@ TEST_F(ScoreAdsReactorProtectedAppSignalsTest,
                                               kTestBid);
   RawRequest raw_request = BuildProtectedAppSignalsRawRequest(
       {std::move(ad)},
-      {.scoring_signals = std::string(kEmptyScoringSignalsJson)});
+      {.scoring_signals = std::string(kNullScoringSignalsJson)});
   ExecuteScoreAds(raw_request, dispatcher);
 }
 
@@ -3548,6 +3892,8 @@ TEST_F(ScoreAdsReactorTest,
       GetTestSellerDispatchRequestData(post_auction_signals, log_context);
   BuyerReportingDispatchRequestData buyer_dispatch_data =
       GetTestBuyerDispatchRequestData(log_context);
+  buyer_dispatch_data.interest_group_name = "";
+  buyer_dispatch_data.buyer_reporting_id = kTestBuyerReportingId;
   EXPECT_EQ(buyer_dispatch_data.data_version, kTestDataVersion);
   EXPECT_EQ(seller_dispatch_data.post_auction_signals.seller_data_version,
             kSellerDataVersion);
@@ -3902,7 +4248,8 @@ TEST_F(ScoreAdsReactorTest, RespectConfiguredDebugUrlLimits) {
   MockV8DispatchClient dispatcher;
   RawRequest raw_request =
       BuildRawRequest({BuildTestAdWithBidMetadata(), GetTestAdWithBidBar()},
-                      {.enable_debug_reporting = true});
+                      {.enable_debug_reporting = true,
+                       .top_level_seller = kTestTopLevelSeller});
   std::string long_win_url(1024, 'A');
   std::string long_loss_url(1025, 'B');
 
@@ -3919,7 +4266,7 @@ TEST_F(ScoreAdsReactorTest, RespectConfiguredDebugUrlLimits) {
                   "response" : {
                     "desirability" : $0,
                     "bid" : 1,
-                    "allowComponentAuction" : false,
+                    "allowComponentAuction" : true,
                     "debugReportUrls": {
                       "auctionDebugLossUrl": "$1",
                       "auctionDebugWinUrl": "$2"
@@ -3944,7 +4291,7 @@ TEST_F(ScoreAdsReactorTest, RespectConfiguredDebugUrlLimits) {
   PS_VLOG(5) << "Response:\n" << scored_ad.DebugString();
   // Desirability must be present but was determined by the scoring code.
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
-  EXPECT_TRUE(scored_ad.has_debug_report_urls());
+  ASSERT_TRUE(scored_ad.has_debug_report_urls());
   EXPECT_FALSE(scored_ad.debug_report_urls().auction_debug_win_url().empty());
   EXPECT_EQ(scored_ad.debug_report_urls().auction_debug_win_url().size(), 1024);
   EXPECT_TRUE(scored_ad.debug_report_urls().auction_debug_loss_url().empty());
@@ -3958,9 +4305,8 @@ ScoredAdData BuildScoredAdData(
     absl::string_view id = "test_id") {
   RequestLogContext log_context(/*context_map=*/{},
                                 server_common::ConsentedDebugConfiguration());
-  absl::StatusOr<rapidjson::Document> response = ParseAndGetScoreAdResponseJson(
-      /*enable_ad_tech_code_logging=*/true,
-      absl::Substitute(
+  absl::StatusOr<rapidjson::Document> score_ads_wrapper_response =
+      ParseJsonString(absl::Substitute(
           R"JSON({
           "response" : {
             "desirability" : $0,
@@ -3968,8 +4314,11 @@ ScoredAdData BuildScoredAdData(
           },
           "logs": []
         })JSON",
-          desirability, buyer_bid),
-      /*log_context=*/log_context);
+          desirability, buyer_bid));
+  CHECK_OK(score_ads_wrapper_response);
+  absl::StatusOr<rapidjson::Document> response = ParseAndGetScoreAdResponseJson(
+      /*enable_ad_tech_code_logging=*/true,
+      /*log_context=*/log_context, *score_ads_wrapper_response);
   CHECK_OK(response);
   ScoredAdData scored_ad_data = {
       .response_json = *std::move(response),
@@ -4797,7 +5146,8 @@ TEST_F(ScoreAdsReactorTest,
             kSellerDataVersion);
   BuyerReportingDispatchRequestData buyer_dispatch_data =
       GetTestBuyerDispatchRequestData(log_context);
-  buyer_dispatch_data.buyer_reporting_id = "";
+  buyer_dispatch_data.interest_group_name = "";
+  buyer_dispatch_data.buyer_reporting_id = std::nullopt;
   buyer_dispatch_data.buyer_and_seller_reporting_id =
       kBuyerAndSellerReportingId;
   buyer_dispatch_data.made_highest_scoring_other_bid = false;
@@ -4839,7 +5189,125 @@ TEST_F(ScoreAdsReactorTest,
           std::string buyer_and_seller_id;
           PS_ASSIGN_IF_PRESENT(buyer_and_seller_id, seller_signals.value(),
                                kBuyerAndSellerReportingIdTag, String);
-          EXPECT_TRUE(buyer_and_seller_id.empty());
+          EXPECT_EQ(buyer_and_seller_id, kBuyerAndSellerReportingId);
+          std::string selected_buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(selected_buyer_and_seller_id,
+                               seller_signals.value(),
+                               kSelectedBuyerAndSellerReportingIdTag, String);
+          EXPECT_TRUE(selected_buyer_and_seller_id.empty());
+          DispatchResponse response;
+          response.resp = kTestReportResultResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&buyer_version, &seller_dispatch_data, &buyer_dispatch_data](
+                      std::vector<DispatchRequest>& batch,
+                      BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+
+          const DispatchRequest& request = batch[0];
+          absl::StatusOr<rapidjson::Document> buyer_signals =
+              ParseJsonString(*request.input[PAReportWinArgIndex(
+                  PAReportWinArgs::kBuyerReportingSignals)]);
+          std::string buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(buyer_and_seller_id, buyer_signals.value(),
+                               kBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(buyer_and_seller_id, kBuyerAndSellerReportingId);
+          std::string selected_buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(selected_buyer_and_seller_id,
+                               buyer_signals.value(),
+                               kSelectedBuyerAndSellerReportingIdTag, String);
+          EXPECT_TRUE(selected_buyer_and_seller_id.empty());
+          VerifyReportWinInput(request, *buyer_version, seller_dispatch_data,
+                               buyer_dispatch_data);
+          DispatchResponse response;
+          response.resp = kTestReportWinResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+  }
+
+  const auto& response =
+      ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  VerifyReportingUrlsInScoreAdsResponse(raw_response);
+}
+
+TEST_F(ScoreAdsReactorTest,
+       ReportingSuccessfulWithPrivateAggregationReportingNumericalValue) {
+  MockV8DispatchClient dispatcher;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true,
+      .enable_private_aggregate_reporting = true};
+  RequestLogContext log_context({},
+                                server_common::ConsentedDebugConfiguration());
+  ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
+  runtime_config.buyers_with_report_win_enabled.insert(
+      winning_ad_score.interest_group_owner());
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kEuroIsoCode, kSellerDataVersion);
+  post_auction_signals.highest_scoring_other_bid = 0;
+  post_auction_signals.made_highest_scoring_other_bid = false;
+  post_auction_signals.highest_scoring_other_bid_currency =
+      kUnknownBidCurrencyCode;
+  post_auction_signals.winning_ad_render_url = kTestAdRenderUrl;
+
+  SellerReportingDispatchRequestData seller_dispatch_data =
+      GetTestSellerDispatchRequestData(post_auction_signals, log_context);
+  EXPECT_EQ(seller_dispatch_data.post_auction_signals.seller_data_version,
+            kSellerDataVersion);
+  BuyerReportingDispatchRequestData buyer_dispatch_data =
+      GetTestBuyerDispatchRequestData(log_context);
+  buyer_dispatch_data.buyer_and_seller_reporting_id =
+      kBuyerAndSellerReportingId;
+  buyer_dispatch_data.interest_group_name = "";
+  buyer_dispatch_data.made_highest_scoring_other_bid = false;
+  AdWithBidMetadata ad;
+  PopulateTestAdWithBidMetdata(post_auction_signals, buyer_dispatch_data, ad);
+  ad.set_bid_currency(kEurosIsoCode);
+  ad.set_bid(1.0);
+  RawRequest raw_request = BuildRawRequest({ad});
+  absl::StatusOr<std::string> seller_version = GetDefaultSellerUdfVersion();
+  absl::StatusOr<std::string> buyer_version = GetBuyerReportWinVersion(
+      ad.interest_group_owner(), AuctionType::kProtectedAudience);
+  {
+    InSequence s;
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
+          EXPECT_EQ(request.version_string, *seller_version);
+          std::vector<absl::StatusOr<DispatchResponse>> responses;
+          DispatchResponse response = {
+              .id = request.id,
+              .resp = absl::StrFormat(
+                  kTestScoreAdWithPAggResponseBucket128BitValueIntValueTemplate,
+                  kTestDesirability)};
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, kReportResultEntryFunction);
+          EXPECT_EQ(request.version_string, *seller_version);
+          absl::StatusOr<rapidjson::Document> seller_signals =
+              ParseJsonString(*request.input[ReportResultArgIndex(
+                  ReportResultArgs::kSellerReportingSignals)]);
+          std::string buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(buyer_and_seller_id, seller_signals.value(),
+                               kBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(buyer_and_seller_id, kBuyerAndSellerReportingId);
           DispatchResponse response;
           response.resp = kTestReportResultResponseJson;
           response.id = request.id;
@@ -4874,7 +5342,599 @@ TEST_F(ScoreAdsReactorTest,
       ExecuteScoreAds(raw_request, dispatcher, runtime_config);
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
+  VerifyPAggResponseNumericalValueInScoreAdsResponse(raw_response,
+                                                     raw_request.seller());
+}
+
+TEST_F(ScoreAdsReactorTest,
+       ReportingSuccessfulWithPrivateAggregationReportingSignalObjects) {
+  MockV8DispatchClient dispatcher;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true,
+      .enable_private_aggregate_reporting = true};
+  RequestLogContext log_context({},
+                                server_common::ConsentedDebugConfiguration());
+  ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
+  runtime_config.buyers_with_report_win_enabled.insert(
+      winning_ad_score.interest_group_owner());
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kEuroIsoCode, kSellerDataVersion);
+  post_auction_signals.highest_scoring_other_bid = 0;
+  post_auction_signals.made_highest_scoring_other_bid = false;
+  post_auction_signals.highest_scoring_other_bid_currency =
+      kUnknownBidCurrencyCode;
+  post_auction_signals.winning_ad_render_url = kTestAdRenderUrl;
+
+  SellerReportingDispatchRequestData seller_dispatch_data =
+      GetTestSellerDispatchRequestData(post_auction_signals, log_context);
+  EXPECT_EQ(seller_dispatch_data.post_auction_signals.seller_data_version,
+            kSellerDataVersion);
+  BuyerReportingDispatchRequestData buyer_dispatch_data =
+      GetTestBuyerDispatchRequestData(log_context);
+  buyer_dispatch_data.interest_group_name = "";
+  buyer_dispatch_data.buyer_and_seller_reporting_id =
+      kBuyerAndSellerReportingId;
+  buyer_dispatch_data.made_highest_scoring_other_bid = false;
+  AdWithBidMetadata ad;
+  PopulateTestAdWithBidMetdata(post_auction_signals, buyer_dispatch_data, ad);
+  ad.set_bid_currency(kEurosIsoCode);
+  ad.set_bid(1.0);
+  RawRequest raw_request = BuildRawRequest({ad});
+  absl::StatusOr<std::string> seller_version = GetDefaultSellerUdfVersion();
+  absl::StatusOr<std::string> buyer_version = GetBuyerReportWinVersion(
+      ad.interest_group_owner(), AuctionType::kProtectedAudience);
+  {
+    InSequence s;
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
+          EXPECT_EQ(request.version_string, *seller_version);
+          std::vector<absl::StatusOr<DispatchResponse>> responses;
+          DispatchResponse response = {
+              .id = request.id,
+              .resp = absl::StrFormat(
+                  kTestScoreAdWithPAggResponseSignalObjectsTemplate,
+                  kTestDesirability)};
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, kReportResultEntryFunction);
+          EXPECT_EQ(request.version_string, *seller_version);
+          absl::StatusOr<rapidjson::Document> seller_signals =
+              ParseJsonString(*request.input[ReportResultArgIndex(
+                  ReportResultArgs::kSellerReportingSignals)]);
+          std::string buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(buyer_and_seller_id, seller_signals.value(),
+                               kBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(buyer_and_seller_id, kBuyerAndSellerReportingId);
+          DispatchResponse response;
+          response.resp = kTestReportResultResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&buyer_version, &seller_dispatch_data, &buyer_dispatch_data](
+                      std::vector<DispatchRequest>& batch,
+                      BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+
+          const DispatchRequest& request = batch[0];
+          absl::StatusOr<rapidjson::Document> buyer_signals =
+              ParseJsonString(*request.input[PAReportWinArgIndex(
+                  PAReportWinArgs::kBuyerReportingSignals)]);
+          std::string buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(buyer_and_seller_id, buyer_signals.value(),
+                               kBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(buyer_and_seller_id, kBuyerAndSellerReportingId);
+          VerifyReportWinInput(request, *buyer_version, seller_dispatch_data,
+                               buyer_dispatch_data);
+          DispatchResponse response;
+          response.resp = kTestReportWinResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+  }
+
+  const auto& response =
+      ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  VerifyPAggResponseSignalObjectsInScoreAdsResponse(raw_response,
+                                                    raw_request.seller());
+}
+
+TEST_F(ScoreAdsReactorTest,
+       ReportingSuccessWithCodeIsolationWithSelectedBuyerAndSellerReportingId) {
+  MockV8DispatchClient dispatcher;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true};
+  RequestLogContext log_context({},
+                                server_common::ConsentedDebugConfiguration());
+  ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
+  runtime_config.buyers_with_report_win_enabled.insert(
+      winning_ad_score.interest_group_owner());
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kEuroIsoCode, kSellerDataVersion);
+  post_auction_signals.highest_scoring_other_bid = 0;
+  post_auction_signals.made_highest_scoring_other_bid = false;
+  post_auction_signals.highest_scoring_other_bid_currency =
+      kUnknownBidCurrencyCode;
+  post_auction_signals.winning_ad_render_url = kTestAdRenderUrl;
+
+  SellerReportingDispatchRequestData seller_dispatch_data =
+      GetTestSellerDispatchRequestData(post_auction_signals, log_context);
+  EXPECT_EQ(seller_dispatch_data.post_auction_signals.seller_data_version,
+            kSellerDataVersion);
+  BuyerReportingDispatchRequestData buyer_dispatch_data =
+      GetTestBuyerDispatchRequestData(log_context);
+  buyer_dispatch_data.interest_group_name = "";
+  buyer_dispatch_data.buyer_reporting_id = kBuyerReportingId;
+  buyer_dispatch_data.buyer_and_seller_reporting_id =
+      kBuyerAndSellerReportingId;
+  buyer_dispatch_data.selected_buyer_and_seller_reporting_id =
+      kSelectedBuyerAndSellerReportingId;
+  buyer_dispatch_data.made_highest_scoring_other_bid = false;
+  AdWithBidMetadata ad;
+  PopulateTestAdWithBidMetdata(post_auction_signals, buyer_dispatch_data, ad);
+  ad.set_bid_currency(kEurosIsoCode);
+  ad.set_bid(1.0);
+  RawRequest raw_request = BuildRawRequest({ad});
+  absl::StatusOr<std::string> seller_version = GetDefaultSellerUdfVersion();
+  absl::StatusOr<std::string> buyer_version = GetBuyerReportWinVersion(
+      ad.interest_group_owner(), AuctionType::kProtectedAudience);
+  {
+    InSequence s;
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
+          EXPECT_EQ(request.version_string, *seller_version);
+          absl::StatusOr<rapidjson::Document> bid_metadata = ParseJsonString(
+              *request.input[ScoreArgIndex(ScoreAdArgs::kBidMetadata)]);
+          std::string buyer_id;
+          PS_ASSIGN_IF_PRESENT(buyer_id, bid_metadata.value(),
+                               kBuyerReportingIdTag, String);
+          EXPECT_EQ(buyer_id, kBuyerReportingId);
+          std::string buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(buyer_and_seller_id, bid_metadata.value(),
+                               kBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(buyer_and_seller_id, kBuyerAndSellerReportingId);
+          std::string selected_buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(selected_buyer_and_seller_id,
+                               bid_metadata.value(),
+                               kSelectedBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(selected_buyer_and_seller_id,
+                    kSelectedBuyerAndSellerReportingId);
+          std::vector<absl::StatusOr<DispatchResponse>> responses;
+          DispatchResponse response = {
+              .id = request.id,
+              .resp = absl::StrFormat(kTestScoreAdResponseTemplate,
+                                      kTestDesirability)};
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, kReportResultEntryFunction);
+          EXPECT_EQ(request.version_string, *seller_version);
+          absl::StatusOr<rapidjson::Document> seller_signals =
+              ParseJsonString(*request.input[ReportResultArgIndex(
+                  ReportResultArgs::kSellerReportingSignals)]);
+          std::string buyer_id;
+          PS_ASSIGN_IF_PRESENT(buyer_id, seller_signals.value(),
+                               kBuyerReportingIdTag, String);
+          EXPECT_TRUE(buyer_id.empty());
+          std::string buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(buyer_and_seller_id, seller_signals.value(),
+                               kBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(buyer_and_seller_id, kBuyerAndSellerReportingId);
+          std::string selected_buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(selected_buyer_and_seller_id,
+                               seller_signals.value(),
+                               kSelectedBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(selected_buyer_and_seller_id,
+                    kSelectedBuyerAndSellerReportingId);
+          DispatchResponse response;
+          response.resp = kTestReportResultResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&buyer_version, &seller_dispatch_data, &buyer_dispatch_data](
+                      std::vector<DispatchRequest>& batch,
+                      BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+
+          const DispatchRequest& request = batch[0];
+          absl::StatusOr<rapidjson::Document> buyer_signals =
+              ParseJsonString(*request.input[PAReportWinArgIndex(
+                  PAReportWinArgs::kBuyerReportingSignals)]);
+          std::string buyer_id;
+          PS_ASSIGN_IF_PRESENT(buyer_id, buyer_signals.value(),
+                               kBuyerReportingIdTag, String);
+          EXPECT_EQ(buyer_id, kBuyerReportingId);
+          std::string buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(buyer_and_seller_id, buyer_signals.value(),
+                               kBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(buyer_and_seller_id, kBuyerAndSellerReportingId);
+          std::string selected_buyer_and_seller_id;
+          PS_ASSIGN_IF_PRESENT(selected_buyer_and_seller_id,
+                               buyer_signals.value(),
+                               kSelectedBuyerAndSellerReportingIdTag, String);
+          EXPECT_EQ(selected_buyer_and_seller_id,
+                    kSelectedBuyerAndSellerReportingId);
+          VerifyReportWinInput(request, *buyer_version, seller_dispatch_data,
+                               buyer_dispatch_data);
+          DispatchResponse response;
+          response.resp = kTestReportWinResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+  }
+
+  const auto& response =
+      ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
   VerifyReportingUrlsInScoreAdsResponse(raw_response);
 }
+
+TEST_F(ScoreAdsReactorTest,
+       ReportingSuccessWithPassedAndEnforcedKAnonStatusReporting) {
+  MockV8DispatchClient dispatcher;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true,
+      .enable_kanon = true};
+  RequestLogContext log_context({},
+                                server_common::ConsentedDebugConfiguration());
+  ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
+  runtime_config.buyers_with_report_win_enabled.insert(
+      winning_ad_score.interest_group_owner());
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kEuroIsoCode, kSellerDataVersion);
+  post_auction_signals.highest_scoring_other_bid = 0;
+  post_auction_signals.made_highest_scoring_other_bid = false;
+  post_auction_signals.highest_scoring_other_bid_currency =
+      kUnknownBidCurrencyCode;
+  post_auction_signals.winning_ad_render_url = kTestAdRenderUrl;
+
+  SellerReportingDispatchRequestData seller_dispatch_data =
+      GetTestSellerDispatchRequestData(post_auction_signals, log_context);
+  EXPECT_EQ(seller_dispatch_data.post_auction_signals.seller_data_version,
+            kSellerDataVersion);
+  BuyerReportingDispatchRequestData buyer_dispatch_data =
+      GetTestBuyerDispatchRequestData(log_context);
+  buyer_dispatch_data.made_highest_scoring_other_bid = false;
+  buyer_dispatch_data.k_anon_status = kPassedAndEnforcedKAnonStatus;
+  AdWithBidMetadata ad;
+  PopulateTestAdWithBidMetdata(post_auction_signals, buyer_dispatch_data, ad);
+  ad.set_bid_currency(kEurosIsoCode);
+  ad.set_bid(1.0);
+  ad.set_k_anon_status(true);
+  RawRequest raw_request = BuildRawRequest({ad});
+  raw_request.set_enforce_kanon(true);
+  absl::StatusOr<std::string> seller_version = GetDefaultSellerUdfVersion();
+  absl::StatusOr<std::string> buyer_version = GetBuyerReportWinVersion(
+      ad.interest_group_owner(), AuctionType::kProtectedAudience);
+  {
+    InSequence s;
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
+          EXPECT_EQ(request.version_string, *seller_version);
+          std::vector<absl::StatusOr<DispatchResponse>> responses;
+          DispatchResponse response = {
+              .id = request.id,
+              .resp = absl::StrFormat(kTestScoreAdResponseTemplate,
+                                      kTestDesirability)};
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, kReportResultEntryFunction);
+          EXPECT_EQ(request.version_string, *seller_version);
+          DispatchResponse response;
+          response.resp = kTestReportResultResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&buyer_version, &seller_dispatch_data, &buyer_dispatch_data](
+                      std::vector<DispatchRequest>& batch,
+                      BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const DispatchRequest& request = batch[0];
+          absl::StatusOr<rapidjson::Document> buyer_signals =
+              ParseJsonString(*request.input[PAReportWinArgIndex(
+                  PAReportWinArgs::kBuyerReportingSignals)]);
+          std::string k_anon_status;
+          PS_ASSIGN_IF_PRESENT(k_anon_status, buyer_signals.value(),
+                               kKAnonStatusTag, String);
+          EXPECT_EQ(k_anon_status, kPassedAndEnforcedKAnonStatus);
+          VerifyReportWinInput(request, *buyer_version, seller_dispatch_data,
+                               buyer_dispatch_data);
+          DispatchResponse response;
+          response.resp = kTestReportWinResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+  }
+
+  const auto& response =
+      ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  VerifyReportingUrlsInScoreAdsResponse(raw_response);
+}
+
+TEST_F(ScoreAdsReactorTest,
+       ReportingSuccessWithNotCalculatedKAnonStatusReporting) {
+  MockV8DispatchClient dispatcher;
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true,
+      .enable_kanon = false};
+  RequestLogContext log_context({},
+                                server_common::ConsentedDebugConfiguration());
+  ScoreAdsResponse::AdScore winning_ad_score = GetTestWinningScoreAdsResponse();
+  runtime_config.buyers_with_report_win_enabled.insert(
+      winning_ad_score.interest_group_owner());
+  PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
+      winning_ad_score, kEuroIsoCode, kSellerDataVersion);
+  post_auction_signals.highest_scoring_other_bid = 0;
+  post_auction_signals.made_highest_scoring_other_bid = false;
+  post_auction_signals.highest_scoring_other_bid_currency =
+      kUnknownBidCurrencyCode;
+  post_auction_signals.winning_ad_render_url = kTestAdRenderUrl;
+
+  SellerReportingDispatchRequestData seller_dispatch_data =
+      GetTestSellerDispatchRequestData(post_auction_signals, log_context);
+  EXPECT_EQ(seller_dispatch_data.post_auction_signals.seller_data_version,
+            kSellerDataVersion);
+  BuyerReportingDispatchRequestData buyer_dispatch_data =
+      GetTestBuyerDispatchRequestData(log_context);
+  buyer_dispatch_data.made_highest_scoring_other_bid = false;
+  buyer_dispatch_data.k_anon_status = kNotCalculatedKAnonStatus;
+  AdWithBidMetadata ad;
+  PopulateTestAdWithBidMetdata(post_auction_signals, buyer_dispatch_data, ad);
+  ad.set_bid_currency(kEurosIsoCode);
+  ad.set_bid(1.0);
+  ad.set_k_anon_status(true);
+  RawRequest raw_request = BuildRawRequest({ad});
+  raw_request.set_enforce_kanon(false);
+  absl::StatusOr<std::string> seller_version = GetDefaultSellerUdfVersion();
+  absl::StatusOr<std::string> buyer_version = GetBuyerReportWinVersion(
+      ad.interest_group_owner(), AuctionType::kProtectedAudience);
+  {
+    InSequence s;
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, "scoreAdEntryFunction");
+          EXPECT_EQ(request.version_string, *seller_version);
+          std::vector<absl::StatusOr<DispatchResponse>> responses;
+          DispatchResponse response = {
+              .id = request.id,
+              .resp = absl::StrFormat(kTestScoreAdResponseTemplate,
+                                      kTestDesirability)};
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&seller_version](std::vector<DispatchRequest>& batch,
+                                    BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const auto& request = batch[0];
+          EXPECT_EQ(request.handler_name, kReportResultEntryFunction);
+          EXPECT_EQ(request.version_string, *seller_version);
+          DispatchResponse response;
+          response.resp = kTestReportResultResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+    EXPECT_CALL(dispatcher, BatchExecute)
+        .WillOnce([&buyer_version, &seller_dispatch_data, &buyer_dispatch_data](
+                      std::vector<DispatchRequest>& batch,
+                      BatchDispatchDoneCallback done_callback) {
+          EXPECT_EQ(batch.size(), 1);
+          const DispatchRequest& request = batch[0];
+          absl::StatusOr<rapidjson::Document> buyer_signals =
+              ParseJsonString(*request.input[PAReportWinArgIndex(
+                  PAReportWinArgs::kBuyerReportingSignals)]);
+          std::string k_anon_status;
+          PS_ASSIGN_IF_PRESENT(k_anon_status, buyer_signals.value(),
+                               kKAnonStatusTag, String);
+          EXPECT_EQ(k_anon_status, kNotCalculatedKAnonStatus);
+          VerifyReportWinInput(request, *buyer_version, seller_dispatch_data,
+                               buyer_dispatch_data);
+          DispatchResponse response;
+          response.resp = kTestReportWinResponseJson;
+          response.id = request.id;
+          done_callback({response});
+          return absl::OkStatus();
+        });
+  }
+
+  const auto& response =
+      ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  raw_response.ParseFromString(response.response_ciphertext());
+  VerifyReportingUrlsInScoreAdsResponse(raw_response);
+}
+
+TEST_F(ScoreAdsReactorTest,
+       DropsKAnonGhostWinnersSellerPrivateAggregateContributions) {
+  MockV8DispatchClient dispatcher;
+  std::vector<float> scores = {kHighScore, kLowScore};
+  std::vector<AdWithBidMetadata> ads_with_bid_metadata = {
+      BuildTestAdWithBidMetadata(
+          {.render_url = kHighScoringRenderUrl1,
+           .bid = kHighScoredBid,
+           .interest_group_name = kHighScoringInterestGroupName1,
+           .interest_group_owner = kHighScoringInterestGroupOwner1,
+           .interest_group_origin = kHighScoringInterestGroupOrigin1,
+           .k_anon_status = false}),
+      BuildTestAdWithBidMetadata(
+          {.render_url = kLowScoringRenderUrl,
+           .bid = kLowScoredBid,
+           .interest_group_name = kLowScoringInterestGroupName,
+           .interest_group_owner = kLowScoringInterestGroupOwner,
+           .interest_group_origin = kLowScoringInterestGroupOrigin,
+           .k_anon_status = true}),
+  };
+  std::string scoring_signals = absl::Substitute(
+      R"JSON(
+      {
+        "renderUrls": {
+          "$0": [1],
+          "$1": [2]
+        }
+      })JSON",
+      kHighScoringRenderUrl1, kLowScoringRenderUrl);
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([scores, ads_with_bid_metadata](
+                          std::vector<DispatchRequest>& batch,
+                          BatchDispatchDoneCallback done_callback) {
+        absl::flat_hash_map<std::string, std::string> score_logic;
+        score_logic.reserve(scores.size());
+        for (int i = 0; i < scores.size(); ++i) {
+          const AdWithBidMetadata& ad_with_bid_metadata =
+              ads_with_bid_metadata[i];
+          score_logic[ad_with_bid_metadata.render()] =
+              absl::Substitute(R"({
+              "response" : {
+                "desirability" : $0,
+                "render": "$1",
+                "interest_group_name": "$2",
+                "interest_group_owner": "$3",
+                "interest_group_origin": "$4",
+                "bid" : $5
+              },
+              "paapiContributions": {
+                "always": [
+                  {
+                    "bucket": {
+                      "signal_bucket": {
+                        "offset": {
+                          "value": [
+                            1,
+                            0
+                          ],
+                          "is_negative": true
+                        },
+                        "base_value": "BASE_VALUE_BID_REJECTION_REASON",
+                        "scale": 2.5
+                      }
+                    },
+                    "value": {
+                      "extended_value": {"base_value": "BASE_VALUE_BID_REJECTION_REASON","offset": 10,"scale": 2.5}
+                    }
+                  },
+                  {
+                    "bucket": {
+                      "bucket_128_bit": {
+                        "bucket_128_bits": [1, 2]
+                      }
+                    },
+                    "value": {
+                        "int_value": 10
+                    }
+                  }
+                ]
+              },
+              "logs":[]})",
+                               scores[i], ad_with_bid_metadata.render(),
+                               ad_with_bid_metadata.interest_group_name(),
+                               ad_with_bid_metadata.interest_group_owner(),
+                               ad_with_bid_metadata.interest_group_origin(),
+                               ad_with_bid_metadata.bid());
+        }
+        return FakeExecute(batch, std::move(done_callback),
+                           std::move(score_logic), true);
+      });
+  RawRequest raw_request = BuildRawRequest(
+      ads_with_bid_metadata, {.scoring_signals = scoring_signals});
+  raw_request.set_enforce_kanon(true);
+  raw_request.set_num_allowed_ghost_winners(1);
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_private_aggregate_reporting = true, .enable_kanon = true};
+  auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsRawResponse expected_response =
+      ParseTextOrDie<ScoreAdsRawResponse>(R"pb(
+        ad_score {
+          desirability: 2
+          render: "RenderUrl"
+          component_renders: "adComponent.com/foo_components/id=0"
+          component_renders: "adComponent.com/foo_components/id=1"
+          component_renders: "adComponent.com/foo_components/id=2"
+          interest_group_name: "IG"
+          buyer_bid: 3
+          interest_group_owner: "IGOwner"
+          ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
+          interest_group_origin: "IGOrigin"
+          top_level_contributions {
+            contributions {
+              bucket {
+                bucket_128_bit { bucket_128_bits: 1 bucket_128_bits: 2 }
+              }
+              value { int_value: 10 }
+            }
+            adtech_origin: "http://seller.com"
+          }
+        }
+        ghost_winning_ad_scores {
+          desirability: 10
+          render: "RenderUrl1"
+          component_renders: "adComponent.com/foo_components/id=0"
+          component_renders: "adComponent.com/foo_components/id=1"
+          component_renders: "adComponent.com/foo_components/id=2"
+          interest_group_name: "IG1"
+          buyer_bid: 1
+          interest_group_owner: "IGOwner1"
+          ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
+          interest_group_origin: "IGOrigin1"
+        }
+      )pb");
+  ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  EXPECT_THAT(raw_response, EqualsProto(expected_response));
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

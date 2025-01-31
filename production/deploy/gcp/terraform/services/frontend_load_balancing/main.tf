@@ -25,10 +25,46 @@ resource "google_compute_url_map" "default" {
   name = "${var.operator}-${var.environment}-xlb-grpc-map"
   default_route_action {
     dynamic "weighted_backend_services" {
-      for_each = var.google_compute_backend_service_ids
+      for_each = var.traffic_weights
       content {
-        backend_service = weighted_backend_services.value
-        weight          = var.traffic_weights[weighted_backend_services.key]
+        backend_service = var.google_compute_backend_service_ids[weighted_backend_services.key]
+        weight          = weighted_backend_services.value
+      }
+    }
+  }
+
+  host_rule {
+    hosts        = ["*"] # all hosts
+    path_matcher = "allpaths"
+  }
+  path_matcher {
+    name = "allpaths"
+    default_route_action {
+      dynamic "weighted_backend_services" {
+        for_each = var.traffic_weights
+        content {
+          backend_service = var.google_compute_backend_service_ids[weighted_backend_services.key]
+          weight          = weighted_backend_services.value
+        }
+      }
+    }
+    dynamic "route_rules" {
+      for_each = var.experiment_match_rules
+      content {
+        priority = index(keys(var.experiment_match_rules), route_rules.key) + 1
+        service  = var.google_compute_backend_service_ids[route_rules.key]
+        dynamic "match_rules" {
+          for_each = route_rules.value
+          content {
+            prefix_match = "/" # all paths
+            header_matches {
+              header_name   = match_rules.value.header_name
+              exact_match   = match_rules.value.exact_match
+              prefix_match  = match_rules.value.prefix_match
+              present_match = match_rules.value.present_match
+            }
+          }
+        }
       }
     }
   }

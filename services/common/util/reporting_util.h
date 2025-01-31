@@ -61,6 +61,8 @@ constexpr absl::string_view kRejectionReasonBidFromGenBidFailedCurrencyCheck =
     "bid-from-gen-bid-failed-currency-check";
 constexpr absl::string_view kRejectionReasonBidFromScoreAdFailedCurrencyCheck =
     "bid-from-score-ad-failed-currency-check";
+constexpr absl::string_view kRejectionReasonDidNotMeetTheKAnonymityThreshold =
+    "did-not-meet-the-kanonymity-threshold";
 
 constexpr float kDefaultWinningBid = 0.0;
 constexpr char kUnknownBidCurrencyCode[] = "???";
@@ -109,7 +111,13 @@ PostAuctionSignals GeneratePostAuctionSignalsForTopLevelSeller(
 // data in the url.
 HTTPRequest CreateDebugReportingHttpRequest(
     absl::string_view url, const DebugReportingPlaceholder& placeholder_data,
-    bool is_win_debug_url);
+    bool is_winning_interest_group);
+
+// Returns debug reporting url after replacing the placeholder data in the URL.
+std::string CreateDebugReportingUrlForInterestGroup(
+    absl::string_view debug_url,
+    const DebugReportingPlaceholder& placeholder_data,
+    bool is_winning_interest_group);
 
 // Returns a debug reporting placeholder for the interest group.
 DebugReportingPlaceholder GetPlaceholderDataForInterestGroup(

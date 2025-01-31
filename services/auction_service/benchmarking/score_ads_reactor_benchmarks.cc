@@ -360,7 +360,7 @@ static void BM_ScoreAdsProtectedAudience(benchmark::State& state) {
     ScoreAdsReactor reactor(&context, dispatcher, &score_ads_request, &response,
                             std::make_unique<ScoreAdsNoOpLogger>(),
                             key_fetcher_manager.get(), &crypto_client,
-                            async_reporter.get(), runtime_config);
+                            *async_reporter, runtime_config);
     reactor.Execute();
   }
 }
@@ -409,7 +409,7 @@ static void BM_ScoreAdsProtectedAudienceAndAppSignals(benchmark::State& state) {
     ScoreAdsReactor reactor(&context, dispatcher, &score_ads_request, &response,
                             std::make_unique<ScoreAdsNoOpLogger>(),
                             key_fetcher_manager.get(), &crypto_client,
-                            async_reporter.get(), runtime_config);
+                            *async_reporter, runtime_config);
     reactor.Execute();
   }
 }

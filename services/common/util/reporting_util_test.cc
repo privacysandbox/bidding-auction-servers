@@ -248,20 +248,27 @@ TEST(CreateDebugReportingHttpRequestTest,
   EXPECT_EQ(request.url, expected_url);
 }
 
-TEST(CreateDebugReportingHttpRequestTest,
-     GetWithRejectionReasonBidFromScoreAdFailedCurrencyCheck) {
+TEST(
+    CreateDebugReportingHttpRequestTest,
+    GetWithRejectionReasonBidFromScoreAdFailedCurrencyCheckAndFillsCurrencies) {
   absl::string_view url =
-      "https://wikipedia.org?seller_rejection_reason=${rejectReason}";
+      "https://"
+      "wikipedia.org?winning_bid_currency=${winningBidCurrency}&highest_"
+      "scoring_other_bid_currency=${highestScoringOtherBidCurrency}&seller_"
+      "rejection_reason=${rejectReason}";
   DebugReportingPlaceholder placeholder_1 = {
       .winning_bid = 1.9,
+      .winning_bid_currency = "USD",
       .made_winning_bid = false,
       .highest_scoring_other_bid = 0.0,
+      .highest_scoring_other_bid_currency = "USD",
       .made_highest_scoring_other_bid = false,
       .rejection_reason =
           SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK};
   absl::string_view expected_url =
       "https://"
-      "wikipedia.org?seller_rejection_reason=bid-from-score-ad-failed-currency-"
+      "wikipedia.org?winning_bid_currency=USD&highest_scoring_other_bid_"
+      "currency=USD&seller_rejection_reason=bid-from-score-ad-failed-currency-"
       "check";
   HTTPRequest request =
       CreateDebugReportingHttpRequest(url, placeholder_1, true);
@@ -521,6 +528,9 @@ TEST(SellerRejectionReasonTest, ToSellerRejectionReasonSuccess) {
   ToSellerRejectionReasonAndCompare(
       "bid-from-score-ad-failed-currency-check",
       SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK);
+  ToSellerRejectionReasonAndCompare(
+      "did-not-meet-the-kanonymity-threshold",
+      SellerRejectionReason::DID_NOT_MEET_THE_KANONYMITY_THRESHOLD);
 }
 
 TEST(SellerRejectionReasonTest, ToSellerRejectionReasonStringSuccess) {
@@ -550,6 +560,9 @@ TEST(SellerRejectionReasonTest, ToSellerRejectionReasonStringSuccess) {
   ToSellerRejectionReasonStringAndCompare(
       SellerRejectionReason::BID_FROM_SCORE_AD_FAILED_CURRENCY_CHECK,
       "bid-from-score-ad-failed-currency-check");
+  ToSellerRejectionReasonStringAndCompare(
+      SellerRejectionReason::DID_NOT_MEET_THE_KANONYMITY_THRESHOLD,
+      "did-not-meet-the-kanonymity-threshold");
 }
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -515,7 +515,7 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
             metric_context_->LogHistogram<metric::kBiddingFailedToBidPercent>(
                 0.0));
         LogIfError(
-            metric_context_->LogUpDownCounter<metric::kBiddingTotalBidsCount>(
+            metric_context_->LogHistogram<metric::kBiddingTotalBidsCount>(
                 received_bid_count));
         if (received_bid_count > 0) {
           LogIfError(
@@ -711,6 +711,7 @@ void ProtectedAppSignalsGenerateBidsReactor::OnDone() { delete this; }
 void ProtectedAppSignalsGenerateBidsReactor::EncryptResponseAndFinish(
     grpc::Status status) {
   PS_VLOG(8, log_context_) << __func__;
+  raw_response_.set_bidding_export_debug(log_context_.ShouldExportEvent());
   if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
     PS_VLOG(kPlain, log_context_)
         << "GenerateProtectedAppSignalsBidsRawResponse "
@@ -718,7 +719,8 @@ void ProtectedAppSignalsGenerateBidsReactor::EncryptResponseAndFinish(
     log_context_.SetEventMessageField(raw_response_);
   }
   // ExportEventMessage before encrypt response
-  log_context_.ExportEventMessage(/*if_export_consented=*/true);
+  log_context_.ExportEventMessage(/*if_export_consented=*/true,
+                                  log_context_.ShouldExportEvent());
   if (!EncryptResponse()) {
     PS_LOG(ERROR, log_context_)
         << "Failed to encrypt the generate app signals bids response.";

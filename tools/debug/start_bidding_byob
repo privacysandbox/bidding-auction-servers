@@ -34,7 +34,7 @@ SERVER_START_CMD=$(cat << END
 --udf_num_workers=4 \
 --js_worker_queue_len=100 \
 --test_mode="true" \
---telemetry_config="mode: OFF" \
+--telemetry_config="${TELEMETRY_CONFIG}" \
 --roma_timeout_ms="120000" \
 --egress_schema_fetch_config='{
       "fetchMode": 0,

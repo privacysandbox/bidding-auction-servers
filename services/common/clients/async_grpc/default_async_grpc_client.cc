@@ -16,13 +16,31 @@
 
 #include <memory>
 
+#include "services/common/util/file_util.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
+
+namespace {
+
+grpc::SslCredentialsOptions GetDefaultSslCredentials(
+    absl::string_view cert_path) {
+  absl::StatusOr<std::string> roots_pem = GetFileContent(cert_path);
+  CHECK(roots_pem.ok()) << "Unable to read from: " << cert_path;
+  return {
+      .pem_root_certs = *std::move(roots_pem),
+  };
+}
+
+}  // namespace
 
 std::shared_ptr<grpc::Channel> CreateChannel(
     absl::string_view server_addr, bool compression, bool secure,
-    absl::string_view grpc_arg_default_authority) {
+    absl::string_view grpc_arg_default_authority, absl::string_view ca_cert) {
+  PS_VLOG(5) << "Creating " << (secure ? "secure" : "insecure")
+             << " credentials " << (secure ? "with cert: " : "without cert: ")
+             << ca_cert;
   std::shared_ptr<grpc::ChannelCredentials> creds =
-      secure ? grpc::SslCredentials(grpc::SslCredentialsOptions())
+      secure ? grpc::SslCredentials(GetDefaultSslCredentials(ca_cert))
              : grpc::InsecureChannelCredentials();
   grpc::ChannelArguments args;
   // Set max message size to 256 MB.

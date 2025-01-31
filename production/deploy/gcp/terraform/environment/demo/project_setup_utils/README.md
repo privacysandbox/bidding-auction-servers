@@ -279,19 +279,74 @@ storagetransfer.jobs.create
 ```
 
 </details>
-<!-- markdownlint-enable -->
+<!-- markdownlint-restore -->
 
 ## Project Setup
 
-1. See the [Project APIs README](./api/README.md). **You must enable the APIs before attempting to
-   run any other terraform.**
+1. Open the [main.tf file](./main.tf) and edit the `backend` block.
 
-1. Next, configure your [domain](./domain/README.md).
+2. Configure your [variables.tf file](./variables.tf) to supply the modules with the necessary
+   information for deployment
 
-1. Configure [internal TLS](./internal_tls/README.md).
+Once these files have been updated the following modules will be ready for deployment:
 
-1. Configure [service accounts](./service_account/README.md).
+-   [API](./api/main.tf): You must enable the APIs before attempting to run any other terraform.
+    This directory provides terraform functionality to enable the APIs used by the Bidding and
+    Auction Services.
 
-1. **OPTIONAL but recommended:** Configure
-   [Cloud Build](../../../../../../packaging/gcp/cloud_build/README.md) to automatically build the
-   latest releases.
+-   [Domain](./domain/main.tf) : This directory provides terraform functionality to create domain
+    records and TLS for buyers and sellers. You only need to ever run this once for every unique
+    domain you wish to use.
+
+    When testing, it is useful to bring up both a buyer and seller, so by default the provided
+    configs provide DNS and TLS support for all services. You may modify
+    [domain terraform file](./domain/main.tf) to suit your needs, although the defaults are strongly
+    recommended for initial project setup.
+
+    Specifically, you will provide a domain -- for example, `example.com`. Then, the terraform in
+    this directory will create DNS records for `sfe.example.com` and `bfe.example.com`, with
+    wildcard TLS certificates for `*sfe.example.com` and `*bfe.example.com`.
+
+    The TLS certificates renew via DNS challenge (for which the provided configs also automatically
+    create records).
+
+-   [Internal TLS](./internal_tls/main.tf) : GCP Application Load Balancers
+    [require their backends to terminate TLS connections](https://cloud.google.com/load-balancing/docs/ssl-certificates/encryption-to-the-backends).
+    The terraform in this directory installs certificates that the Seller Frontend VM envoy and
+    Buyer Frontend VM grpc server processes will use to terminate the load balancer TLS connection.
+    The certificates may be self-signed and may be used in production. These are separate from the
+    TLS certificates required for client to load balancer communication -- see the
+    [Domain](./domain/main.tf) setup for more details.
+
+-   [Service accounts](./service_account/main.tf): A service account is attached to each running
+    Bidding and Auction service's Confidential Compute instance and require permissions for all of
+    the actions the service will perform.
+
+    This directory provides terraform functionality to create a service account and configure all
+    project permissions the service account requires to operate the Bidding and Auction servers.
+
+    Additionally, the provided configs create a
+    [GCS HMAC Key](https://github.com/privacysandbox/bidding-auction-servers/blob/722e1542c262dddc3aaf41be7b6c159a38cefd0a/production/deploy/gcp/terraform/modules/secrets/secrets.tf#L49)
+    for usage with
+    [consented debugging](https://github.com/privacysandbox/protected-auction-services-docs/blob/main/debugging_protected_audience_api_services.md#adtech-consented-debugging).
+    This key is tied to the service account.
+
+**OPTIONAL but recommended:** Configure
+[Cloud Build](../../../../../../packaging/gcp/cloud_build/README.md) to automatically build the
+latest releases.
+
+## Usage
+
+In the same directory as this README, run:
+
+```bash
+terraform init
+terraform apply # You will have to type 'yes' if you approve of the plan.
+```
+
+The terraform for the server setup ([buyer](../buyer/buyer.tf) and [seller](../seller/seller.tf))
+may then reference the outputs of this terraform for setup of the individual services. You will need
+to save the outputs (but you can just run `terraform apply` again if you lose them).
+
+Visit the link output by `zone_url` and verify that your Primary zone NS and SOA records conform
+with your domain registrar.

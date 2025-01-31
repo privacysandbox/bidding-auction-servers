@@ -85,6 +85,9 @@ class TrustedServersConfigClient {
   // Fetches the int64 value for the specified config parameter.
   int64_t GetInt64Parameter(absl::string_view name) const noexcept;
 
+  // Fetches the double value for the specified config parameter.
+  double GetDoubleParameter(absl::string_view name) const noexcept;
+
   // Fetches custom flag value for the specified config parameter.
   template <typename T>
   T GetCustomParameter(absl::string_view name) const noexcept {

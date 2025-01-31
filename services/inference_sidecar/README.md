@@ -137,6 +137,21 @@ To disable Inference packaging Build: change .bazelrc files's `--//:inference_bu
 -   When inference is not enabled, invocations of inference callbacks in UDF (e.g.,
     `runInference()`) will fail the UDF execution.
 
+### Memory Protection for Inference
+
+RAM Limitation
+
+-   You can set the memory limit of the inference sidecar via `INFERENCE_SIDECAR_RLIMIT_MB`runtime
+    flag. the value suggested to be set at least `12` times for your loaded model size. For example
+    if you have a `500 mb` model then set `inference_sidecar_rlimit_mb` to `6000 mb` or more will be
+    recommended.
+-   This limiation using [RLIMIT_AS](https://man7.org/linux/man-pages/man2/prlimit.2.html) which
+    affects calls to brk(2), mmap(2), and mremap(2), which fail with the error ENOMEM upon exceeding
+    this limit. In addition, automatic stack expansion fails (and generates a SIGSEGV that kills the
+    process if no alternate stack has been made available via sigaltstack(2)). As a result
+    `will kills off the process holding sidecar if exceed`, but bidding main process will not be
+    effected.
+
 ## Local Testing
 
 ### Start the B&A servers locally for testing/debugging
@@ -145,7 +160,7 @@ The servers run locally and the ML models are directly read from the local disk.
 
 -   Use the command-line flags: `--inference_sidecar_binary_path` and
     `--inference_model_local_paths`, `--inference_sidecar_runtime_config`.
--   Utilize services/inference_sidecar/common/tools/debug/start_inference script.
+-   Utilize `tools/debug/start_bidding --enable_inference` script.
 
 ## Inference API
 

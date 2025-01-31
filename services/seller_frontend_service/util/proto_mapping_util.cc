@@ -14,6 +14,7 @@
 
 #include "services/seller_frontend_service/util/proto_mapping_util.h"
 
+#include "services/seller_frontend_service/data/k_anon.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -48,7 +49,8 @@ void SetReportingUrls(const WinReportingUrls& win_reporting_urls,
 
 AuctionResult MapAdScoreToAuctionResult(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
-    const std::optional<AuctionResult::Error>& error) {
+    const std::optional<AuctionResult::Error>& error,
+    std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr) {
   AuctionResult auction_result;
   if (error) {
     *auction_result.mutable_error() = *error;
@@ -84,6 +86,18 @@ AuctionResult MapAdScoreToAuctionResult(
     *auction_result.mutable_ad_component_render_urls() =
         high_score->component_renders();
     auction_result.set_ad_type(high_score->ad_type());
+    if (kanon_data) {
+      if (kanon_data->kanon_ghost_winners) {
+        auto& kanon_ghost_winners = kanon_data->kanon_ghost_winners;
+        auction_result.mutable_k_anon_ghost_winners()->Assign(
+            std::make_move_iterator(kanon_ghost_winners->begin()),
+            std::make_move_iterator(kanon_ghost_winners->end()));
+      }
+      if (kanon_data->kanon_winner_join_candidates) {
+        auction_result.set_allocated_k_anon_winner_join_candidates(
+            kanon_data->kanon_winner_join_candidates.release());
+      }
+    }
   } else {
     auction_result.set_is_chaff(true);
   }
@@ -111,12 +125,14 @@ absl::StatusOr<std::string> PackageAuctionResultCiphertext(
 }
 
 absl::StatusOr<std::string> PackageAuctionResultForWeb(
+    absl::string_view auction_result_nonce,
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<IgsWithBidsMap>& maybe_bidding_group_map,
     const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
     OhttpHpkeDecryptedMessage& decrypted_request,
-    RequestLogContext& log_context) {
+    RequestLogContext& log_context,
+    std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr) {
   std::string error_msg;
   absl::Notification wait_for_error_callback;
   auto error_handler = [&wait_for_error_callback,
@@ -133,7 +149,8 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
       Encode(high_score,
              maybe_bidding_group_map.has_value() ? *maybe_bidding_group_map
                                                  : IgsWithBidsMap(),
-             update_group_map, error, error_handler);
+             update_group_map, error, error_handler, auction_result_nonce,
+             std::move(kanon_data));
   if (!serialized_data.ok()) {
     wait_for_error_callback.WaitForNotification();
     return absl::Status(serialized_data.status().code(), error_msg);
@@ -159,10 +176,12 @@ absl::StatusOr<std::string> PackageAuctionResultForApp(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error,
     OhttpHpkeDecryptedMessage& decrypted_request,
-    RequestLogContext& log_context) {
+    RequestLogContext& log_context,
+    std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr) {
   // Map to AuctionResult proto and serialized to bytes array.
 
-  AuctionResult result = MapAdScoreToAuctionResult(high_score, error);
+  AuctionResult result =
+      MapAdScoreToAuctionResult(high_score, error, std::move(kanon_data));
   if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
     PS_VLOG(kPlain, log_context)
         << "AuctionResult exported in EventMessage if consented";
@@ -188,8 +207,10 @@ AuctionResult AdScoreToAuctionResult(
     AuctionScope auction_scope, absl::string_view seller,
     const std::variant<ProtectedAudienceInput, ProtectedAuctionInput>&
         protected_auction_input,
-    absl::string_view top_level_seller) {
-  AuctionResult auction_result = MapAdScoreToAuctionResult(high_score, error);
+    absl::string_view top_level_seller,
+    std::unique_ptr<KAnonAuctionResultData> kanon_data) {
+  AuctionResult auction_result =
+      MapAdScoreToAuctionResult(high_score, error, std::move(kanon_data));
   if (high_score.has_value() &&
       auction_scope ==
           AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER) {
@@ -254,27 +275,32 @@ CreateTopLevelScoreAdsRawRequest(
   return raw_request;
 }
 
-absl::StatusOr<std::string> CreateWinningAuctionResultCiphertext(
+absl::StatusOr<std::string> CreateNonChaffAuctionResultCiphertext(
+    absl::string_view auction_result_nonce,
     const ScoreAdsResponse::AdScore& ad_score,
     const std::optional<IgsWithBidsMap>& bidding_group_map,
     const UpdateGroupMap& update_group_map, ClientType client_type,
     OhttpHpkeDecryptedMessage& decrypted_request,
-    RequestLogContext& log_context) {
+    RequestLogContext& log_context,
+    std::unique_ptr<KAnonAuctionResultData> kanon_data) {
   absl::StatusOr<std::string> auction_result_ciphertext;
   switch (client_type) {
     case CLIENT_TYPE_ANDROID:
       return PackageAuctionResultForApp(ad_score, /*error =*/std::nullopt,
-                                        decrypted_request, log_context);
+                                        decrypted_request, log_context,
+                                        std::move(kanon_data));
     case CLIENT_TYPE_BROWSER:
       return PackageAuctionResultForWeb(
-          ad_score, bidding_group_map, update_group_map,
-          /*error =*/std::nullopt, decrypted_request, log_context);
+          auction_result_nonce, ad_score, bidding_group_map, update_group_map,
+          /*error =*/std::nullopt, decrypted_request, log_context,
+          std::move(kanon_data));
     default:
       return PackageAuctionResultForInvalid(client_type);
   }
 }
 
 absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
+    absl::string_view auction_result_nonce,
     const AuctionResult::Error& auction_error, ClientType client_type,
     OhttpHpkeDecryptedMessage& decrypted_request,
     RequestLogContext& log_context) {
@@ -285,6 +311,7 @@ absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
           log_context);
     case CLIENT_TYPE_BROWSER:
       return PackageAuctionResultForWeb(
+          auction_result_nonce,
           /*high_score=*/std::nullopt, /*maybe_bidding_group_map=*/std::nullopt,
           /*update_group_map=*/{}, auction_error, decrypted_request,
           log_context);
@@ -294,7 +321,8 @@ absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
 }
 
 absl::StatusOr<std::string> CreateChaffAuctionResultCiphertext(
-    ClientType client_type, OhttpHpkeDecryptedMessage& decrypted_request,
+    absl::string_view auction_result_nonce, ClientType client_type,
+    OhttpHpkeDecryptedMessage& decrypted_request,
     RequestLogContext& log_context) {
   switch (client_type) {
     case CLIENT_TYPE_ANDROID:
@@ -303,6 +331,7 @@ absl::StatusOr<std::string> CreateChaffAuctionResultCiphertext(
           decrypted_request, log_context);
     case CLIENT_TYPE_BROWSER:
       return PackageAuctionResultForWeb(
+          auction_result_nonce,
           /*high_score=*/std::nullopt, /*maybe_bidding_group_map=*/std::nullopt,
           /*update_group_map=*/{},
           /*error =*/std::nullopt, decrypted_request, log_context);

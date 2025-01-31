@@ -27,6 +27,7 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
@@ -48,6 +49,8 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 
 // Currently max proto message is at 2 Gib per message.
 constexpr size_t kMaxProtoMessageSize = 2ULL * 1024ULL * 1024ULL * 1024ULL;
+// Minimal duration to wait before trying to fetch model blobs again.
+constexpr absl::Duration kMinModelFetchPeriod = absl::Minutes(1);
 
 PeriodicModelFetcher::PeriodicModelFetcher(
     absl::string_view config_path,
@@ -62,6 +65,9 @@ PeriodicModelFetcher::PeriodicModelFetcher(
       fetch_period_ms_(fetch_period_ms) {}
 
 absl::Status PeriodicModelFetcher::Start() {
+  CHECK_GT(fetch_period_ms_, kMinModelFetchPeriod)
+      << "Too small fetch period is prohibited, please modify "
+         "INFERENCE_MODEL_FETCH_PERIOD_MS";
   InternalPeriodicModelFetchAndRegistration();
   return absl::OkStatus();
 }
@@ -86,6 +92,7 @@ void PeriodicModelFetcher::DeleteModel(absl::string_view model_path)
     PS_LOG(INFO) << "Successful deletion of model: " << model_path;
     ModelFetcherMetric::IncrementModelDeletionSuccessCount();
   }
+  UpdateMetricsForAvailableModels();
 }
 
 void PeriodicModelFetcher::DeleteModels(
@@ -113,7 +120,6 @@ void PeriodicModelFetcher::DeleteModels(
             PS_LOG(INFO) << "Model eviction grace period ends for model: "
                          << model_path;
             DeleteModel(model_path);
-            UpdateMetricsForAvailableModels();
           });
       continue;
     }
@@ -122,8 +128,6 @@ void PeriodicModelFetcher::DeleteModels(
     // immediately.
     // Case #3-b: If the model failed to be deleted after the grace period with
     // the IN_DELETION status, delete the model immediately.
-    // In this case, the metric partition will be set after the model fetcher
-    // finishes the current round polling.
     DeleteModel(model_path);
   }
 }
@@ -159,6 +163,8 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
     return;
   }
 
+  ModelFetcherMetric::IncrementCloudFetchSuccessCount();
+
   // Model deletion happens upon model configuration file changes.
   // Case #1: If a model metadata (model path and checksum) stays unchanged in
   // the configuration, no deletion will happen as the model will be erased from
@@ -177,6 +183,7 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
   // not for metric purposes.
   std::vector<std::string> success_models;
   std::vector<std::string> failure_models;
+  absl::flat_hash_map<std::string, double> pre_warm_latency_metric_map;
   BlobFetcherBase::FilterOptions filter_options;
   std::vector<ModelMetadata> pending_model_metadata;
   // Processes model deletion.
@@ -238,8 +245,6 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
         cloud_fetch_status.code());
     return;
   }
-
-  ModelFetcherMetric::IncrementCloudFetchSuccessCount();
 
   const std::vector<BlobFetcherBase::Blob>& bucket_snapshot =
       blob_fetcher_->snapshot();
@@ -313,11 +318,25 @@ void PeriodicModelFetcher::InternalModelFetchAndRegistration() {
           .eviction_grace_period_in_ms = metadata.eviction_grace_period_in_ms(),
           .model_state = ModelState::ACTIVE};
       success_models.push_back(model_path);
+      if (response.metrics_list_size() != 0) {
+        if (response.metrics_list().find(
+                "kInferenceRegisterModelResponseModelWarmUpDuration") !=
+            response.metrics_list().end()) {
+          pre_warm_latency_metric_map.insert(
+              {model_path,
+               response.metrics_list()
+                   .at("kInferenceRegisterModelResponseModelWarmUpDuration")
+                   .metrics()
+                   .at(0)
+                   .value_double()});
+        }
+      }
     }
   }
-
   ModelFetcherMetric::UpdateRecentModelRegistrationSuccess(success_models);
   ModelFetcherMetric::UpdateRecentModelRegistrationFailure(failure_models);
+  ModelFetcherMetric::UpdateModelRegistrationPrewarmLatency(
+      pre_warm_latency_metric_map);
   UpdateMetricsForAvailableModels();
 }
 

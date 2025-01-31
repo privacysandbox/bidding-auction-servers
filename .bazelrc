@@ -27,6 +27,7 @@ build:clang --client_env=BAZEL_CXXOPTS=-std=c++17
 build:clang --copt=-Werror=thread-safety
 # Disables the "int conversion" warning for external/nitrokmscli_aws_c_http/source/websocket_decoder.c
 build:clang --per_file_copt=external/nitrokmscli_.*\.c@-Wno-int-conversion
+build:clang --per_file_copt=api/.*_builder\.c@-Wno-deprecated-declarations
 # https://github.com/google/tcmalloc/blob/master/docs/tuning.md#build-time-optimizations
 build:clang --cxxopt=-fsized-deallocation
 build:clang --host_cxxopt=-fsized-deallocation
@@ -54,49 +55,6 @@ build:clang-tidy --@bazel_clang_tidy//:clang_tidy_config=//:clang_tidy_config
 
 test --test_verbose_timeout_warnings
 
-build:instance_local --//:instance=local
-build:instance_local --@google_privacysandbox_servers_common//:instance=local
-
-build:instance_gcp --//:instance=gcp
-build:instance_gcp --@google_privacysandbox_servers_common//:instance=gcp
-
-build:instance_aws --//:instance=aws
-build:instance_aws --@google_privacysandbox_servers_common//:instance=aws
-
-build:platform_local --//:platform=local
-
-build:platform_aws --//:platform=aws
-build:platform_aws --@google_privacysandbox_servers_common//:platform=aws
-
-build:platform_gcp --//:platform=gcp
-build:platform_gcp --@google_privacysandbox_servers_common//:platform=gcp
-
-build:local_aws --config=instance_local
-build:local_aws --config=platform_aws
-
-build:local_gcp --config=instance_local
-build:local_gcp --config=platform_gcp
-
-build:gcp_gcp --config=instance_gcp
-build:gcp_gcp --config=platform_gcp
-
-build:local_local --config=instance_local
-build:local_local --config=platform_local
-
-build:aws_aws --config=instance_aws
-build:aws_aws --config=platform_aws
-
-build:non_prod --//:build_flavor=non_prod
-build:non_prod --//:inference_build=yes
-build:non_prod --//:inference_runtime=all
-build:non_prod --@google_privacysandbox_servers_common//:build_flavor=non_prod
-build:prod --//:build_flavor=prod
-# TODO(b/325487321): Change the default value of inference_build and
-# inference_runtime.
-build:prod --//:inference_build=yes
-build:prod --//:inference_runtime=all
-build:prod --@google_privacysandbox_servers_common//:build_flavor=prod
-
 # Address sanitizer, set action_env to segregate cache entries
 build:asan --action_env=PRIVACY_SANDBOX_SERVERS_ASAN=1
 build:asan --strip=never
@@ -110,6 +68,7 @@ build:asan --linkopt=-fsanitize=address
 build:asan --linkopt=-fuse-ld=lld
 build:asan --action_env=ASAN_OPTIONS=detect_leaks=1:color=always
 build:asan --custom_malloc=@bazel_tools//tools/cpp:malloc
+build:asan --fission=yes
 
 # Memory sanitizer, set action_env to segregate cache entries
 build:msan --action_env=PRIVACY_SANDBOX_SERVERS_MSAN=1
@@ -161,5 +120,6 @@ build:all-tests --compilation_mode=opt
 test:all-tests --build_tests_only
 test:all-tests --test_summary=detailed
 
+try-import %workspace%/production/packaging/.bazelrc
 try-import %workspace%/builders/.coverage.bazelrc
 coverage --test_tag_filters=-flaky

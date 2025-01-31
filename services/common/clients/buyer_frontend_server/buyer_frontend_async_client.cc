@@ -35,9 +35,10 @@ BuyerFrontEndAsyncGrpcClient::BuyerFrontEndAsyncGrpcClient(
       stub_(std::move(stub)),
       chaffing_enabled_(client_config.chaffing_enabled) {
   if (!stub_) {
-    stub_ = BuyerFrontEnd::NewStub(CreateChannel(client_config.server_addr,
-                                                 client_config.compression,
-                                                 client_config.secure_client));
+    stub_ = BuyerFrontEnd::NewStub(CreateChannel(
+        client_config.server_addr, client_config.compression,
+        client_config.secure_client,
+        /*grpc_arg_default_authority=*/"", client_config.ca_root_pem));
   }
 }
 

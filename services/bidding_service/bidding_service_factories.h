@@ -68,8 +68,9 @@ GetProtectedAppSignalsByobReactorFactory() {
 }
 
 inline GenerateBidsReactorFactory GetProtectedAudienceV8ReactorFactory(
-    V8DispatchClient& v8_client, bool enable_bidding_service_benchmark) {
-  return [&v8_client, &enable_bidding_service_benchmark](
+    V8DispatchClient& v8_client,
+    bool enable_bidding_service_benchmark = false) {
+  return [&v8_client, enable_bidding_service_benchmark](
              grpc::CallbackServerContext* context,
              const GenerateBidsRequest* request, GenerateBidsResponse* response,
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,

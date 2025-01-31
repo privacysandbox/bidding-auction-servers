@@ -34,6 +34,7 @@ cc_library(
     hdrs = ["sandbox_executor.h"],
     deps = [
         ":sandbox_worker",
+        "//utils:resource_size_utils",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/status",

@@ -18,37 +18,71 @@
 #include <utility>
 
 #include "absl/status/statusor.h"
+#include "services/auction_service/private_aggregation/private_aggregation_manager.h"
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 #include "services/auction_service/reporting/reporting_helper.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/constants/common_constants.h"
+#include "services/common/private_aggregation/private_aggregation_post_auction_util.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 constexpr absl::string_view kReportWinUDFName = "reportWin";
+
+inline void AddKeyValToSellerSignalsIfNotPresent(
+    const ::std::string& tag, const std::string& val,
+    rapidjson::Document& seller_device_signals) {
+  if (seller_device_signals.HasMember(tag.c_str())) {
+    return;
+  }
+
+  rapidjson::GenericStringRef string_to_add(val.c_str());
+  seller_device_signals.AddMember(
+      rapidjson::Value(tag.c_str(), seller_device_signals.GetAllocator())
+          .Move(),
+      string_to_add, seller_device_signals.GetAllocator());
+}
+
 }  // namespace
 
-void SetBuyerReportingIds(
+void SetReportingIds(
     const BuyerReportingDispatchRequestData& buyer_reporting_metadata,
     rapidjson::Document& seller_device_signals) {
-  // if buyerAndSellerReportingId is present,
-  // it will be used as a substitute for the IG Name. else if buyerReportingId
-  // is present, it will be used as a substitute for the IG Name. else, the
-  // implementation will fallback to using IG name. Reference:
-  // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#12-interest-group-attributes
-  if (buyer_reporting_metadata.buyer_and_seller_reporting_id) {
-    rapidjson::GenericStringRef buyer_and_seller_reporting_id(
-        (buyer_reporting_metadata.buyer_and_seller_reporting_id)->c_str());
-    seller_device_signals.AddMember(kBuyerAndSellerReportingIdTag,
-                                    buyer_and_seller_reporting_id,
-                                    seller_device_signals.GetAllocator());
+  // If selectedBuyerAndSellerId is present, it will be used as a substitute for
+  // the IG name, along with other IDs that are present. If
+  // buyerAndSellerReportingId is present, it will be used as a substitute for
+  // the IG Name. Else if buyerReportingId is present, it will be used as a
+  // substitute for the IG Name. Else, the implementation will fallback to using
+  // IG name. Reference:
+  // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#54-reporting-ids
+  if (buyer_reporting_metadata.selected_buyer_and_seller_reporting_id) {
+    AddKeyValToSellerSignalsIfNotPresent(
+        kSelectedBuyerAndSellerReportingIdTag,
+        *buyer_reporting_metadata.selected_buyer_and_seller_reporting_id,
+        seller_device_signals);
+    if (buyer_reporting_metadata.buyer_and_seller_reporting_id) {
+      AddKeyValToSellerSignalsIfNotPresent(
+          kBuyerAndSellerReportingIdTag,
+          *buyer_reporting_metadata.buyer_and_seller_reporting_id,
+          seller_device_signals);
+    }
+    if (buyer_reporting_metadata.buyer_reporting_id) {
+      rapidjson::GenericStringRef buyer_reporting_id(
+          (buyer_reporting_metadata.buyer_reporting_id)->c_str());
+      seller_device_signals.AddMember(kBuyerReportingIdTag, buyer_reporting_id,
+                                      seller_device_signals.GetAllocator());
+    }
+  } else if (buyer_reporting_metadata.buyer_and_seller_reporting_id) {
+    AddKeyValToSellerSignalsIfNotPresent(
+        kBuyerAndSellerReportingIdTag,
+        *buyer_reporting_metadata.buyer_and_seller_reporting_id,
+        seller_device_signals);
   } else if (buyer_reporting_metadata.buyer_reporting_id) {
-    rapidjson::GenericStringRef buyer_reporting_id(
-        (buyer_reporting_metadata.buyer_reporting_id)->c_str());
-    seller_device_signals.AddMember(kBuyerReportingIdTag, buyer_reporting_id,
-                                    seller_device_signals.GetAllocator());
+    AddKeyValToSellerSignalsIfNotPresent(
+        kBuyerReportingIdTag, *buyer_reporting_metadata.buyer_reporting_id,
+        seller_device_signals);
   } else {
     rapidjson::GenericStringRef interest_group_name(
         buyer_reporting_metadata.interest_group_name.c_str());
@@ -125,20 +159,25 @@ absl::StatusOr<std::shared_ptr<std::string>> GenerateBuyerDeviceSignals(
     seller_device_signals.AddMember(kAdCostTag, *ad_cost,
                                     seller_device_signals.GetAllocator());
   }
-  SetBuyerReportingIds(buyer_reporting_metadata, seller_device_signals);
+  SetReportingIds(buyer_reporting_metadata, seller_device_signals);
 
   if (buyer_reporting_metadata.data_version > 0) {
     seller_device_signals.AddMember(kDataVersion,
                                     buyer_reporting_metadata.data_version,
                                     seller_device_signals.GetAllocator());
   }
+  rapidjson::GenericStringRef k_anon_status(
+      buyer_reporting_metadata.k_anon_status.c_str());
+  seller_device_signals.AddMember(kKAnonStatusTag, k_anon_status,
+                                  seller_device_signals.GetAllocator());
   return SerializeJsonDoc(seller_device_signals,
                           buyer_reporting_metadata.buyer_signals.size());
 }
 
 absl::StatusOr<ReportWinResponse> ParseReportWinResponse(
     const ReportingDispatchRequestConfig& dispatch_request_config,
-    absl::string_view response, RequestLogContext& log_context) {
+    absl::string_view response, const BaseValues& base_values,
+    RequestLogContext& log_context) {
   PS_ASSIGN_OR_RETURN(rapidjson::Document document, ParseJsonString(response));
   auto it = document.FindMember(kResponse);
   if (it == document.MemberEnd()) {
@@ -174,6 +213,18 @@ absl::StatusOr<ReportWinResponse> ParseReportWinResponse(
     HandleUdfLogs(document, kReportingUdfWarnings, kReportWinUDFName,
                   log_context);
   }
+  rapidjson::Document paapi_response_obj;
+  auto pagg_iterator = document.FindMember(kPAggContributions);
+  if (pagg_iterator != document.MemberEnd() &&
+      pagg_iterator->value.IsObject()) {
+    paapi_response_obj.CopyFrom(pagg_iterator->value,
+                                paapi_response_obj.GetAllocator());
+    PrivateAggregateReportingResponse pagg_response =
+        GetPrivateAggregateReportingResponseForWinner(base_values,
+                                                      paapi_response_obj);
+    report_win_response.pagg_response = pagg_response;
+  }
+
   return report_win_response;
 }
 

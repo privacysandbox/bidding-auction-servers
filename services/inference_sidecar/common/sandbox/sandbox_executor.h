@@ -55,7 +55,8 @@ std::string GetFilePath(absl::string_view relative_binary_path);
 class SandboxExecutor {
  public:
   SandboxExecutor(absl::string_view binary_path,
-                  const std::vector<std::string>& args);
+                  const std::vector<std::string>& args,
+                  const int64_t rlimit_mb = 0);
   ~SandboxExecutor();
 
   SandboxExecutor(const SandboxExecutor&) = delete;

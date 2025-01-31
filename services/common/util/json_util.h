@@ -254,8 +254,10 @@ inline absl::StatusOr<double> GetDoubleMember(const T& document,
     return absl::InvalidArgumentError(
         absl::StrFormat(kMissingMember, member_name));
   }
-
-  if (!it->value.IsDouble()) {
+  // Can be either double or number.
+  // This is because values such as 1.0 in rapidjson would be interpreted as
+  // number.
+  if (!it->value.IsDouble() && !it->value.IsNumber()) {
     return absl::InvalidArgumentError(
         absl::StrFormat(kUnexpectedMemberType, member_name,
                         rapidjson::kNumberType, it->value.GetType()));

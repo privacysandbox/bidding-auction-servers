@@ -39,13 +39,14 @@ absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
     if (!json.IsArray()) {
       return absl::InvalidArgumentError(absl::StrFormat(
           "Incorrectly formed compression group. Array was expected. "
-          "Compression group id %i",
+          "Compression group index %i",
           compression_group_index));
     }
     for (auto& partition_output : json.GetArray()) {
       if (!partition_output.IsObject()) {
         return absl::InvalidArgumentError(absl::StrFormat(
-            "Incorrectly formed compression group. Compression group id %i",
+            "Incorrectly formed compression group. partitionOutput should be "
+            "an object. Compression group index %i. ",
             compression_group_index));
       }
       auto&& po = partition_output.GetObject();
@@ -53,7 +54,8 @@ absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
       if (!(key_group_outputs != po.MemberEnd() &&
             key_group_outputs->value.IsArray())) {
         return absl::InvalidArgumentError(absl::StrFormat(
-            "Incorrectly formed compression group. Compression group id %i",
+            "Incorrectly formed compression group. keyGroupOutputs should be "
+            "an array. Compression group index %i",
             compression_group_index));
       }
       for (auto& key_group_output : key_group_outputs->value.GetArray()) {
@@ -65,9 +67,10 @@ absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
         auto key_values = key_group_output.FindMember(kKeyValues);
         if (key_values == key_group_output.MemberEnd() ||
             !(key_values->value.IsObject())) {
-          return absl::InvalidArgumentError(absl::StrFormat(
-              "Incorrectly formed compression group. Compression group id %i",
-              compression_group_index));
+          return absl::InvalidArgumentError(
+              absl::StrFormat("Incorrectly formed compression group. keyValues "
+                              "should be an object. Compression group index %i",
+                              compression_group_index));
         }
         for (auto& key_value_pair : key_values->value.GetObject()) {
           if (ig_signals.FindMember(key_value_pair.name) ==
@@ -100,6 +103,7 @@ absl::StatusOr<std::string> ConvertKvV2ResponseToV1String(
   // However, a doc object for each compression group must exist until
   // SerializeJsonDoc is called. Otherwise the chain of pointers is broken and
   // we get undefined behavior.
+  PS_VLOG(8) << "Converting TKV V2 response: " << v2_response_to_convert;
   std::vector<rapidjson::Document> docs;
   docs.reserve(v2_response_to_convert.compression_groups().size());
   for (auto&& group : v2_response_to_convert.compression_groups()) {

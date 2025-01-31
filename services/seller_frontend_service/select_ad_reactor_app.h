@@ -36,7 +36,9 @@ class SelectAdReactorForApp : public SelectAdReactor {
       SelectAdResponse* response, const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
       const ReportWinMap& report_win_map, bool enable_cancellation = false,
-      bool enable_kanon = false, bool fail_fast = true);
+      bool enable_kanon = false,
+      bool enable_buyer_private_aggregate_reporting = false,
+      bool fail_fast = true);
   virtual ~SelectAdReactorForApp() = default;
 
   // SelectAdReactorForApp is neither copyable nor movable.
@@ -88,12 +90,12 @@ class SelectAdReactorForApp : public SelectAdReactor {
   std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> CreateScoreAdsRequest()
       override;
 
-  KAnonAuctionResultData GetKAnonAuctionResultData(
-      const std::optional<ScoreAdsResponse::AdScore>& high_score,
-      const AdScores* ghost_winning_scores = nullptr) override;
-
-  AuctionResult::KAnonJoinCandidate GetKAnonJoinCandidate(
+  KAnonJoinCandidate GetKAnonJoinCandidate(
       const ScoreAdsResponse::AdScore& score) override;
+
+  BidKAnonHashSets GetKAnonHashesForBids() override;
+
+  absl::string_view GetKAnonSetType() override;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

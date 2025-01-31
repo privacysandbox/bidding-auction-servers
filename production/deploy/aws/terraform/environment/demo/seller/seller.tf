@@ -25,44 +25,6 @@ locals {
   use_service_mesh = true
   # Whether to use TLS-encrypted communication between service mesh envoy sidecars. Defaults to false, as comms take place within a VPC and the critical payload is HPKE-encrypted, and said encryption is terminated inside a TEE.
   use_tls_with_mesh = false
-}
-provider "aws" {
-  region = local.region
-}
-
-
-module "seller" {
-  source                               = "../../../modules/seller"
-  environment                          = local.environment
-  region                               = local.region
-  enclave_debug_mode                   = false # Example: false, set to true for extended logs
-  root_domain                          = local.seller_root_domain
-  root_domain_zone_id                  = "" # Example: "Z010286721PKVM00UYU50"
-  certificate_arn                      = "" # Example: "arn:aws:acm:us-west-1:574738241422:certificate/b8b0a33f-0821-1111-8464-bc8da130a7fe"
-  operator                             = local.seller_operator
-  sfe_instance_ami_id                  = ""    # Example: "ami-0ff8ad2fa8512a078"
-  auction_instance_ami_id              = ""    # Example: "ami-0ea85f493f16aba3c"
-  sfe_instance_type                    = ""    # Example: "c6i.2xlarge"
-  auction_instance_type                = ""    # Example: "c6i.2xlarge"
-  sfe_enclave_cpu_count                = 6     # Example: 6
-  sfe_enclave_memory_mib               = 12000 # Example: 12000
-  auction_enclave_cpu_count            = 6     # Example: 6
-  auction_enclave_memory_mib           = 12000 # Example: 12000
-  sfe_autoscaling_desired_capacity     = 3     # Example: 3
-  sfe_autoscaling_max_size             = 5     # Example: 5
-  sfe_autoscaling_min_size             = 1     # Example: 1
-  auction_autoscaling_desired_capacity = 3     # Example: 3
-  auction_autoscaling_max_size         = 5     # Example: 5
-  auction_autoscaling_min_size         = 1     # Example: 1
-  country_for_cert_auth                = ""    # Example: "US"
-  business_org_for_cert_auth           = ""    # Example: "Privacy Sandbox"
-  state_for_cert_auth                  = ""    # Example: "California"
-  org_unit_for_cert_auth               = ""    # Example: "Bidding and Auction Servers"
-  locality_for_cert_auth               = ""    # Example: "Mountain View"
-  use_service_mesh                     = local.use_service_mesh
-  use_tls_with_mesh                    = local.use_tls_with_mesh
-  # NOTE THAT THE ONLY PORT ALLOWED HERE WHEN RUNNING WITH MESH IS 50051!
-  tee_kv_servers_port = 50051 # Example: 50051
 
   runtime_flags = {
     AUCTION_PORT         = "50051"                                   # Do not change unless you are modifying the default AWS architecture.
@@ -96,7 +58,7 @@ module "seller" {
     CREATE_NEW_EVENT_ENGINE             = ""            # Example: "false"
     TELEMETRY_CONFIG                    = ""            # Example: "mode: EXPERIMENT"
     ENABLE_OTEL_BASED_LOGGING           = ""            # Example: "true"
-    CONSENTED_DEBUG_TOKEN               = ""            # Example: "123456"
+    CONSENTED_DEBUG_TOKEN               = ""            # Example: "123456". Consented debugging requests increase server load in production. A high QPS of these requests can lead to unhealthy servers.
     DEBUG_SAMPLE_RATE_MICRO             = "0"
     TEST_MODE                           = "" # Example: "false"
     SELLER_CODE_FETCH_CONFIG            = "" # Example:
@@ -120,10 +82,16 @@ module "seller" {
     #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
 
     #  }"
-    UDF_NUM_WORKERS                 = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count, and should be equal for best performance.
-    JS_WORKER_QUEUE_LEN             = "" # Example: "100".
-    ROMA_TIMEOUT_MS                 = "" # Example: "10000"
-    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
+    ROMA_TIMEOUT_MS                        = "" # Example: "10000"
+    ENABLE_REPORT_WIN_INPUT_NOISING        = "" # Example: "true"
+    K_ANON_TOTAL_NUM_HASH                  = "" # Example: "1000"
+    EXPECTED_K_ANON_TO_NON_K_ANON_RATIO    = "" # Example: "1.0"
+    K_ANON_CLIENT_TIME_OUT_MS              = "" # Example: "60000"
+    NUM_K_ANON_SHARDS                      = "" # Example: "1"
+    NUM_NON_K_ANON_SHARDS                  = "" # Example: "1"
+    TEST_MODE_K_ANON_CACHE_TTL_SECONDS     = "" # Example: "180"
+    TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS = "" # Example: "180"
+    ENABLE_K_ANON_QUERY_CACHE              = "" # Example: "true"
 
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.
@@ -156,10 +124,80 @@ module "seller" {
     SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
 
-    ENABLE_CHAFFING                     = "false"
-    ENABLE_PRIORITY_VECTOR              = "false"
-    REQUIRE_SCORING_SIGNALS_FOR_SCORING = "true"
-    ALLOW_COMPRESSED_AUCTION_CONFIG     = "false"
+    ENABLE_CHAFFING        = "false"
+    ENABLE_PRIORITY_VECTOR = "false"
+    # Possible values:
+    # NOT_FETCHED: No call to KV server is made. All ads are sent to scoreAd().
+    # FETCHED_BUT_OPTIONAL: Call to KV server is made and must not fail. All ads are sent to scoreAd() irrespective of whether their adRenderUrls have scoring signals or not.
+    # Any other value/REQUIRED (default): Call to KV server is made and must not fail. Only those ads are sent to scoreAd() that have scoring signals for their adRenderUrl.
+    SCORING_SIGNALS_FETCH_MODE      = "REQUIRED"
+    ALLOW_COMPRESSED_AUCTION_CONFIG = "false"
   }
+}
+provider "aws" {
+  region = "us-east-1"
+  alias  = "us-east-1"
+}
+
+
+module "seller-us-east-1" {
+  # --- Params in upper section are expected to change between regions. ---
+
+  providers = {
+    aws = aws.us-east-1
+  }
+  region          = "us-east-1"
+  certificate_arn = "" # Example: "arn:aws:acm:us-west-1:574738241422:certificate/b8b0a33f-0821-1111-8464-bc8da130a7fe"
+
+  # AMIs
+  sfe_instance_ami_id     = "" # Example: "ami-0ff8ad2fa8512a078"
+  auction_instance_ami_id = "" # Example: "ami-0ea85f493f16aba3c"
+
+  # Machine sizing
+  sfe_instance_type          = ""    # Example: "c6i.2xlarge"
+  auction_instance_type      = ""    # Example: "c6i.2xlarge"
+  sfe_enclave_cpu_count      = 6     # Example: 6
+  sfe_enclave_memory_mib     = 12000 # Example: 12000
+  auction_enclave_cpu_count  = 6     # Example: 6
+  auction_enclave_memory_mib = 12000 # Example: 12000
+  runtime_flags = merge(local.runtime_flags, {
+    UDF_NUM_WORKERS     = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count, and should be equal for best performance.
+    JS_WORKER_QUEUE_LEN = "" # Example: "100".
+  })
+
+  # Autoscaling
+  sfe_autoscaling_desired_capacity     = 3 # Example: 3
+  sfe_autoscaling_max_size             = 5 # Example: 5
+  sfe_autoscaling_min_size             = 1 # Example: 1
+  auction_autoscaling_desired_capacity = 3 # Example: 3
+  auction_autoscaling_max_size         = 5 # Example: 5
+  auction_autoscaling_min_size         = 1 # Example: 1
+
+
+  # --- Params below are not generally expected to change between regions. ---
+
+  source              = "../../../modules/seller"
+  environment         = local.environment
+  enclave_debug_mode  = false # Example: false, set to true for extended logs
+  root_domain         = local.seller_root_domain
+  root_domain_zone_id = "" # Example: "Z010286721PKVM00UYU50"
+  operator            = local.seller_operator
+
+  # Certificate authority
+  country_for_cert_auth      = "" # Example: "US"
+  business_org_for_cert_auth = "" # Example: "Privacy Sandbox"
+  state_for_cert_auth        = "" # Example: "California"
+  org_unit_for_cert_auth     = "" # Example: "Bidding and Auction Servers"
+  locality_for_cert_auth     = "" # Example: "Mountain View"
+
+  # NOTE THAT THE ONLY PORT ALLOWED HERE WHEN RUNNING WITH MESH IS 50051!
+  tee_kv_servers_port = 50051 # Example: 50051
+
+  # Service Mesh (deprecated by AWS)
+  use_service_mesh  = local.use_service_mesh
+  use_tls_with_mesh = local.use_tls_with_mesh
+
+  # The value is required for "awss3" exporter defined in production/packaging/aws/common/ami/otel_collector_config.yaml.
+  # Alternatively, "awss3" must not be used in otel_collector_config.yaml.
   consented_request_s3_bucket = "" # Example: ${name of a s3 bucket}
 }

@@ -112,6 +112,19 @@ container_layer(
     ],
 )
 
+pkg_tar(
+    name = "root_certs",
+    srcs = ["@com_github_grpc_grpc//:root_certificates"],
+)
+
+container_layer(
+    name = "root_certs_layer",
+    directory = "/etc/",
+    tars = [
+        ":root_certs",
+    ],
+)
+
 container_image(
     name = "server_docker_image",
     base = select({
@@ -127,6 +140,7 @@ container_image(
         ":server_binary_layer",
         ":envoy_distroless_layer",
         ":envoy_config_layer",
+        ":root_certs_layer",
     ] + select({
         "//:e2e_build": [
         ],

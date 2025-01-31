@@ -60,6 +60,10 @@ constexpr char kTestEgressPayloadBiggerThan3Bytes[] = "deadbeef";
 constexpr char kTestEgressPayloadBiggerThan23bits[] = "f01020";
 constexpr char kTestAdsRetrievalAdsResponse[] = "Ads Data And Metadata";
 constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
+constexpr char kTestBuyerAndSellerReportingId[] =
+    "testBuyerAndSellerReportingId";
+constexpr char kTestSelectedBuyerAndSellerReportingId[] =
+    "testSelectedBuyerAndSellerReportingId";
 constexpr char kTestAdsRetrievalContextualEmbeddingsResponse[] = R"JSON(
 {
     "contextualEmbeddings1": {

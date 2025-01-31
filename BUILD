@@ -46,67 +46,6 @@ EOF""",
     local = True,
 )
 
-# Config settings to determine which platform the system will be built to run on
-# Example:
-string_flag(
-    name = "platform",
-    build_setting_default = "aws",
-    values = [
-        "aws",
-        "azure",
-        "gcp",
-        "local",
-    ],
-)
-
-config_setting(
-    name = "aws_platform",
-    flag_values = {
-        ":platform": "aws",
-    },
-    visibility = ["//visibility:private"],
-)
-
-config_setting(
-    name = "azure_platform",
-    flag_values = {
-        ":platform": "azure",
-    },
-    visibility = ["//visibility:private"],
-)
-
-config_setting(
-    name = "gcp_platform",
-    flag_values = {
-        ":platform": "gcp",
-    },
-    visibility = ["//visibility:private"],
-)
-
-config_setting(
-    name = "gcp_instance",
-    flag_values = {
-        ":instance": "gcp",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "aws_instance",
-    flag_values = {
-        ":instance": "aws",
-    },
-    visibility = ["//visibility:public"],
-)
-
-config_setting(
-    name = "local_platform",
-    flag_values = {
-        ":platform": "local",
-    },
-    visibility = ["//visibility:private"],
-)
-
 exports_files(
     [".bazelversion"],
 )

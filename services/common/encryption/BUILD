@@ -55,11 +55,11 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
-        "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:private_key_fetcher",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:public_key_fetcher",
+        "@google_privacysandbox_servers_common//src/errors:retry",
     ],
 )
 

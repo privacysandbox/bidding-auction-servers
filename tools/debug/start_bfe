@@ -28,21 +28,23 @@ SERVER_START_CMD=$(cat << END
 --bidding_server_addr="${BIDDING_SERVER_ADDR}" \
 --buyer_kv_server_addr="${BUYER_KV_SERVER_ADDR}" \
 --buyer_tkv_v2_server_addr="${BUYER_TKV_V2_SERVER_ADDR}" \
+--bidding_signals_fetch_mode="REQUIRED" \
 --enable_buyer_frontend_benchmarking="true" \
---generate_bid_timeout_ms=60000 --bidding_signals_load_timeout_ms 60000 \
+--generate_bid_timeout_ms=60000 \
+--bidding_signals_load_timeout_ms 60000 \
 --protected_app_signals_generate_bid_timeout_ms=60000 \
 --create_new_event_engine="false" \
 --test_mode="true" \
---telemetry_config="mode: OFF" \
+--telemetry_config="${TELEMETRY_CONFIG}" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
 --ps_verbosity=${PS_VERBOSITY} \
 --enable_chaffing="false" \
---enable_kanon="false" \
---enable_protected_audience="true" \
+--enable_kanon=${ENABLE_KANON} \
+--enable_protected_audience=${ENABLE_PROTECTED_AUDIENCE} \
 --bfe_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --bfe_tcmalloc_max_total_thread_cache_bytes=10737418240 \
---enable_protected_app_signals="true" && exit
+--enable_protected_app_signals=${ENABLE_PROTECTED_APP_SIGNALS} && exit
 END
 )
 

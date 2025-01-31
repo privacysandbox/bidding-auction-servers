@@ -15,9 +15,15 @@
 #ifndef SERVICES_BUYER_FRONTEND_SERVICE_DATA_GET_BIDS_CONFIG_H_
 #define SERVICES_BUYER_FRONTEND_SERVICE_DATA_GET_BIDS_CONFIG_H_
 
-#include <string>
+#include <cstdint>
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+enum class BiddingSignalsFetchMode : std::uint8_t {
+  REQUIRED = 0,
+  FETCHED_BUT_OPTIONAL = 1,
+  NOT_FETCHED = 2,
+};
 
 struct GetBidsConfig {
   // The max time to wait for generate bid request to finish.
@@ -44,6 +50,10 @@ struct GetBidsConfig {
   bool priority_vector_enabled = false;
   bool test_mode = false;
   bool tkv_v2_address_empty = false;
+  BiddingSignalsFetchMode bidding_signals_fetch_mode =
+      BiddingSignalsFetchMode::REQUIRED;
+  // TKV per buyer signals propagation
+  bool propagate_buyer_signals_to_tkv = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

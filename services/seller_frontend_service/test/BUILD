@@ -33,3 +33,27 @@ cc_library(
         "@com_google_absl//absl/status",
     ],
 )
+
+cc_library(
+    name = "constants",
+    testonly = True,
+    hdrs = ["constants.h"],
+    visibility = [
+        "//services:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "kanon_test_utils",
+    testonly = True,
+    srcs = ["kanon_test_utils.cc"],
+    hdrs = ["kanon_test_utils.h"],
+    visibility = [
+        "//services:__subpackages__",
+    ],
+    deps = [
+        "//api:bidding_auction_servers_cc_grpc_proto",
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/seller_frontend_service/data:seller_frontend_data",
+    ],
+)

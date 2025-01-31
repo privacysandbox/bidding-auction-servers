@@ -27,6 +27,7 @@
 #include "include/gmock/gmock.h"
 #include "include/gtest/gtest.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/test/constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -37,7 +38,10 @@ class AsyncReporterTest : public ::testing::Test {
     executor_ = std::make_unique<server_common::EventEngineExecutor>(
         grpc_event_engine::experimental::CreateEventEngine());
     reporter_ = std::make_unique<AsyncReporter>(
-        std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()));
+        std::make_unique<MultiCurlHttpFetcherAsync>(
+            executor_.get(), /*keepalive_interval_sec=*/2,
+            /*keepalive_idle_sec=*/2,
+            "external/com_github_grpc_grpc/etc/roots.pem"));
   }
   std::unique_ptr<server_common::EventEngineExecutor> executor_;
   std::unique_ptr<AsyncReporter> reporter_;
@@ -49,7 +53,7 @@ TEST_F(AsyncReporterTest, DoReportSuccessfully) {
   // NOLINTNEXTLINE
   auto done_cb = [&done](absl::StatusOr<absl::string_view> result) {
     done.DecrementCount();
-    ASSERT_TRUE(result.ok());
+    ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_GT(result.value().length(), 0);
   };
   reporter_->DoReport({"https://wikipedia.org", {}}, done_cb);

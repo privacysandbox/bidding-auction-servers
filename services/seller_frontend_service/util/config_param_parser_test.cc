@@ -136,7 +136,7 @@ TEST(StartupParamParserTest, ParseSingleBuyerMap) {
   }
 
   BuyerFrontEndAsyncClientFactory class_under_test(
-      output.value(), nullptr, nullptr, BuyerServiceClientConfig());
+      output.value(), nullptr, nullptr, {.ca_root_pem = kTestCaCertPath});
 
   std::shared_ptr<const BuyerFrontEndAsyncClient> actual_buyer_async_client_1 =
       class_under_test.Get("https://bid1.com");
@@ -154,7 +154,7 @@ TEST(StartupParamParserTest, ParseSingleLocalhostBuyerMap) {
   }
 
   BuyerFrontEndAsyncClientFactory class_under_test(
-      output.value(), nullptr, nullptr, BuyerServiceClientConfig());
+      output.value(), nullptr, nullptr, {.ca_root_pem = kTestCaCertPath});
 
   std::shared_ptr<const BuyerFrontEndAsyncClient> actual_buyer_async_client_1 =
       class_under_test.Get("https://bid1.com");
@@ -166,7 +166,7 @@ TEST(StartupParamParserTest, ParseMultiBuyerMap) {
   ASSERT_TRUE(output.ok());
   if (output.ok()) {
     BuyerFrontEndAsyncClientFactory class_under_test(
-        output.value(), nullptr, nullptr, BuyerServiceClientConfig());
+        output.value(), nullptr, nullptr, {.ca_root_pem = kTestCaCertPath});
 
     std::shared_ptr<const BuyerFrontEndAsyncClient> actual_buyer_async_client;
     std::string current_ig_owner;

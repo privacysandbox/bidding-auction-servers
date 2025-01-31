@@ -40,6 +40,54 @@ struct EgressSchemaCaches {
   std::unique_ptr<EgressSchemaCache> unlimited_egress_schema_cache = nullptr;
 };
 
+inline constexpr absl::string_view kNoEgressSchemaFetchConfig =
+    "No egress schema fetch json config supplied.";
+inline constexpr absl::string_view kParseEgressSchemaFetchConfigFailure =
+    "Failed to parse egress schema fetch configuration. Check the "
+    "EGRESS_SCHEMA_FETCH_CONFIG json.";
+
+inline constexpr absl::string_view kTemporaryEgressEnabled =
+    "Temporary egress feature is enabled in the binary, attempting schema "
+    "fetch...";
+inline constexpr absl::string_view kTemporaryEgressFetchUnsuccessful =
+    "Temporary egress schema fetch unsuccessful.";
+inline constexpr absl::string_view kTemporaryEgressFetchSuccessful =
+    "Temporary egress schema fetch successful.";
+inline constexpr absl::string_view kTemporaryEgressDisabled =
+    "Temporary egress feature is not enabled in the binary";
+
+inline constexpr absl::string_view kLimitedEgressEnabled =
+    " limited egress bits enabled, attempting to fetch...";
+
+inline constexpr absl::string_view kLimitedEgressFetchUnsuccessful =
+    "Limited egress schema fetch unsuccessful.";
+inline constexpr absl::string_view kLimitedEgressFetchSuccessful =
+    "Limited egress schema fetch successful.";
+inline constexpr absl::string_view kLimitedEgressDisabled =
+    "Limited egress feature is not enabled in the binary";
+
+inline constexpr absl::string_view kEgressBlobStorageClientInitFailure =
+    "Egress blob storage client init failed.";
+inline constexpr absl::string_view kEgressBlobStorageClientRunFailure =
+    "Egress blob storage client run failed.";
+
+inline constexpr absl::string_view kCddlSpecCacheInitFailure =
+    "Unable to init cddl spec cache.";
+inline constexpr absl::string_view kEgressSchemaFetchStartFailure =
+    "Unable to start fetching the egress schema.";
+inline constexpr absl::string_view kEgressSchemaFetchModeNotSupported =
+    "Egress schema fetch mode not supported.";
+
+inline constexpr absl::string_view kMustUseTemporaryOrLimitedEgress =
+    "You must use temporary unlimited egress or specify limited_egress_bits >= "
+    "1.";
+inline constexpr absl::string_view kNoUnlimitedSchemaVersion =
+    "enable_temporary_unlimited_egress is true but no valid unlimited egress "
+    "schema version was specified";
+inline constexpr absl::string_view kNoLimitedSchemaVersion =
+    "limited_egress_bits is non zero but no valid default egress schema "
+    "version was specified";
+
 // This class manages fetching and caching of egress schemas.
 class EgressSchemaFetchManager {
  public:
@@ -47,9 +95,9 @@ class EgressSchemaFetchManager {
     bool enable_protected_app_signals = false;
     bool enable_temporary_unlimited_egress = false;
     int limited_egress_bits = 0;
+    absl::string_view fetch_config;
 
     // All of the following fields must outlive EgressSchemaFetchManager.
-    bidding_service::EgressSchemaFetchConfig fetch_config;
     server_common::Executor* executor;
     HttpFetcherAsync* http_fetcher_async;
     std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
@@ -72,17 +120,18 @@ class EgressSchemaFetchManager {
   EgressSchemaFetchManager(const EgressSchemaFetchManager&) = delete;
   EgressSchemaFetchManager& operator=(const EgressSchemaFetchManager&) = delete;
 
-  // Configures the runtime versioning defaults to be used by reactors.
-  // May be called regardless of the status of Init().
+  // Must be called exactly once.
   // May modify runtime_config.
+  absl::StatusOr<EgressSchemaCaches> Init(
+      BiddingServiceRuntimeConfig& runtime_config);
+
+  const bidding_service::EgressSchemaFetchConfig& GetFetchConfig() const;
+
+ private:
+  // Configures the runtime versioning defaults to be used by reactors.
   absl::Status ConfigureRuntimeDefaults(
       BiddingServiceRuntimeConfig& runtime_config);
 
-  // Must be called exactly once. Failure to Init means that the bidding service
-  // does not have any egress schema caches.
-  absl::StatusOr<EgressSchemaCaches> Init();
-
- private:
   struct StartEgressSchemaFetchResult {
     std::unique_ptr<EgressSchemaCache> schema_cache;
     std::unique_ptr<FetcherInterface> schema_fetcher;
@@ -94,6 +143,7 @@ class EgressSchemaFetchManager {
 
   absl::Status InitializeBucketClient();
   Options options_;
+  bidding_service::EgressSchemaFetchConfig fetch_config_;
 
   std::unique_ptr<FetcherInterface> egress_schema_fetcher_;
   std::unique_ptr<FetcherInterface> unlimited_egress_schema_fetcher_;

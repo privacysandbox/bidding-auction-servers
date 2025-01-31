@@ -20,6 +20,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include "absl/flags/declare.h"
+#include "absl/flags/flag.h"
+#include "absl/flags/reflection.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -33,6 +36,8 @@
 #include "utils/inference_metric_util.h"
 #include "utils/log.h"
 #include "utils/test_util.h"
+
+ABSL_DECLARE_FLAG(bool, testonly_disable_model_validation);
 
 namespace privacy_sandbox::bidding_auction_servers::inference {
 namespace {
@@ -110,7 +115,7 @@ TEST(TensorflowModuleTest, Failure_RegisterModelLoadError) {
             status_or.status().message().find("Error loading model: ./pcvr"));
 }
 
-TEST(TensorflowModuleTest, Failure_RegisterModel_FreezeError) {
+TEST(TensorflowModuleTest, Failure_RegisterModel_ValidationError) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
       ModuleInterface::Create(config);
@@ -125,11 +130,11 @@ TEST(TensorflowModuleTest, Failure_RegisterModel_FreezeError) {
         tensorflow_module->RegisterModel(register_request);
 
     // Verifying that the registration fails with an InternalError due to
-    // freezing failure.
+    // validation failure.
     ASSERT_FALSE(status_or.ok());
     EXPECT_EQ(status_or.status().code(), absl::StatusCode::kInternal);
-    EXPECT_NE(std::string::npos, status_or.status().message().find(absl::StrCat(
-                                     "Error freezing model: ", model_dir)));
+    EXPECT_NE(std::string::npos, status_or.status().message().find(
+                                     absl::StrCat("Error: model ", model_dir)));
   }
 }
 
@@ -393,14 +398,14 @@ TEST(TensorflowModuleTest, Success_Predict_ValidateMetrics) {
   CheckMetricList(predict_response->metrics_list(), "kInferenceRequestSize", 0,
                   1432);
   CheckMetricList(predict_response->metrics_list(), "kInferenceResponseSize", 0,
-                  514);
+                  479);
   CheckMetricList(predict_response->metrics_list(),
                   "kInferenceRequestBatchCountByModel", 0, 1);
 
   auto it = predict_response->metrics_list().find("kInferenceRequestDuration");
   ASSERT_NE(it, predict_response->metrics_list().end())
       << "kInferenceRequestDuration metric is missing.";
-  EXPECT_GT(it->second.metrics().at(0).value(), 0)
+  EXPECT_GT(it->second.metrics().at(0).value_int32(), 0)
       << "kInferenceRequestDuration should be greater than zero.";
 
   predict_request.set_input(kPcvrJsonRequest2Models);
@@ -533,6 +538,39 @@ TEST(TensorflowModuleTest, Success_RegisterModelWithWarmUpData) {
   register_request.set_warm_up_batch_request_json(
       kFrozenPcvrJsonRequestBatchSize2);
   ASSERT_TRUE(tensorflow_module->RegisterModel(register_request).ok());
+}
+
+TEST(TensorflowModuleTest,
+     Success_RegisterModelDefaultReturnNoConstructMetric) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
+  auto register_response = tensorflow_module->RegisterModel(register_request);
+
+  ASSERT_TRUE(register_response.ok());
+  EXPECT_EQ(register_response.value().metrics_list_size(), 0);
+}
+
+TEST(TensorflowModuleTest,
+     Success_RegisterModelWithWarmUpDataReturnConstructMetric) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request).ok());
+  register_request.set_warm_up_batch_request_json(
+      kFrozenPcvrJsonRequestBatchSize2);
+  auto register_response = tensorflow_module->RegisterModel(register_request);
+
+  ASSERT_TRUE(register_response.ok());
+  EXPECT_EQ(register_response.value().metrics_list_size(), 1);
+  ASSERT_TRUE(register_response.value().metrics_list().find(
+                  "kInferenceRegisterModelResponseModelWarmUpDuration") !=
+              register_response.value().metrics_list().end());
 }
 
 constexpr char kPcvrJsonRequestBatchSizeWithWrongPath[] = R"json({
@@ -1309,6 +1347,273 @@ TEST(TensorflowModuleTest, CanReturnPartialBatchOutputWithError) {
                     HasSubstr("\"tensors\":")));
 }
 
+constexpr char kMixedValidInvalidBatchJsonRequest_WithParsingError[] = R"json({
+  "request" : [{
+    "model_path" : "./benchmark_models/frozen_pcvr",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_args_0:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["7", "3"]
+    }
+  ]
+},
+{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": [1]
+    }
+  ]
+},
+{
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["1","2"]
+    }
+  ]
+},
+{
+    "model_path" : "./non-existent",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["7", "3"]
+    }
+  ]
+},
+{
+    "model_path" : "./benchmark_models/frozen_pcvr",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_args_0:0",
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1, 10
+      ],
+      "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_1:0",
+      "data_type": "DOUBLE",
+      "tensor_shape": [
+        1, 10
+      ],
+      "tensor_content": ["0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.33", "0.13", "0.97", "0.12"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_2:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_3:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_4:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_5:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    },
+    {
+      "tensor_name": "serving_default_args_0_6:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        1, 1
+      ],
+      "tensor_content": ["8"]
+    }
+  ]
+}]
+    })json";
+
+TEST(TensorflowModuleTest, CanReturnPartialBatchOutputWithParsingError) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  RegisterModelRequest register_request_1;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel1Dir, register_request_1).ok());
+  ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_1).ok());
+  RegisterModelRequest register_request_2;
+  ASSERT_TRUE(
+      PopulateRegisterModelRequest(kFrozenModel2Dir, register_request_2).ok());
+  ASSERT_TRUE(tensorflow_module->RegisterModel(register_request_2).ok());
+
+  PredictRequest predict_request;
+  predict_request.set_input(
+      kMixedValidInvalidBatchJsonRequest_WithParsingError);
+  absl::StatusOr predict_output = tensorflow_module->Predict(predict_request);
+  ASSERT_TRUE(predict_output.ok());
+  // invalid parsing error from execution
+  EXPECT_THAT(predict_output->output(), AllOf(HasSubstr("MODEL_EXECUTION"),
+                                              HasSubstr("MODEL_NOT_FOUND")));
+  // invalid parsing error from request parser
+  EXPECT_THAT(predict_output->output(),
+              AllOf(HasSubstr("INPUT_PARSING"),
+                    HasSubstr("Missing model_path in the JSON document")));
+  // valid requests are executed
+  EXPECT_THAT(predict_output->output(), HasSubstr("\"tensors\":"));
+}
+
+constexpr char kTwoInValidParsingInputs[] = R"json({
+  "request" : [{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_args_0:0",
+      "data_type": "NOTSUPPORTED",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["7", "3"]
+    }
+  ]
+},
+{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": [1]
+    }
+  ]
+},
+{
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_int_input1:0",
+      "data_type": "INT64",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["1", "2"]
+    }
+  ]
+}]
+    })json";
+
+TEST(TensorflowModuleTest, PredictTwoInvalidParsingInputs) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  PredictRequest predict_request;
+  predict_request.set_input(kTwoInValidParsingInputs);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request, RequestContext());
+  ASSERT_TRUE(predict_response.ok());
+  // invalid parsing error from request parser
+  EXPECT_THAT(predict_response->output(),
+              AllOf(HasSubstr("Invalid JSON format: Unsupported 'data_type' "
+                              "field NOTSUPPORTED"),
+                    HasSubstr("Invalid JSON format: Unsupported 'data_type' "
+                              "field NOTSUPPORTED"),
+                    HasSubstr("Missing model_path in the JSON document"),
+                    HasSubstr("simple_model")));
+}
+
+constexpr char kInvalidInputNoModelPath[] = R"json({
+  "request" : [{
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_args_0:0",
+      "data_type": "INT32",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["7", "3"]
+    }
+  ]
+}]
+    })json";
+
+TEST(TensorflowModuleTest, PredictInvalidInputNoModelPath) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  PredictRequest predict_request;
+  predict_request.set_input(kInvalidInputNoModelPath);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request, RequestContext());
+  ASSERT_TRUE(predict_response.ok());
+  // invalid parsing error from request parser
+  EXPECT_EQ(predict_response->output(),
+            "{\"response\":[{\"model_path\":\"\",\"error\":{\"error_type\":"
+            "\"INPUT_PARSING\",\"description\":\"Missing model_path in the "
+            "JSON document\"}}]}");
+}
+
+constexpr char kInvalidInputWithModelPath[] = R"json({
+  "request" : [{
+    "model_path" : "simple_model",
+    "tensors" : [
+    {
+      "tensor_name": "serving_default_args_0:0",
+      "data_type": "NOTSUPPORTED",
+      "tensor_shape": [
+        2, 1
+      ],
+      "tensor_content": ["7", "3"]
+    }
+  ]
+}]
+    })json";
+
+TEST(TensorflowModuleTest, PredictInvalidInputWithModelPath) {
+  InferenceSidecarRuntimeConfig config;
+  std::unique_ptr<ModuleInterface> tensorflow_module =
+      ModuleInterface::Create(config);
+  PredictRequest predict_request;
+  predict_request.set_input(kInvalidInputWithModelPath);
+  absl::StatusOr<PredictResponse> predict_response =
+      tensorflow_module->Predict(predict_request, RequestContext());
+  ASSERT_TRUE(predict_response.ok());
+  // invalid parsing error from request parser
+  EXPECT_EQ(predict_response->output(),
+            "{\"response\":[{\"model_path\":\"simple_model\",\"error\":{"
+            "\"error_type\":\"INPUT_PARSING\",\"description\":\"Invalid JSON "
+            "format: Unsupported 'data_type' field NOTSUPPORTED\"}}]}");
+}
+
 TEST(TensorflowModuleTest, Failure_DeleteModel_NotFound) {
   InferenceSidecarRuntimeConfig config;
   std::unique_ptr<ModuleInterface> tensorflow_module =
@@ -1381,6 +1686,9 @@ class NoFreezeTensorflowTest : public ::testing::Test {
     tensorflow_module_->SetModelStoreForTestOnly(
         std::make_unique<ModelStore<tensorflow::SavedModelBundle>>(
             config, MockModelConstructor));
+
+    // Disables the model validation to force to load the stateful model.
+    absl::SetFlag(&FLAGS_testonly_disable_model_validation, true);
   }
 
   void SetResetProbability(float probability) {
@@ -1394,7 +1702,8 @@ class NoFreezeTensorflowTest : public ::testing::Test {
   // No model freezing to allow stateful models to be loaded.
   static absl::StatusOr<std::shared_ptr<tensorflow::SavedModelBundle>>
   MockModelConstructor(const InferenceSidecarRuntimeConfig& config,
-                       const RegisterModelRequest& request) {
+                       const RegisterModelRequest& request,
+                       ModelConstructMetrics& construct_metrics) {
     for (const auto& pair : request.model_files()) {
       const std::string& path = absl::StrCat(kRamFileSystemScheme, pair.first);
       const std::string& bytes = pair.second;
@@ -1416,6 +1725,7 @@ class NoFreezeTensorflowTest : public ::testing::Test {
   }
 
   std::unique_ptr<TensorflowModule> tensorflow_module_;
+  absl::FlagSaver flag_saver_;
 };
 
 TEST_F(NoFreezeTensorflowTest, Success_NoReset_StatefulModel) {

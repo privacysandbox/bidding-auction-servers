@@ -31,6 +31,28 @@
       "componentSellerReportingURLs": { "$ref": "#/$defs/reportingUrlsDef" },
       "topLevelSellerReportingURLs": { "$ref": "#/$defs/reportingUrlsDef" }
     },
+    "debugReportDef": {
+      "type": "object",
+      "properties": {
+        "isWinReport": { "type": "bool" },
+        "isSellerReport": { "type": "bool" },
+        "componentWin": { "type": "bool" },
+        "url": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "debugReportsPerOriginDef": {
+      "type": "object",
+      "properties": {
+        "adTechOrigin": { "type": "string" },
+        "reports": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/debugReportDef" }
+        }
+      },
+      "required": ["adTechOrigin", "reports"],
+      "additionalProperties": false
+    },
     "KAnonJoinCandidate": {
         "properties": {
             "adRenderURLHash": {
@@ -83,9 +105,9 @@
                 "type": "string",
                 "description": "BuyerReportingId of the ghost winning Ad. This will be verified with the buyerAndSellerReportingId in the Ad properties on the browser."
             },
-            "selectableBuyerAndSellerReportingId": {
+            "selectedBuyerAndSellerReportingId": {
                 "type": "string",
-                "description": "SelectableBuyerAndSellerReportingId of the ghost winning Ad. This will be verified with the buyerAndSellerReportingId in the Ad properties on the browser."
+                "description": "SelectedBuyerAndSellerReportingId of the ghost winning Ad. This will be verified with the selectablebuyerAndSellerReportingId in the Ad properties on the browser."
             },
             "buyerAndSellerReportingId": {
                 "type": "string",
@@ -141,7 +163,56 @@
         "type": "object",
         "title": "K Anon Ghost Winner",
         "description": "Data for the ghost winner sent back to the client. This should also include key-hashes corresponding to the ghost winning ad. Refer https://wicg.github.io/turtledove/#k-anonymity for details around how clients call the Join API using the hash."
-    }
+    },
+    "PAggBucketAndValue": {
+      "type": "object",
+      "properties": {
+        "bucket": {"type": "string"},
+        "value": {"type": "integer"}
+      },
+      "required": ["bucket", "value"],
+      "additionalProperties": false,
+      "description": "Bucket and Value of a Private Aggregation contribution."
+    },
+    "PAggEventContribution": {
+      "type": "object",
+      "properties": {
+        "contributions": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/PAggBucketAndValue"}
+          },
+        "event": {"type": "string"}
+      },
+      "required": ["event","contributions"],
+      "additionalProperties": false,
+      "description": "Group of event type and associated Private Aggregation contributions. event is set only if the contribution was made for a custom event or in case of component auctions for the winning buyer and seller. Event type supported: reserved.win, reserved.loss, reserved.always and custom events(not starting with reserved."
+    },
+   "PAggResponsePerIg": {
+      "type": "object",
+      "properties": {
+        "eventContributions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/PAggEventContribution"}
+        },
+        "igIndex": {"type": "integer"},
+        "coordinator": {"type": "string"},
+        "componentWin": {"type": "boolean"}
+    },
+    "required": ["eventContributions"],
+    "description": "All Private Aggregation contributions made for a specific IG. coordinator is only populated for component seller. componentWin is set only for winning buyer and seller's contributions made for the winning IG in case of multi seller auctions. componentWin is expected to be false by default if not set. igIndex is only set for the buyer and is expected to not be set for the seller."
+   },
+   "PAggResponsePerOrigin": {
+      "type": "object",
+      "properties": {
+        "igContributions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/PAggResponsePerIg"}
+        },
+        "reportingOrigin": {"type": "string"}
+    },
+    "required": ["igContributions","reportingOrigin"],
+    "description": "reportingOrigin(buyer or seller origin) and all the corresponding Private Aggregation contributions made."
+   }
   },
   "properties": {
     "adRenderURL": {
@@ -202,6 +273,11 @@
       "description": "Boolean to indicate that there is no remarketing winner from the auction. AuctionResult may be ignored by the client (after decryption) if this is set to true."
     },
     "winReportingURLs": { "$ref": "#/$defs/winReportingUrlsDef" },
+    "debugReports": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/debugReportsPerOriginDef" },
+      "description": "Debug reporting metadata needed to send debug pings on device."
+    },
     "error": { "$ref": "#/$defs/errorDef" },
     "adMetadata": {
       "type": "string",
@@ -225,6 +301,15 @@
         },
         "additionalProperties": false,
         "type": "array"
+    },
+    "paggResponse": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/PAggResponsePerOrigin"},
+      "description": "All the Private Aggregation contributions made by seller and associated buyers along with the metadata needed to send the final report on device."
+    },
+    "nonce": {
+      "type": "string",
+      "description": "The Ad-Auction-Result-Nonce sent by the seller in the SelectAdRequest for parallelized Protected Auctions mixed mode. This is included with the bid, error and the chaff response"
     }
   }
 }

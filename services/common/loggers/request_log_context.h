@@ -104,6 +104,8 @@ class EventMessageProvider {
 
   EVENT_MESSAGE_PROVIDER_SET(EventMessage::KvSignal, kv_signal);
 
+  bool ShouldExport() const { return !event_message_.udf_log().empty(); }
+
  private:
   EventMessage event_message_;
 };

@@ -14,7 +14,7 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//services/auction_service:__pkg__"])
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "private_aggregation_manager",
@@ -44,6 +44,7 @@ cc_test(
     ],
     deps = [
         ":private_aggregation_manager_test_util",
+        "//services/common/private_aggregation:private_aggregation_test_util",
     ],
 )
 
@@ -52,9 +53,6 @@ cc_library(
     testonly = True,
     srcs = ["private_aggregation_manager_test_util.cc"],
     hdrs = ["private_aggregation_manager_test_util.h"],
-    visibility = [
-        "//services/auction_service/private_aggregation:__pkg__",
-    ],
     deps = [
         ":private_aggregation_manager",
         "@com_google_googletest//:gtest_main",

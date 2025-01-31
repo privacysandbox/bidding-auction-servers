@@ -74,6 +74,28 @@ locals {
     # optional: more experiment arm
     # "${local.environment}-2" = ...
   }
+
+  # Divert request to different sfe and auction servers by http headers at frontend load balancer
+  seller_header_experiment = {
+    # optional: header experiment arm 1
+    "${local.environment}-h1" = {
+      image_tag             = ""                          # Image built and uploaded by production/packaging/build_and_test_all_in_docker
+      region_config         = local.default_region_config # region config can be different for each arm
+      runtime_flag_override = {}
+      match_rules = [
+        # The request matches when any of match_rules are satisfied. Arm with empty match_rules will be skipped.
+        # { # Only one of exactMatch, prefixMatch, or presentMatch must be specified.
+        #   header_name   = "exp-id123"
+        #   exact_match   = ""
+        #   prefix_match  = ""
+        #   present_match = true
+        # },
+      ]
+    }
+
+    # optional: more header experiment arm
+    # "${local.environment}-h2" = ...
+  }
 }
 
 provider "google" {
@@ -97,7 +119,13 @@ module "secrets" {
 }
 
 module "seller" {
-  for_each              = { for key, value in local.seller_traffic_splits : key => value if value.traffic_weight > 0 }
+  for_each = merge(
+    { for key, value in local.seller_traffic_splits :
+    key => value if value.traffic_weight > 0 },
+    { for key, value in local.seller_header_experiment :
+    key => value if length(value.match_rules) > 0 }
+  )
+
   source                = "../../../modules/seller"
   environment           = each.key
   gcp_project_id        = local.gcp_project_id
@@ -152,15 +180,23 @@ module "seller" {
     #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},
     #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
     #  }"
-    UDF_NUM_WORKERS                 = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
-    JS_WORKER_QUEUE_LEN             = "" # Example: "200".
-    ROMA_TIMEOUT_MS                 = "" # Example: "10000"
-    TELEMETRY_CONFIG                = "" # Example: "mode: EXPERIMENT"
-    COLLECTOR_ENDPOINT              = "" # Example: "collector-seller-1-${each.key}.sfe-gcp.com:4317"
-    ENABLE_OTEL_BASED_LOGGING       = "" # Example: "false"
-    CONSENTED_DEBUG_TOKEN           = "" # Example: "<unique_id>"
-    DEBUG_SAMPLE_RATE_MICRO         = "0"
-    ENABLE_REPORT_WIN_INPUT_NOISING = "" # Example: "true"
+    UDF_NUM_WORKERS                        = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
+    JS_WORKER_QUEUE_LEN                    = "" # Example: "200".
+    ROMA_TIMEOUT_MS                        = "" # Example: "10000"
+    TELEMETRY_CONFIG                       = "" # Example: "mode: EXPERIMENT"
+    COLLECTOR_ENDPOINT                     = "" # Example: "collector-seller-1-${each.key}.sfe-gcp.com:4317"
+    ENABLE_OTEL_BASED_LOGGING              = "" # Example: "false"
+    CONSENTED_DEBUG_TOKEN                  = "" # Example: "<unique_id>". Consented debugging requests increase server load in production. A high QPS of these requests can lead to unhealthy servers.
+    DEBUG_SAMPLE_RATE_MICRO                = "0"
+    ENABLE_REPORT_WIN_INPUT_NOISING        = "" # Example: "true"
+    K_ANON_TOTAL_NUM_HASH                  = "" # Example: "1000"
+    EXPECTED_K_ANON_TO_NON_K_ANON_RATIO    = "" # Example: "1.0"
+    K_ANON_CLIENT_TIME_OUT_MS              = "" # Example: "60000"
+    NUM_K_ANON_SHARDS                      = "" # Example: "1"
+    NUM_NON_K_ANON_SHARDS                  = "" # Example: "1"
+    TEST_MODE_K_ANON_CACHE_TTL_SECONDS     = "" # Example: "180"
+    TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS = "" # Example: "180"
+    ENABLE_K_ANON_QUERY_CACHE              = "" # Example: "true"
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators.
@@ -197,7 +233,14 @@ module "seller" {
     AUCTION_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES             = "10737418240"
     SFE_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND     = "4096"
     SFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES                 = "10737418240"
-    REQUIRE_SCORING_SIGNALS_FOR_SCORING                       = "true"
+    # Possible values:
+    # NOT_FETCHED: No call to KV server is made. All ads are sent to scoreAd().
+    # FETCHED_BUT_OPTIONAL: Call to KV server is made and must not fail. All ads are sent to scoreAd() irrespective of whether their adRenderUrls have scoring signals or not.
+    # Any other value/REQUIRED (default): Call to KV server is made and must not fail. Only those ads are sent to scoreAd() that have scoring signals for their adRenderUrl.
+    SCORING_SIGNALS_FETCH_MODE = "REQUIRED"
+
+    # Http headers in sfe request to be passed in bfe request, in lower case separated by comma without space.
+    # Example:  HEADER_PASSED_TO_BUYER =  "exp-id,exp-id789"
   }, each.value.runtime_flag_override)
 
   frontend_domain_name               = local.seller_domain_name
@@ -237,12 +280,15 @@ module "seller_frontend_load_balancing" {
     for seller_key, seller in module.seller :
     seller_key => seller.google_compute_backend_service_id
   }
-  traffic_weights = { for key, value in local.seller_traffic_splits : key => value.traffic_weight }
+  traffic_weights        = { for key, value in local.seller_traffic_splits : key => value.traffic_weight if value.traffic_weight > 0 }
+  experiment_match_rules = { for key, value in local.seller_header_experiment : key => value.match_rules if length(value.match_rules) > 0 }
 }
 
 module "seller_dashboard" {
-  source      = "../../services/dashboards/seller_dashboard"
-  environment = join("|", [for k, v in local.seller_traffic_splits : k if v.traffic_weight > 0])
+  source = "../../services/dashboards/seller_dashboard"
+  environment = join("|", concat(
+    [for k, v in local.seller_traffic_splits : k if v.traffic_weight > 0],
+  [for k, v in local.seller_header_experiment : k if length(v.match_rules) > 0]))
 }
 
 # use below to perform an in-place upgrade from pre 4.2 to 4.2 and after, replace $ENV with $local.environment value

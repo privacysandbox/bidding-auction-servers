@@ -60,7 +60,8 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
       });
   BuyerServiceClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .chaffing_enabled = true};
+      .chaffing_enabled = true,
+      .ca_root_pem = kTestCaCertPath};
 
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
@@ -169,7 +170,8 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
       });
   BuyerServiceClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .chaffing_enabled = false};
+      .chaffing_enabled = false,
+      .ca_root_pem = kTestCaCertPath};
 
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);

@@ -16,6 +16,8 @@
 
 #include "pytorch.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <future>
 #include <istream>
 #include <memory>
@@ -26,6 +28,7 @@
 
 #include <torch/torch.h>
 
+#include "absl/log/absl_log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
@@ -107,7 +110,8 @@ absl::Status InitRuntimeThreadConfig(
 
 absl::StatusOr<std::shared_ptr<torch::jit::script::Module>>
 PyTorchModelConstructor(const InferenceSidecarRuntimeConfig& config,
-                        const RegisterModelRequest& request) {
+                        const RegisterModelRequest& request,
+                        ModelConstructMetrics& construct_metrics) {
   torch::jit::script::Module model;
   // Converts PyTorch exception to absl status.
   try {
@@ -136,7 +140,7 @@ PyTorchModelConstructor(const InferenceSidecarRuntimeConfig& config,
   // Model warm-up.
   absl::string_view model_key = request.model_spec().model_path();
   if (!request.warm_up_batch_request_json().empty()) {
-    absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
+    absl::StatusOr<std::vector<ParsedRequestOrError>> parsed_requests =
         ParseJsonInferenceRequest(request.warm_up_batch_request_json());
     if (!parsed_requests.ok()) {
       return absl::InvalidArgumentError(absl::StrCat(
@@ -145,17 +149,39 @@ PyTorchModelConstructor(const InferenceSidecarRuntimeConfig& config,
     }
     // Process warm up for each inference request.
     // TODO(b/362338463): Add optional execute mode choice.
-    for (const InferenceRequest& inference_request : (*parsed_requests)) {
-      if (inference_request.model_path != model_key) {
-        return absl::InvalidArgumentError(
-            "Warm up request using different model path.");
-      }
-      auto inference_response =
-          PredictInternal(frozen_model, inference_request);
-      if (!inference_response.ok()) {
-        return inference_response.status();
+    size_t parsed_request_size = 0;
+    auto start_pre_warm_time = absl::Now();
+    for (const ParsedRequestOrError& parsed_request : (*parsed_requests)) {
+      if (parsed_request.request) {
+        parsed_request_size += 1;
+        InferenceRequest inference_request = parsed_request.request.value();
+        if (inference_request.model_path != model_key) {
+          return absl::InvalidArgumentError(
+              "Warm up request using different model path.");
+        }
+        auto inference_response =
+            PredictInternal(frozen_model, inference_request);
+        if (!inference_response.ok()) {
+          return inference_response.status();
+        }
+      } else {
+        // TODO(b/384551230): parsing error handling when partial failure
+        ABSL_LOG(ERROR)
+            << "Encounters warm up batch inference request parsing error: "
+            << "Model: "
+            << absl::StrCat(parsed_request.error.value().model_path)
+            << " Description: "
+            << absl::StrCat(parsed_request.error.value().description);
       }
     }
+    if (parsed_request_size == 0) {
+      return absl::InvalidArgumentError(
+          "Encounters warm up batch inference request parsing error: All "
+          "requests can not be parsed");
+    }
+    // Set warm up latency metric
+    construct_metrics.set_model_pre_warm_latency(
+        ToDoubleMicroseconds((absl::Now() - start_pre_warm_time)));
   }
   return frozen_model;
 }
@@ -176,7 +202,7 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
   PredictResponse predict_response;
   absl::Time start_inference_execution_time = absl::Now();
   AddMetric(predict_response, "kInferenceRequestSize", request.ByteSizeLong());
-  absl::StatusOr<std::vector<InferenceRequest>> parsed_requests =
+  absl::StatusOr<std::vector<ParsedRequestOrError>> parsed_requests =
       ParseJsonInferenceRequest(request.input());
   if (!parsed_requests.ok()) {
     AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
@@ -194,32 +220,41 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
       parsed_requests->size());
   std::vector<PerModelOutput> batch_outputs(parsed_requests->size());
   for (size_t task_id = 0; task_id < parsed_requests->size(); ++task_id) {
-    const InferenceRequest& inference_request = (*parsed_requests)[task_id];
-    const std::string& model_key = inference_request.model_path;
-    INFERENCE_LOG(INFO, request_context)
-        << "Received inference request to model: " << model_key;
-    absl::StatusOr<std::shared_ptr<torch::jit::script::Module>> model =
-        store_->GetModel(model_key, request.is_consented());
-    if (!model.ok()) {
-      AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
-                std::string(kInferenceModelNotFoundError));
-      INFERENCE_LOG(ERROR, request_context)
-          << "Fails to get model: " << model_key
-          << " Reason: " << model.status();
-      batch_outputs[task_id] = PerModelOutput{
-          .model_path = model_key,
-          .error = Error{.error_type = Error::MODEL_NOT_FOUND,
-                         .description = std::string(model.status().message())}};
+    if ((*parsed_requests)[task_id].request) {
+      const InferenceRequest& inference_request =
+          (*parsed_requests)[task_id].request.value();
+      const std::string& model_key = inference_request.model_path;
+      INFERENCE_LOG(INFO, request_context)
+          << "Received inference request to model: " << model_key;
+      absl::StatusOr<std::shared_ptr<torch::jit::script::Module>> model =
+          store_->GetModel(model_key, request.is_consented());
+      if (!model.ok()) {
+        AddMetric(predict_response, "kInferenceErrorCountByErrorCode", 1,
+                  std::string(kInferenceModelNotFoundError));
+        INFERENCE_LOG(ERROR, request_context)
+            << "Fails to get model: " << model_key
+            << " Reason: " << model.status();
+        batch_outputs[task_id] = PerModelOutput{
+            .model_path = model_key,
+            .error =
+                Error{.error_type = Error::MODEL_NOT_FOUND,
+                      .description = std::string(model.status().message())}};
+      } else {
+        // Only log count by model for available models since there is no metric
+        // partition for unregistered models.
+        AddMetric(predict_response, "kInferenceRequestCountByModel", 1,
+                  model_key);
+        int batch_count = inference_request.inputs[0].tensor_shape[0];
+        AddMetric(predict_response, "kInferenceRequestBatchCountByModel",
+                  batch_count, model_key);
+        tasks[task_id] = std::async(std::launch::async, &PredictInternal,
+                                    *model, inference_request);
+      }
+
     } else {
-      // Only log count by model for available models since there is no metric
-      // partition for unregistered models.
-      AddMetric(predict_response, "kInferenceRequestCountByModel", 1,
-                model_key);
-      int batch_count = inference_request.inputs[0].tensor_shape[0];
-      AddMetric(predict_response, "kInferenceRequestBatchCountByModel",
-                batch_count, model_key);
-      tasks[task_id] = std::async(std::launch::async, &PredictInternal, *model,
-                                  inference_request);
+      const Error error = (*parsed_requests)[task_id].error.value();
+      batch_outputs[task_id] =
+          PerModelOutput{.model_path = error.model_path, .error = error};
     }
   }
 
@@ -227,7 +262,8 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
     if (!batch_outputs[task_id].error) {
       // Task launch is not blocked by a get model error.
       absl::StatusOr<torch::IValue> task_result = tasks[task_id].get();
-      const std::string& model_path = (*parsed_requests)[task_id].model_path;
+      const std::string& model_path =
+          (*parsed_requests)[task_id].request.value().model_path;
       if (!task_result.ok()) {
         AddMetric(predict_response, "kInferenceRequestFailedCountByModel", 1,
                   model_path);
@@ -270,17 +306,20 @@ absl::StatusOr<PredictResponse> PyTorchModule::Predict(
     return predict_response;
   }
 
-  for (const InferenceRequest& inference_request : *parsed_requests) {
-    store_->IncrementModelInferenceCount(inference_request.model_path);
+  for (const ParsedRequestOrError& parsed_request : *parsed_requests) {
+    if (parsed_request.request) {
+      store_->IncrementModelInferenceCount(
+          parsed_request.request.value().model_path);
+    }
   }
 
   predict_response.set_output(*output_json);
+  AddMetric(predict_response, "kInferenceResponseSize",
+            predict_response.ByteSizeLong());
   int inference_execution_time_ms =
       (absl::Now() - start_inference_execution_time) / absl::Milliseconds(1);
   AddMetric(predict_response, "kInferenceRequestDuration",
             inference_execution_time_ms);
-  AddMetric(predict_response, "kInferenceResponseSize",
-            predict_response.ByteSizeLong());
   return predict_response;
 }
 
@@ -309,9 +348,18 @@ absl::StatusOr<RegisterModelResponse> PyTorchModule::RegisterModel(
         absl::StrCat("Error: model ", model_key,
                      " is not allowed due to using a disallowed operator"));
   }
+  // Set collector for metric during model construct.
+  ModelConstructMetrics model_construct_metrics;
+  PS_RETURN_IF_ERROR(
+      store_->PutModel(model_key, request, model_construct_metrics));
 
-  PS_RETURN_IF_ERROR(store_->PutModel(model_key, request));
-  return RegisterModelResponse();
+  RegisterModelResponse register_model_response;
+  if (!request.warm_up_batch_request_json().empty()) {
+    AddMetric(register_model_response,
+              "kInferenceRegisterModelResponseModelWarmUpDuration",
+              model_construct_metrics.model_pre_warm_latency());
+  }
+  return register_model_response;
 }
 
 absl::StatusOr<DeleteModelResponse> PyTorchModule::DeleteModel(

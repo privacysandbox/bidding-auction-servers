@@ -45,6 +45,8 @@ inline constexpr absl::string_view kPrivateAggregateContributionMissingValue =
 inline constexpr char kSignalValueIntValue[] = "int_value";
 inline constexpr char kSignalValueExtendedValue[] = "extended_value";
 inline constexpr char kSignalBucketBucket128Bit[] = "bucket_128_bit";
+inline constexpr char kSignalBucketBucket128BitBucket128Bits[] =
+    "bucket_128_bits";
 inline constexpr char kSignalBucketSignalBucket[] = "signal_bucket";
 
 inline constexpr absl::string_view kPrivateAggregationBucket = "bucket";
@@ -62,7 +64,7 @@ inline constexpr absl::string_view kBucketOffsetValue = "value";
 inline constexpr absl::string_view kBucketOffsetIsNegative = "is_negative";
 
 inline constexpr absl::string_view kEventTypeWin = "win";
-inline constexpr absl::string_view kEventTypeLoss = "lose";
+inline constexpr absl::string_view kEventTypeLoss = "loss";
 inline constexpr absl::string_view kEventTypeAlways = "always";
 inline constexpr absl::string_view kEventTypeCustom = "custom_events";
 inline constexpr absl::string_view kEventTypeUnspecified = "not-specified";
@@ -74,6 +76,7 @@ struct PrivateAggregationHandlerMetadata {
   int private_aggregate_report_limit;
   BaseValues base_values;
   std::string ad_id;
+  std::optional<std::string> seller_origin;
 };
 
 // Convert baseValue string into enum.
@@ -95,6 +98,13 @@ void HandlePrivateAggregationReporting(
     const PrivateAggregationHandlerMetadata& metadata,
     const rapidjson::Document& contribution_obj_doc,
     ScoreAdsResponse::AdScore& score_ads_response);
+
+// Parses contribution_obj_doc and generates PrivateAggregateReportingResponse
+// for the winning ig. Only the contributions for reserved.win, reserved.always
+// and custom events will be processed.
+PrivateAggregateReportingResponse GetPrivateAggregateReportingResponseForWinner(
+    const BaseValues& base_values,
+    const rapidjson::Document& contribution_obj_doc);
 
 // Parses, Processes, and Appends the selected contributions (win, loss,
 // always, or custom_events) to input pagg_response.

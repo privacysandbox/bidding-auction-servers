@@ -19,8 +19,8 @@ package(default_visibility = ["//:__subpackages__"])
 cc_library(
     name = "config_client_util",
     srcs = ["trusted_server_config_client_util.cc"] + select({
-        "//:aws_instance": ["add_zone_aws.cc"],
-        "//:gcp_instance": ["add_zone_gcp.cc"],
+        "@google_privacysandbox_servers_common//:aws_instance": ["add_zone_aws.cc"],
+        "@google_privacysandbox_servers_common//:gcp_instance": ["add_zone_gcp.cc"],
         "//conditions:default": ["add_zone_default.cc"],
     }),
     hdrs = ["trusted_server_config_client_util.h"],

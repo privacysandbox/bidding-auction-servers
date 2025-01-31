@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "api/bidding_auction_servers.pb.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 // Response received from execution of reportResult() in Roma.
@@ -27,6 +28,7 @@ struct ReportResultResponse {
   bool send_report_to_invoked;
   bool register_ad_beacon_invoked;
   std::string signals_for_winner;
+  PrivateAggregateReportingResponse pagg_response;
 };
 
 struct ReportWinResponse {
@@ -34,6 +36,7 @@ struct ReportWinResponse {
   absl::flat_hash_map<std::string, std::string> interaction_reporting_urls;
   bool send_report_to_invoked;
   bool register_ad_beacon_invoked;
+  PrivateAggregateReportingResponse pagg_response;
 };
 
 struct ReportingResponseLogs {

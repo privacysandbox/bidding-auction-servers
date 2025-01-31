@@ -236,7 +236,9 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log:absl_log",
         "@inference_common//model:validator",
+        "@org_tensorflow//tensorflow/cc:cc_ops",
         "@org_tensorflow//tensorflow/cc:client_session",
+        "@org_tensorflow//tensorflow/cc:ops",
         "@org_tensorflow//tensorflow/core:framework",
     ],
 )
@@ -245,6 +247,9 @@ cc_test(
     name = "validator_test",
     srcs = ["validator_test.cc"],
     data = [
+        "//benchmark_models/frozen_embedding:frozen_embedding_model",
+        "//benchmark_models/frozen_pctr:frozen_pctr_model",
+        "//benchmark_models/frozen_pcvr:frozen_pcvr_model",
         "//benchmark_models/stateful:stateful_model",
     ],
     deps = [
@@ -305,6 +310,7 @@ genrule(
     ],
     outs = ["inference_sidecar_binary"],
     cmd_bash = """cat << EOF > '$@'
+rm -rf artifacts
 mkdir -p artifacts
 cp $(execpath :inference_sidecar_bin) artifacts/inference_sidecar_tensorflow_v2_14_0
 EOF""",

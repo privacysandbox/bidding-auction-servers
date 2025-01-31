@@ -32,6 +32,7 @@
 #include "services/common/clients/kv_server/kv_async_client.h"
 #include "services/common/feature_flags.h"
 #include "services/common/reporters/async_reporter.h"
+#include "services/seller_frontend_service/k_anon/k_anon_cache_manager_interface.h"
 #include "services/seller_frontend_service/providers/http_scoring_signals_async_provider.h"
 #include "services/seller_frontend_service/providers/scoring_signals_async_provider.h"
 #include "services/seller_frontend_service/report_win_map.h"
@@ -55,14 +56,16 @@ ParseSellerCloudPlarformMap(absl::string_view seller_platforms_map_json) {
 // This a utility class that acts as a wrapper for the clients that are used
 // by SellerFrontEndService.
 struct ClientRegistry {
-  const ScoringSignalsAsyncProvider& scoring_signals_async_provider;
+  absl::Nullable<const ScoringSignalsAsyncProvider* const>
+      scoring_signals_async_provider;
   ScoringAsyncClient& scoring;
   const ClientFactory<BuyerFrontEndAsyncClient, absl::string_view>&
       buyer_factory;
-  KVAsyncClient& kv_async_client;
+  absl::Nullable<KVAsyncClient* const> kv_async_client;
   server_common::KeyFetcherManagerInterface& key_fetcher_manager_;
   CryptoClientWrapperInterface* const crypto_client_ptr_;
   std::unique_ptr<AsyncReporter> reporting;
+  std::unique_ptr<KAnonCacheManagerInterface> k_anon_cache_manager;
 };
 
 // SellerFrontEndService implements business logic to orchestrate requests
@@ -77,7 +80,9 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
       std::unique_ptr<server_common::KeyFetcherManagerInterface>
           key_fetcher_manager,
       std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
-      ReportWinMap report_win_map)
+      ReportWinMap report_win_map,
+      std::unique_ptr<KAnonCacheManagerInterface> k_anon_cache_manager =
+          nullptr)
       : config_client_(*config_client),
         key_fetcher_manager_(std::move(key_fetcher_manager)),
         crypto_client_(std::move(crypto_client)),
@@ -86,9 +91,12 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                 ? grpc_event_engine::experimental::CreateEventEngine()
                 : grpc_event_engine::experimental::GetDefaultEventEngine())),
         scoring_signals_async_provider_(
-            std::make_unique<HttpScoringSignalsAsyncProvider>(
-                CreateV1KVClient(), config_client_.GetBooleanParameter(
-                                        ENABLE_PROTECTED_APP_SIGNALS))),
+            config_client_.GetStringParameter(SCORING_SIGNALS_FETCH_MODE) ==
+                    kSignalsNotFetched
+                ? nullptr
+                : std::make_unique<HttpScoringSignalsAsyncProvider>(
+                      CreateV1KVClient(), config_client_.GetBooleanParameter(
+                                              ENABLE_PROTECTED_APP_SIGNALS))),
         scoring_(std::make_unique<ScoringAsyncGrpcClient>(
             key_fetcher_manager_.get(), crypto_client_.get(),
             AuctionServiceClientConfig{
@@ -119,30 +127,39 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
                   .chaffing_enabled =
                       config_client_.GetBooleanParameter(ENABLE_CHAFFING)});
         }()),
-        kv_async_client_(std::make_unique<KVAsyncGrpcClient>(
-            key_fetcher_manager_.get(),
-            kv_server::v2::KeyValueService::NewStub(CreateChannel(
-                config_client_.GetStringParameter(
-                    TRUSTED_KEY_VALUE_V2_SIGNALS_HOST),
-                /*compression=*/true,
-                /*secure=*/
-                config_client_.GetBooleanParameter(TKV_EGRESS_TLS),
-                /*grpc_arg_default_authority=*/
-                config_client_
-                    .GetStringParameter(GRPC_ARG_DEFAULT_AUTHORITY_VAL)
-                    .data())))),
+        kv_async_client_(
+            config_client_.GetStringParameter(SCORING_SIGNALS_FETCH_MODE) ==
+                    kSignalsNotFetched
+                ? nullptr
+                : std::make_unique<KVAsyncGrpcClient>(
+                      key_fetcher_manager_.get(),
+                      kv_server::v2::KeyValueService::NewStub(CreateChannel(
+                          config_client_.GetStringParameter(
+                              TRUSTED_KEY_VALUE_V2_SIGNALS_HOST),
+                          /*compression=*/true,
+                          /*secure=*/
+                          config_client_.GetBooleanParameter(TKV_EGRESS_TLS),
+                          /*grpc_arg_default_authority=*/
+                          config_client_
+                              .GetStringParameter(
+                                  GRPC_ARG_DEFAULT_AUTHORITY_VAL)
+                              .data())))),
         clients_{
-            *scoring_signals_async_provider_,
+            scoring_signals_async_provider_.get(),
             *scoring_,
             *buyer_factory_,
-            *kv_async_client_,
+            kv_async_client_.get(),
             *key_fetcher_manager_,
             crypto_client_.get(),
             std::make_unique<AsyncReporter>(
-                std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()))},
+                std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get())),
+            std::move(k_anon_cache_manager),
+        },
         enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
         enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)),
-        report_win_map_(std::move(report_win_map)) {
+        report_win_map_(std::move(report_win_map)),
+        enable_buyer_private_aggregate_reporting_(
+            absl::GetFlag(FLAGS_enable_buyer_private_aggregate_reporting)) {
     if (config_client_.HasParameter(SELLER_CLOUD_PLATFORMS_MAP)) {
       seller_cloud_platforms_map_ = ParseSellerCloudPlarformMap(
           config_client_.GetStringParameter(SELLER_CLOUD_PLATFORMS_MAP));
@@ -154,7 +171,9 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
       : config_client_(*config_client),
         clients_(std::move(clients)),
         enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
-        enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)) {
+        enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)),
+        enable_buyer_private_aggregate_reporting_(
+            absl::GetFlag(FLAGS_enable_buyer_private_aggregate_reporting)) {
     if (config_client_.HasParameter(SELLER_CLOUD_PLATFORMS_MAP)) {
       seller_cloud_platforms_map_ = ParseSellerCloudPlarformMap(
           config_client_.GetStringParameter(SELLER_CLOUD_PLATFORMS_MAP));
@@ -217,6 +236,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
   const bool enable_cancellation_;
   const bool enable_kanon_;
   ReportWinMap report_win_map_;
+  const bool enable_buyer_private_aggregate_reporting_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers
