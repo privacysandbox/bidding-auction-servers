@@ -1,118 +1,107 @@
 diff --git a/src/roma/byob/container/BUILD.bazel b/src/roma/byob/container/BUILD.bazel
-index 4f7ae70b..50a43f30 100644
+index e76f7c94..ae145a7f 100644
 --- a/src/roma/byob/container/BUILD.bazel
 +++ b/src/roma/byob/container/BUILD.bazel
-@@ -15,10 +15,11 @@
- load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
- load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
- load("@rules_cc//cc:defs.bzl", "cc_binary")
-+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
- load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "pkg_mkdirs")
- load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
- load("//src/roma/byob/config:container.bzl", "roma_container_dir", "roma_container_root_dir")
--load("//third_party:container_deps.bzl", "DISTROLESS_USERS", "container_image")
-+load("//third_party:container_deps.bzl", "DISTROLESS_USERS")
- 
- [
-     expand_template(
-@@ -161,36 +162,69 @@ pkg_files(
-     for user in DISTROLESS_USERS
- ]
- 
--[
--    genrule(
--        name = "gen_byob_runtime_container_tar_{}".format(arch),
--        outs = ["byob_runtime_base_{}.tar".format(arch)],
--        cmd_bash = """echo FROM {base_image} | docker buildx build --output=type=tar,dest=$@ --file=- .""".format(
--            base_image = container_image(
--                "runtime-debian-nondebug-nonroot",
--                arch,
--            ).uri,
--        ),
--        visibility = ["//visibility:public"],
--    )
--    for arch in ("arm64", "amd64")
--]
--
- alias(
--    name = "byob_runtime_base.tar",
-+    name = "runtime-debian-nondebug-nonroot",
-     actual = select({
--        "@platforms//cpu:aarch64": ":byob_runtime_base_arm64.tar",
--        "@platforms//cpu:x86_64": ":byob_runtime_base_amd64.tar",
-+        "@platforms//cpu:aarch64": "@runtime-debian-nondebug-nonroot-arm64",
-+        "@platforms//cpu:x86_64": "@runtime-debian-nondebug-nonroot-amd64",
-     }),
--    visibility = ["//visibility:public"],
- )
- 
-+[
-+    oci_image(
-+        name = "byob_runtime_image_{}".format(user.flavor),
-+        base = ":runtime-debian-nondebug-nonroot",
-+        tars = [":byob_runtime_tar_{}".format(user.flavor)],
-+    )
-+    for user in DISTROLESS_USERS
-+]
+@@ -223,7 +265,7 @@ if [[ -d $${{ROOT_DIR}}/lib64 ]]; then
+   rm -rf "$${{ROOT_DIR}}/lib"
+ fi
+ # TODO: b/330312036 - Avoid compressing this tar till rules_docker is deprecated.
+-tar --create --owner={user}:{uid} --group={group}:{gid} --file=$@ --directory="$${{TMPDIR}}" "{roma_container_dir}/"
++tar --create --owner={user}:{uid} --group={group}:{gid} --sort=name --format=gnu --mtime="2000-01-01 10:00:00" --file=$@ --directory="$${{TMPDIR}}" "{roma_container_dir}/"
+ rm -rf "$${{TMPDIR}}"
+ """.format(
+             flavor = user.flavor,
+
+diff --git a/src/core/curl_client/http1_curl_wrapper.cc b/src/core/curl_client/http1_curl_wrapper.cc
+index ecd7aed5..ffbefabb 100644
+--- a/src/core/curl_client/http1_curl_wrapper.cc
++++ b/src/core/curl_client/http1_curl_wrapper.cc
+@@ -111,12 +111,20 @@ size_t ResponsePayloadHandler(char* contents, size_t byte_size,
+                               size_t num_bytes, void* output) {
+   BytesBuffer* output_buffer = static_cast<BytesBuffer*>(output);
+   size_t contents_length = byte_size * num_bytes;
+-  output_buffer->bytes = std::make_shared<std::vector<Byte>>(contents_length);
+-  for (size_t i = 0; i < contents_length; i++) {
+-    output_buffer->bytes->at(i) = contents[i];
 +
-+_server_image = "byob_server:v1-{flavor}"
++  if (!output_buffer->bytes) {
++    output_buffer->bytes = std::make_shared<std::vector<Byte>>();
+   }
+-  output_buffer->length = contents_length;
+-  output_buffer->capacity = contents_length;
 +
-+[
-+    oci_load(
-+        name = "byob_runtime_image_{}_tar".format(user.flavor),
-+        image = ":byob_runtime_image_{}".format(user.flavor),
-+        repo_tags = [_server_image.format(flavor = user.flavor)],
-+    )
-+    for user in DISTROLESS_USERS
-+]
++  size_t current_size = output_buffer->bytes->size();
++  output_buffer->bytes->resize(current_size + contents_length);
 +
-+[
-+    filegroup(
-+        name = "byob_runtime_image_{}.tar".format(user.flavor),
-+        srcs = [":byob_runtime_image_{}_tar".format(user.flavor)],
-+        output_group = "tarball",
-+    )
-+    for user in DISTROLESS_USERS
-+]
++  std::memcpy(output_buffer->bytes->data() + current_size, contents,
++              contents_length);
 +
-+# warning: this is not hermetic, it uses the local docker client to load an
-+# image, create a container then export that image using a static container name
-+[
-+    genrule(
-+       name = "gen_byob_runtime_container_tar_{}".format(user.flavor),
-+       srcs = [":byob_runtime_image_{}.tar".format(user.flavor)],
-+       outs = ["byob_runtime_container_{}.tar".format(user.flavor)],
-+       cmd_bash = """
-+docker load -i "$(location :byob_runtime_image_{flavor}.tar)"
-+CID=$$(docker create --entrypoint /server/bin/run_workers --privileged "{image_uri}")
-+docker export $$CID -o $@
-+docker rm $$CID
-+""".format(
-+            flavor = user.flavor,
-+            image_uri = _server_image.format(flavor = user.flavor),
-+         ),
-+        visibility = ["//visibility:public"],
-+     )
-+    for user in DISTROLESS_USERS
-+]
++  output_buffer->length += contents_length;
++  output_buffer->capacity = output_buffer->bytes->capacity();
 +
- [
-     genrule(
-         name = "gen_byob_runtime_container_with_dir_tar_{}".format(user.flavor),
-         srcs = [
--            ":byob_runtime_base.tar",
--            ":byob_runtime_tar_{}.tar".format(user.flavor),
-+            ":byob_runtime_container_{}.tar".format(user.flavor),
-             ":container_config_{}.tar".format(user.user),
-         ],
-         outs = ["byob_runtime_container_with_dir_{}.tar".format(user.flavor)],
-@@ -198,8 +232,7 @@ alias(
- TMPDIR="$$(mktemp --directory roma_container_tmp.XXXXXXXXXX)"
- MACHINE="$$(uname --machine)"
- mkdir --parents --mode=700 "$$TMPDIR/{roma_container_dir}/{roma_container_root_dir}"
--tar --extract --file="$(location :byob_runtime_base.tar)" --directory="$$TMPDIR/{roma_container_dir}/{roma_container_root_dir}"
--tar --extract --file="$(location :byob_runtime_tar_{flavor}.tar)" --directory="$$TMPDIR/{roma_container_dir}/{roma_container_root_dir}"
-+tar --extract --file="$(location :byob_runtime_container_{flavor}.tar)" --directory="$$TMPDIR/{roma_container_dir}/{roma_container_root_dir}"
- tar --extract --file="$(location :container_config_{flavor}.tar)" --directory="$$TMPDIR/{roma_container_dir}"
- 
- readonly ROOT_DIR="$${{TMPDIR}}/{roma_container_dir}/{roma_container_root_dir}"
+   return contents_length;
+ }
+
+diff --git a/src/core/curl_client/http1_curl_wrapper_test.cc b/src/core/curl_client/http1_curl_wrapper_test.cc
+index 37a3e976..85191410 100644
+--- a/src/core/curl_client/http1_curl_wrapper_test.cc
++++ b/src/core/curl_client/http1_curl_wrapper_test.cc
+@@ -40,13 +40,12 @@ namespace {
+ // place null characters at the end, except when c_str is called. However, I
+ // confirmed printing behaves nicely.
+ constexpr Byte kRequestBody[] = {'a', 'b', '\0', 'c'};
+-constexpr Byte kResponseBody[] = {'\0', 'd', 'e', 'f'};
+
+ class Http1CurlWrapperTest
+     : public ::testing::TestWithParam<std::tuple<status, ExecutionResult>> {
+  protected:
+   Http1CurlWrapperTest()
+-      : response_body_(kResponseBody, sizeof(kResponseBody)),
++      : response_body_(std::string(100000, '*')),
+         post_request_body_(kRequestBody, sizeof(kRequestBody)),
+         subject_([]() {
+           auto wrapper_or = Http1CurlWrapper::MakeWrapper();
+diff --git a/src/cpio/client_providers/auth_token_provider/gcp/gcp_auth_token_provider.cc b/src/cpio/client_providers/auth_token_provider/gcp/gcp_auth_token_provider.cc
+index 58a239d2..e06a2633 100644
+--- a/src/cpio/client_providers/auth_token_provider/gcp/gcp_auth_token_provider.cc
++++ b/src/cpio/client_providers/auth_token_provider/gcp/gcp_auth_token_provider.cc
+@@ -251,6 +251,7 @@ void GcpAuthTokenProvider::OnGetSessionTokenForTargetAudienceCallback(
+     SCP_ERROR_CONTEXT(kGcpAuthTokenProvider, get_token_context, result,
+                       "Received token does not have %d parts.",
+                       kExpectedTokenPartsSize);
++    fprintf(stderr, "%s\n", response_body.c_str());
+     get_token_context.Finish(result);
+     return;
+   }
+@@ -262,6 +263,7 @@ void GcpAuthTokenProvider::OnGetSessionTokenForTargetAudienceCallback(
+     SCP_ERROR_CONTEXT(kGcpAuthTokenProvider, get_token_context,
+                       padded_jwt_or.result(),
+                       "Received JWT cannot be padded correctly.");
++    fprintf(stderr, "%s\n", response_body.c_str());
+     get_token_context.Finish(padded_jwt_or.result());
+     return;
+   }
+@@ -270,6 +272,7 @@ void GcpAuthTokenProvider::OnGetSessionTokenForTargetAudienceCallback(
+       !decode_result.Successful()) {
+     SCP_ERROR_CONTEXT(kGcpAuthTokenProvider, get_token_context, decode_result,
+                       "Received token JWT could not be decoded.");
++    fprintf(stderr, "%s\n", response_body.c_str());
+     get_token_context.Finish(decode_result);
+     return;
+   }
+@@ -282,6 +285,7 @@ void GcpAuthTokenProvider::OnGetSessionTokenForTargetAudienceCallback(
+         SC_GCP_INSTANCE_AUTHORIZER_PROVIDER_BAD_SESSION_TOKEN);
+     SCP_ERROR_CONTEXT(kGcpAuthTokenProvider, get_token_context, result,
+                       "Received JWT could not be parsed into a JSON.");
++    fprintf(stderr, "%s\n", response_body.c_str());
+     get_token_context.Finish(result);
+     return;
+   }
+@@ -296,6 +300,7 @@ void GcpAuthTokenProvider::OnGetSessionTokenForTargetAudienceCallback(
+     SCP_ERROR_CONTEXT(
+         kGcpAuthTokenProvider, get_token_context, result,
+         "Received JWT does not contain all the necessary fields.");
++    fprintf(stderr, "%s\n", response_body.c_str());
+     get_token_context.Finish(result);
+     return;
+   }
