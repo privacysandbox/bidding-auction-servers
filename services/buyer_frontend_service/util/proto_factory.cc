@@ -96,7 +96,7 @@ absl::StatusOr<ParsedTrustedBiddingSignals> GetSignalsForIG(
 // Copy properties from IG from device to IG for Bidding.
 // Note: trusted bidding signals and keys are not copied.
 void CopyIGFromDeviceToIGForBidding(
-    const BuyerInput::InterestGroup& ig_from_device,
+    const BuyerInputForBidding::InterestGroupForBidding& ig_from_device,
     GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding*
         mutable_ig_for_bidding) {
   mutable_ig_for_bidding->set_name(ig_from_device.name());
@@ -119,10 +119,10 @@ void CopyIGFromDeviceToIGForBidding(
   // Set device signals.
   if (ig_from_device.has_browser_signals() &&
       ig_from_device.browser_signals().IsInitialized()) {
-    mutable_ig_for_bidding->mutable_browser_signals()->CopyFrom(
+    mutable_ig_for_bidding->mutable_browser_signals_for_bidding()->CopyFrom(
         ig_from_device.browser_signals());
   } else if (ig_from_device.has_android_signals()) {
-    mutable_ig_for_bidding->mutable_android_signals()->CopyFrom(
+    mutable_ig_for_bidding->mutable_android_signals_for_bidding()->CopyFrom(
         ig_from_device.android_signals());
   }
 }
@@ -134,7 +134,8 @@ PrepareGenerateBidsRequestResult PrepareGenerateBidsRequest(
     const PriorityVectorConfig& priority_vector_config,
     const PrepareGenerateBidsRequestOptions& options) {
   auto generate_bids_raw_request = std::make_unique<GenerateBidsRawRequest>();
-  const BuyerInput& buyer_input = get_bids_raw_request.buyer_input();
+  const BuyerInputForBidding& buyer_input =
+      get_bids_raw_request.buyer_input_for_bidding();
 
   absl::flat_hash_map<std::string, double> interest_group_priorities;
   if (priority_vector_config.priority_vector_enabled) {

@@ -24,6 +24,7 @@
 #include "services/buyer_frontend_service/providers/bidding_signals_async_provider.h"
 #include "services/common/clients/bidding_server/bidding_async_client.h"
 #include "services/common/clients/kv_server/kv_async_client.h"
+#include "src/concurrent/executor.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -56,10 +57,12 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
           key_fetcher_manager,
       std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
       std::unique_ptr<KVAsyncClient> kv_async_client,
-      const GetBidsConfig config, bool enable_benchmarking = false);
+      const GetBidsConfig config, server_common::Executor& executor,
+      bool enable_benchmarking = false);
 
   explicit BuyerFrontEndService(ClientRegistry client_registry,
                                 const GetBidsConfig config,
+                                server_common::Executor& executor,
                                 bool enable_benchmarking = false);
 
   // Returns bid for the top eligible ad candidate.
@@ -98,6 +101,7 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
   std::unique_ptr<ProtectedAppSignalsBiddingAsyncClient>
       protected_app_signals_bidding_async_client_;
   std::unique_ptr<KVAsyncClient> kv_async_client_;
+  server_common::Executor& executor_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

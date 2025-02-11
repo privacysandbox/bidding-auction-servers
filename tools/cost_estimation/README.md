@@ -1,7 +1,7 @@
 # Cost Estimation Tool
 
 For highlevel overview of the cost estimation tool refer to the
-[Cost estimation tool explainer](https://github.com/privacysandbox/protected-auction-services-docs/blob/main/).
+[Cost estimation tool explainer](https://github.com/privacysandbox/protected-auction-services-docs/blob/main/bidding_auction_cost_estimation_tool.md).
 
 The cost estimation tool helps estimate usage and cost for deployed and running Bidding and Auction
 (B&A) services. It does so by downloading metrics collected by the system and applying a set of

@@ -136,6 +136,7 @@ cc_test(
         "//services/seller_frontend_service/private_aggregation:private_aggregation_helper",
         "//services/seller_frontend_service/test:constants",
         "//services/seller_frontend_service/test:kanon_test_utils",
+        "//services/seller_frontend_service/util:buyer_input_proto_utils",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_googletest//:gtest",
@@ -207,6 +208,7 @@ cc_library(
         "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
         "//services/seller_frontend_service:runtime_flags",
+        "//services/seller_frontend_service/util:startup_param_parser",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:private_key_fetcher",
@@ -339,5 +341,37 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@google_privacysandbox_servers_common//src/core/test/utils",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:fake_key_fetcher_manager",
+    ],
+)
+
+cc_library(
+    name = "buyer_input_proto_utils",
+    srcs = [
+        "buyer_input_proto_utils.cc",
+    ],
+    hdrs = [
+        "buyer_input_proto_utils.h",
+    ],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
+    deps = [
+        "//api:bidding_auction_servers_cc_proto",
+        "//services/common/util:json_util",
+        "@rapidjson",
+    ],
+)
+
+cc_test(
+    name = "buyer_input_proto_utils_test",
+    size = "small",
+    srcs = [
+        "buyer_input_proto_utils_test.cc",
+    ],
+    deps = [
+        ":buyer_input_proto_utils",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )

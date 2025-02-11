@@ -80,10 +80,10 @@ inline constexpr absl::string_view K_ANON_CLIENT_TIME_OUT_MS =
 inline constexpr absl::string_view NUM_K_ANON_SHARDS = "NUM_K_ANON_SHARDS";
 inline constexpr absl::string_view NUM_NON_K_ANON_SHARDS =
     "NUM_NON_K_ANON_SHARDS";
-inline constexpr absl::string_view TEST_MODE_K_ANON_CACHE_TTL_SECONDS =
-    "TEST_MODE_K_ANON_CACHE_TTL_SECONDS";
-inline constexpr absl::string_view TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS =
-    "TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS";
+inline constexpr absl::string_view TEST_MODE_K_ANON_CACHE_TTL_MS =
+    "TEST_MODE_K_ANON_CACHE_TTL_MS";
+inline constexpr absl::string_view TEST_MODE_NON_K_ANON_CACHE_TTL_MS =
+    "TEST_MODE_NON_K_ANON_CACHE_TTL_MS";
 inline constexpr absl::string_view ENABLE_K_ANON_QUERY_CACHE =
     "ENABLE_K_ANON_QUERY_CACHE";
 
@@ -123,8 +123,8 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     K_ANON_CLIENT_TIME_OUT_MS,
     NUM_K_ANON_SHARDS,
     NUM_NON_K_ANON_SHARDS,
-    TEST_MODE_K_ANON_CACHE_TTL_SECONDS,
-    TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS,
+    TEST_MODE_K_ANON_CACHE_TTL_MS,
+    TEST_MODE_NON_K_ANON_CACHE_TTL_MS,
     ENABLE_K_ANON_QUERY_CACHE};
 
 inline std::vector<absl::string_view> GetServiceFlags() {

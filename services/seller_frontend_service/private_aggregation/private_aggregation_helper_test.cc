@@ -39,6 +39,7 @@ constexpr absl::string_view kTestIgNameWin = "testIgNameWin";
 constexpr absl::string_view kTestIgNameLoss = "testIgNameLoss";
 constexpr absl::string_view kTestIgOwner = "testIgOwner";
 constexpr absl::string_view kTestSeller = "kTestSeller";
+constexpr int kPerAdtechPaapiContributionsLimit = 2;
 constexpr int losing_ig_idx = 1;
 constexpr int winning_ig_idx = 2;
 
@@ -149,6 +150,12 @@ TEST(GroupContributionsByAdTechTest, ReturnsMapOfAdTechAndContributions) {
   PrivateAggregateReportingResponse response1;
   PrivateAggregateContribution* contribution1 = response1.add_contributions();
   *contribution1 = GetTestContributionWithIntegers(EVENT_TYPE_WIN, "");
+  // This contribution is expected to be dropped since
+  // per_adtech_paapi_contributions_limit is 2
+  *response1.add_contributions() =
+      GetTestContributionWithIntegers(EVENT_TYPE_WIN, "");
+  *response1.add_contributions() =
+      GetTestContributionWithIntegers(EVENT_TYPE_LOSS, "");
   response1.set_adtech_origin(kTestIgOwner);
   PrivateAggregateReportingResponse response2;
   PrivateAggregateContribution* contribution2 = response2.add_contributions();
@@ -159,12 +166,14 @@ TEST(GroupContributionsByAdTechTest, ReturnsMapOfAdTechAndContributions) {
   responses.Add(std::move(response1));
   responses.Add(std::move(response2));
 
-  auto result = GroupContributionsByAdTech(responses);
+  auto result =
+      GroupContributionsByAdTech(kPerAdtechPaapiContributionsLimit, responses);
 
   ASSERT_EQ(result.size(), 2);
-  ASSERT_EQ(result[kTestIgOwner].size(), 1);
+  ASSERT_EQ(result[kTestIgOwner].size(), 2);
   google::protobuf::util::MessageDifferencer differencer;
   ASSERT_TRUE(differencer.Compare(*result[kTestIgOwner][0], *contribution1));
+  ASSERT_TRUE(differencer.Compare(*result[kTestIgOwner][1], *contribution1));
   ASSERT_EQ(result[kTestSeller].size(), 1);
   ASSERT_TRUE(differencer.Compare(*result[kTestSeller][0], *contribution2));
 }
@@ -266,7 +275,7 @@ TEST(CborSerializePAggContribution, SuccessfullySerializesEventContributions) {
   responses.Add(std::move(expected_response));
 
   ContributionsPerAdTechMap contributions_per_adtech =
-      GroupContributionsByAdTech(responses);
+      GroupContributionsByAdTech(kPerAdtechPaapiContributionsLimit, responses);
   ASSERT_EQ(contributions_per_adtech.size(), 1);
   ASSERT_EQ(contributions_per_adtech[kTestIgOwner].size(), 2);
   ScopedCbor cbor_data_root(cbor_new_definite_map(1));
@@ -323,7 +332,7 @@ TEST(CborSerializePAggContribution, SuccessfullySerailizesIgContributions) {
   PrivateAggregateReportingResponses responses;
   responses.Add()->CopyFrom(expected_response);
   ContributionsPerAdTechMap contributions_per_adtech =
-      GroupContributionsByAdTech(responses);
+      GroupContributionsByAdTech(kPerAdtechPaapiContributionsLimit, responses);
   ASSERT_EQ(contributions_per_adtech.size(), 1);
   ASSERT_EQ(contributions_per_adtech[kTestIgOwner].size(), 2);
   ScopedCbor cbor_data_root(cbor_new_definite_map(1));
@@ -368,6 +377,7 @@ TEST(CborSerializePAggContribution, SuccessfullySerailizesIgContributions) {
 }
 
 TEST(CborSerializePAggContribution, SuccessfullySerailizesPAggResponse) {
+  int per_adtech_paapi_contributions_limit = 100;
   PrivateAggregateReportingResponse seller_pagg_response;
   PrivateAggregateReportingResponse buyer_pagg_response;
   PrivateAggregateContribution contribution1 =
@@ -386,7 +396,8 @@ TEST(CborSerializePAggContribution, SuccessfullySerailizesPAggResponse) {
   auto* cbor_internal = cbor_data_root.get();
   auto err_handler = [](const grpc::Status& status) {};
   auto result =
-      CborSerializePAggResponse(responses, err_handler, *cbor_internal);
+      CborSerializePAggResponse(responses, per_adtech_paapi_contributions_limit,
+                                err_handler, *cbor_internal);
   ASSERT_TRUE(result.ok()) << result;
   absl::Span<struct cbor_pair> contribution_map(cbor_map_handle(cbor_internal),
                                                 cbor_map_size(cbor_internal));

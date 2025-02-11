@@ -66,14 +66,16 @@ PackagePayload(const ProtectedAuctionInput& protected_auction_input,
 // for creating requests from a browser source.
 absl::StatusOr<google::protobuf::Map<std::string, std::string>>
 PackageBuyerInputsForBrowser(
-    const google::protobuf::Map<std::string, BuyerInput>& buyer_inputs);
+    const google::protobuf::Map<std::string, BuyerInputForBidding>&
+        buyer_inputs);
 
 // Returns a map of IG owners -> GZIP compressed proto binary Buyer Inputs.
 // The output from this method can be used to populate the buyer_input map in
 // ProtectedAuctionInput for mimicking requests from android.
 absl::StatusOr<google::protobuf::Map<std::string, std::string>>
 PackageBuyerInputsForApp(
-    const google::protobuf::Map<std::string, BuyerInput>& buyer_inputs);
+    const google::protobuf::Map<std::string, BuyerInputForBidding>&
+        buyer_inputs);
 
 // Returns a decrypted, decompressed and decoded proto response
 // for response strings generated for a browser or android source.

@@ -82,8 +82,27 @@ ParseCloudPlatformPublicKeysMap(
   return per_platform_endpoints;
 }
 
+absl::Status ValidateSfePublicKeyEndpoints(
+    const PlatformToPublicKeyServiceEndpointMap& endpoints_map,
+    const absl::flat_hash_map<std::string, BuyerServiceEndpoint>&
+        buyer_server_hosts) {
+  for (const auto& entry : buyer_server_hosts) {
+    if (!endpoints_map.contains(entry.second.cloud_platform)) {
+      return absl::InvalidArgumentError(
+          "Invalid runtime configs provided - a supplied buyer cloud "
+          "platform in BUYER_SERVER_HOSTS is not present "
+          "in SFE_PUBLIC_KEYS_ENDPOINTS");
+    }
+  }
+
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::unique_ptr<server_common::PublicKeyFetcherInterface>>
-CreateSfePublicKeyFetcher(const TrustedServersConfigClient& config_client) {
+CreateSfePublicKeyFetcher(
+    const TrustedServersConfigClient& config_client,
+    const absl::flat_hash_map<std::string, BuyerServiceEndpoint>&
+        buyer_server_hosts) {
   if (config_client.GetBooleanParameter(TEST_MODE)) {
     return nullptr;
   }
@@ -97,6 +116,9 @@ CreateSfePublicKeyFetcher(const TrustedServersConfigClient& config_client) {
       PlatformToPublicKeyServiceEndpointMap endpoints_map,
       ParseCloudPlatformPublicKeysMap(
           config_client.GetStringParameter(SFE_PUBLIC_KEYS_ENDPOINTS)));
+  PS_RETURN_IF_ERROR(
+      ValidateSfePublicKeyEndpoints(endpoints_map, buyer_server_hosts));
+
   return PublicKeyFetcherFactory::Create(endpoints_map, SystemLogContext());
 }
 

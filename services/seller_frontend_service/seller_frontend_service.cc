@@ -42,7 +42,8 @@ std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
     SelectAdResponse* response, const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
-    bool enable_kanon, bool enable_buyer_private_aggregate_reporting) {
+    bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
+    int per_adtech_paapi_contributions_limit) {
   switch (request->client_type()) {
     case CLIENT_TYPE_ANDROID:
       return std::make_unique<SelectAdReactorForApp>(
@@ -52,7 +53,8 @@ std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
       return std::make_unique<SelectAdReactorForWeb>(
           context, request, response, clients, config_client, report_win_map,
           enable_cancellation, enable_kanon,
-          enable_buyer_private_aggregate_reporting);
+          enable_buyer_private_aggregate_reporting,
+          per_adtech_paapi_contributions_limit);
     default:
       return std::make_unique<SelectAdReactorInvalid>(
           context, request, response, clients, config_client, report_win_map);
@@ -90,14 +92,16 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     auto reactor = std::make_unique<SelectAuctionResultReactor>(
         context, request, response, clients_, config_client_,
         enable_cancellation_,
-        /*enable_buyer_private_aggregate_reporting=*/false, enable_kanon_);
+        /*enable_buyer_private_aggregate_reporting=*/false,
+        /*per_adtech_paapi_contributions_limit=*/100, enable_kanon_);
     reactor->Execute();
     return reactor.release();
   }
   std::unique_ptr<SelectAdReactor> reactor =
       GetSelectAdReactor(context, request, response, clients_, config_client_,
                          report_win_map_, enable_cancellation_, enable_kanon_,
-                         enable_buyer_private_aggregate_reporting_);
+                         enable_buyer_private_aggregate_reporting_,
+                         per_adtech_paapi_contributions_limit_);
   reactor->Execute();
   return reactor.release();
 }

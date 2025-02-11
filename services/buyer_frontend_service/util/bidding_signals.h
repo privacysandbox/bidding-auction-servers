@@ -84,7 +84,7 @@ struct BiddingSignalJsonComponents {
 // basic validations.
 absl::StatusOr<BiddingSignalJsonComponents> ParseTrustedBiddingSignals(
     std::unique_ptr<BiddingSignals> bidding_signals,
-    const BuyerInput& buyer_input);
+    const BuyerInputForBidding& buyer_input);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

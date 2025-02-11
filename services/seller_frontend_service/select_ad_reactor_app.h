@@ -38,7 +38,7 @@ class SelectAdReactorForApp : public SelectAdReactor {
       const ReportWinMap& report_win_map, bool enable_cancellation = false,
       bool enable_kanon = false,
       bool enable_buyer_private_aggregate_reporting = false,
-      bool fail_fast = true);
+      int per_adtech_paapi_contributions_limit = 0, bool fail_fast = true);
   virtual ~SelectAdReactorForApp() = default;
 
   // SelectAdReactorForApp is neither copyable nor movable.
@@ -49,7 +49,8 @@ class SelectAdReactorForApp : public SelectAdReactor {
   absl::StatusOr<std::string> GetNonEncryptedResponse(
       const std::optional<ScoreAdsResponse::AdScore>& high_score,
       const std::optional<AuctionResult::Error>& error,
-      const AdScores* ghost_winning_scores = nullptr) override;
+      const AdScores* ghost_winning_scores = nullptr,
+      int per_adtech_paapi_contributions_limit = 0) override;
 
   [[deprecated]] ProtectedAudienceInput GetDecodedProtectedAudienceInput(
       absl::string_view encoded_data) override;
@@ -57,9 +58,9 @@ class SelectAdReactorForApp : public SelectAdReactor {
   ProtectedAuctionInput GetDecodedProtectedAuctionInput(
       absl::string_view encoded_data) override;
 
-  absl::flat_hash_map<absl::string_view, BuyerInput> GetDecodedBuyerinputs(
-      const google::protobuf::Map<std::string, std::string>&
-          encoded_buyer_inputs) override;
+  absl::flat_hash_map<absl::string_view, BuyerInputForBidding>
+  GetDecodedBuyerinputs(const google::protobuf::Map<std::string, std::string>&
+                            encoded_buyer_inputs) override;
 
   // Protected App Signals (PAS) related methods follow.
 
@@ -76,7 +77,7 @@ class SelectAdReactorForApp : public SelectAdReactor {
   // PAS buyer inputs populated properly.
   std::unique_ptr<GetBidsRequest::GetBidsRawRequest> CreateGetBidsRequest(
       const std::string& buyer_ig_owner,
-      const BuyerInput& buyer_input) override;
+      const BuyerInputForBidding& buyer_input) override;
 
   // Populates PAS bids in the scoring request to be sent to auction service.
   void MayPopulateProtectedAppSignalsBids(

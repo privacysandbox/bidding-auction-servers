@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for sql_expr."""
+
 import unittest
 import sqlite3
 

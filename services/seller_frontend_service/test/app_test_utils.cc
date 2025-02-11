@@ -24,10 +24,24 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
+using DecodedBuyerInputForBiddings =
+    ::google::protobuf::Map<std::string, BuyerInputForBidding>;
+
+EncodedBuyerInputs GetProtoEncodedBuyerInputs(
+    const DecodedBuyerInputs& buyer_inputs) {
+  EncodedBuyerInputs encoded_buyer_inputs;
+  for (const auto& [buyer, buyer_input] : buyer_inputs) {
+    absl::StatusOr<std::string> compressed_buyer_input =
+        GzipCompress(buyer_input.SerializeAsString());
+    DCHECK(compressed_buyer_input.ok()) << compressed_buyer_input.status();
+    encoded_buyer_inputs.emplace(buyer, std::move(*compressed_buyer_input));
+  }
+  return encoded_buyer_inputs;
+}
 
 // Encodes and compresses the passed in buyer inputs.
 EncodedBuyerInputs GetProtoEncodedBuyerInputs(
-    const DecodedBuyerInputs& buyer_inputs) {
+    const DecodedBuyerInputForBiddings& buyer_inputs) {
   EncodedBuyerInputs encoded_buyer_inputs;
   for (const auto& [buyer, buyer_input] : buyer_inputs) {
     absl::StatusOr<std::string> compressed_buyer_input =

@@ -42,7 +42,7 @@ absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
                               std::optional<bool> enable_debug_reporting,
                               std::optional<bool> enable_debug_info,
                               std::optional<bool> enable_unlimited_egress,
-                              bool enforce_kanon);
+                              std::optional<bool> enforce_kanon);
 
 // Sends a request to BFE. The parameters used for the request are retrieved
 // from absl flags that are used to run the script.

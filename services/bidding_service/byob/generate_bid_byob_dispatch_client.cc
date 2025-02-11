@@ -51,29 +51,22 @@ absl::Status GenerateBidByobDispatchClient::LoadSync(std::string version,
 
   // Get UDF blob for the given code and register it with the BYOB service.
   PS_ASSIGN_OR_RETURN(UdfBlob udf_blob, UdfBlob::Create(std::move(code)));
-  absl::Notification notif;
-  absl::Status load_status;
-  PS_ASSIGN_OR_RETURN(
-      std::string new_code_token,
-      byob_service_.Register(udf_blob(), notif, load_status, num_workers_));
-  // TODO(b/368624844): Make duration configurable by taking in this in Create.
-  notif.WaitForNotificationWithTimeout(absl::Seconds(120));
+  PS_ASSIGN_OR_RETURN(std::string new_code_token,
+                      byob_service_.Register(udf_blob(), num_workers_));
 
-  if (load_status.ok()) {
-    // Acquire lock before updating info about the most recently loaded code
-    // blob.
-    if (code_mutex_.TryLock()) {
-      code_token_ = std::move(new_code_token);
-      code_version_ = std::move(version);
-      code_hash_ = new_code_hash;
-      code_mutex_.Unlock();
-    }
+  // Acquire lock before updating info about the most recently loaded code
+  // blob.
+  if (code_mutex_.TryLock()) {
+    code_token_ = std::move(new_code_token);
+    code_version_ = std::move(version);
+    code_hash_ = new_code_hash;
+    code_mutex_.Unlock();
   }
-  return load_status;
+  return absl::OkStatus();
 }
 
 absl::Status GenerateBidByobDispatchClient::Execute(
-    roma_service::GenerateProtectedAudienceBidRequest request,
+    const roma_service::GenerateProtectedAudienceBidRequest& request,
     absl::Duration timeout,
     absl::AnyInvocable<
         void(absl::StatusOr<
@@ -88,7 +81,7 @@ absl::Status GenerateBidByobDispatchClient::Execute(
                   response) mutable {
             std::move(callback)(std::move(response));
           },
-          std::move(request), /*metadata=*/{}, code_token_)
+          request, /*metadata=*/{}, code_token_)
       .status();
 }
 

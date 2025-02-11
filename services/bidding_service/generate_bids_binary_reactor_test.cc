@@ -319,14 +319,19 @@ TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForBrowser) {
             EXPECT_EQ(request.browser_signals().multi_bid_limit(), 2);
             EXPECT_EQ(request.browser_signals().seller(), raw_request.seller());
             EXPECT_TRUE(request.browser_signals().top_level_seller().empty());
-            EXPECT_EQ(request.browser_signals().join_count(),
-                      ig_for_bidding.browser_signals().join_count());
+            EXPECT_EQ(
+                request.browser_signals().join_count(),
+                ig_for_bidding.browser_signals_for_bidding().join_count());
             EXPECT_EQ(request.browser_signals().bid_count(),
-                      ig_for_bidding.browser_signals().bid_count());
-            EXPECT_EQ(request.browser_signals().recency(),
-                      ig_for_bidding.browser_signals().recency() * 1000);
+                      ig_for_bidding.browser_signals_for_bidding().bid_count());
+            EXPECT_EQ(
+                request.browser_signals().recency(),
+                ig_for_bidding.browser_signals_for_bidding().recency() * 1000);
             EXPECT_EQ(request.browser_signals().prev_wins(),
-                      ig_for_bidding.browser_signals().prev_wins());
+                      ig_for_bidding.browser_signals_for_bidding().prev_wins());
+            EXPECT_EQ(
+                request.browser_signals().prev_wins_ms(),
+                ig_for_bidding.browser_signals_for_bidding().prev_wins_ms());
             std::move(callback)(
                 roma_service::GenerateProtectedAudienceBidResponse());
             return absl::OkStatus();
@@ -342,9 +347,10 @@ TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForBrowserWithRecencyMs) {
       {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
       /*enable_debug_reporting=*/true, /*logging_enabled=*/true);
   ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
-  ASSERT_TRUE(raw_request.interest_group_for_bidding(0).has_browser_signals());
   ASSERT_TRUE(raw_request.interest_group_for_bidding(0)
-                  .browser_signals()
+                  .has_browser_signals_for_bidding());
+  ASSERT_TRUE(raw_request.interest_group_for_bidding(0)
+                  .browser_signals_for_bidding()
                   .has_recency_ms());
   ASSERT_TRUE(raw_request.top_level_seller().empty());
 
@@ -361,14 +367,19 @@ TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForBrowserWithRecencyMs) {
                       raw_request.publisher_name());
             EXPECT_EQ(request.browser_signals().seller(), raw_request.seller());
             EXPECT_TRUE(request.browser_signals().top_level_seller().empty());
-            EXPECT_EQ(request.browser_signals().join_count(),
-                      ig_for_bidding.browser_signals().join_count());
+            EXPECT_EQ(
+                request.browser_signals().join_count(),
+                ig_for_bidding.browser_signals_for_bidding().join_count());
             EXPECT_EQ(request.browser_signals().bid_count(),
-                      ig_for_bidding.browser_signals().bid_count());
-            EXPECT_EQ(request.browser_signals().recency(),
-                      ig_for_bidding.browser_signals().recency_ms());
+                      ig_for_bidding.browser_signals_for_bidding().bid_count());
+            EXPECT_EQ(
+                request.browser_signals().recency(),
+                ig_for_bidding.browser_signals_for_bidding().recency_ms());
             EXPECT_EQ(request.browser_signals().prev_wins(),
-                      ig_for_bidding.browser_signals().prev_wins());
+                      ig_for_bidding.browser_signals_for_bidding().prev_wins());
+            EXPECT_EQ(
+                request.browser_signals().prev_wins_ms(),
+                ig_for_bidding.browser_signals_for_bidding().prev_wins_ms());
             std::move(callback)(
                 roma_service::GenerateProtectedAudienceBidResponse());
             return absl::OkStatus();
@@ -381,14 +392,15 @@ TEST_F(GenerateBidsBinaryReactorTest,
        CreatesRequestForBrowseForComponentAuction) {
   GenerateBidsRawRequest raw_request;
   IGForBidding ig_for_bidding = MakeARandomInterestGroupForBiddingFromBrowser();
-  ig_for_bidding.mutable_browser_signals()->clear_recency_ms();
+  ig_for_bidding.mutable_browser_signals_for_bidding()->clear_recency_ms();
   BuildGenerateBidsRawRequestForComponentAuction(
       {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
       false);
   ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
-  ASSERT_TRUE(raw_request.interest_group_for_bidding(0).has_browser_signals());
+  ASSERT_TRUE(raw_request.interest_group_for_bidding(0)
+                  .has_browser_signals_for_bidding());
   ASSERT_FALSE(raw_request.interest_group_for_bidding(0)
-                   .browser_signals()
+                   .browser_signals_for_bidding()
                    .has_recency_ms());
   ASSERT_FALSE(raw_request.top_level_seller().empty());
 
@@ -406,14 +418,19 @@ TEST_F(GenerateBidsBinaryReactorTest,
             EXPECT_EQ(request.browser_signals().seller(), raw_request.seller());
             EXPECT_EQ(request.browser_signals().top_level_seller(),
                       raw_request.top_level_seller());
-            EXPECT_EQ(request.browser_signals().join_count(),
-                      ig_for_bidding.browser_signals().join_count());
+            EXPECT_EQ(
+                request.browser_signals().join_count(),
+                ig_for_bidding.browser_signals_for_bidding().join_count());
             EXPECT_EQ(request.browser_signals().bid_count(),
-                      ig_for_bidding.browser_signals().bid_count());
-            EXPECT_EQ(request.browser_signals().recency(),
-                      ig_for_bidding.browser_signals().recency() * 1000);
+                      ig_for_bidding.browser_signals_for_bidding().bid_count());
+            EXPECT_EQ(
+                request.browser_signals().recency(),
+                ig_for_bidding.browser_signals_for_bidding().recency() * 1000);
             EXPECT_EQ(request.browser_signals().prev_wins(),
-                      ig_for_bidding.browser_signals().prev_wins());
+                      ig_for_bidding.browser_signals_for_bidding().prev_wins());
+            EXPECT_EQ(
+                request.browser_signals().prev_wins_ms(),
+                ig_for_bidding.browser_signals_for_bidding().prev_wins_ms());
             std::move(callback)(
                 roma_service::GenerateProtectedAudienceBidResponse());
             return absl::OkStatus();
@@ -430,9 +447,10 @@ TEST_F(GenerateBidsBinaryReactorTest,
       {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
       true);
   ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
-  ASSERT_TRUE(raw_request.interest_group_for_bidding(0).has_browser_signals());
   ASSERT_TRUE(raw_request.interest_group_for_bidding(0)
-                  .browser_signals()
+                  .has_browser_signals_for_bidding());
+  ASSERT_TRUE(raw_request.interest_group_for_bidding(0)
+                  .browser_signals_for_bidding()
                   .has_recency_ms());
   ASSERT_FALSE(raw_request.top_level_seller().empty());
 
@@ -450,14 +468,19 @@ TEST_F(GenerateBidsBinaryReactorTest,
             EXPECT_EQ(request.browser_signals().seller(), raw_request.seller());
             EXPECT_EQ(request.browser_signals().top_level_seller(),
                       raw_request.top_level_seller());
-            EXPECT_EQ(request.browser_signals().join_count(),
-                      ig_for_bidding.browser_signals().join_count());
+            EXPECT_EQ(
+                request.browser_signals().join_count(),
+                ig_for_bidding.browser_signals_for_bidding().join_count());
             EXPECT_EQ(request.browser_signals().bid_count(),
-                      ig_for_bidding.browser_signals().bid_count());
-            EXPECT_EQ(request.browser_signals().recency(),
-                      ig_for_bidding.browser_signals().recency_ms());
+                      ig_for_bidding.browser_signals_for_bidding().bid_count());
+            EXPECT_EQ(
+                request.browser_signals().recency(),
+                ig_for_bidding.browser_signals_for_bidding().recency_ms());
             EXPECT_EQ(request.browser_signals().prev_wins(),
-                      ig_for_bidding.browser_signals().prev_wins());
+                      ig_for_bidding.browser_signals_for_bidding().prev_wins());
+            EXPECT_EQ(
+                request.browser_signals().prev_wins_ms(),
+                ig_for_bidding.browser_signals_for_bidding().prev_wins_ms());
             std::move(callback)(
                 roma_service::GenerateProtectedAudienceBidResponse());
             return absl::OkStatus();
@@ -473,7 +496,8 @@ TEST_F(GenerateBidsBinaryReactorTest, CreatesRequestForAndroid) {
       {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
       /*enable_debug_reporting=*/false, /*logging_enabled=*/true);
   ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
-  ASSERT_TRUE(raw_request.interest_group_for_bidding(0).has_android_signals());
+  ASSERT_TRUE(raw_request.interest_group_for_bidding(0)
+                  .has_android_signals_for_bidding());
   ASSERT_TRUE(raw_request.top_level_seller().empty());
 
   GenerateBidsRawResponse expected_raw_response;
@@ -501,7 +525,8 @@ TEST_F(GenerateBidsBinaryReactorTest,
       {ig_for_bidding}, kTestAuctionSignals, kTestBuyerSignals, raw_request,
       true);
   ASSERT_EQ(raw_request.interest_group_for_bidding_size(), 1);
-  ASSERT_TRUE(raw_request.interest_group_for_bidding(0).has_android_signals());
+  ASSERT_TRUE(raw_request.interest_group_for_bidding(0)
+                  .has_android_signals_for_bidding());
   ASSERT_FALSE(raw_request.top_level_seller().empty());
 
   GenerateBidsRawResponse expected_raw_response;

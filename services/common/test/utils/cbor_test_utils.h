@@ -43,7 +43,8 @@ absl::StatusOr<std::string> CborEncodeProtectedAuctionProto(
 // BuyerInput Map (note that keys in the map are not encoded).
 absl::StatusOr<google::protobuf::Map<std::string, std::string>>
 GetEncodedBuyerInputMap(
-    const google::protobuf::Map<std::string, BuyerInput>& buyer_inputs);
+    const google::protobuf::Map<std::string, BuyerInputForBidding>&
+        buyer_inputs);
 
 // Converts the passed in CBOR data handle to the serialized CBOR byte-string.
 std::string SerializeCbor(cbor_item_t* root);

@@ -43,6 +43,8 @@ using ::google::protobuf::RepeatedPtrField;
 using BiddingGroupMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using BuyerInputMap = ::google::protobuf::Map<std::string, BuyerInput>;
+using BuyerInputForBiddingMap =
+    ::google::protobuf::Map<std::string, BuyerInputForBidding>;
 using BuyerInputMapEncoded = ::google::protobuf::Map<std::string, std::string>;
 using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 
@@ -129,9 +131,9 @@ absl::StatusOr<std::vector<PrevWin>> DecodeJsonArrayPrevWins(
   return result;
 }
 
-absl::Status CborSerializeBrowserSignals(absl::string_view key,
-                                         const BrowserSignals& browser_signals,
-                                         cbor_item_t& interest_group_root) {
+absl::Status CborSerializeBrowserSignals(
+    absl::string_view key, const BrowserSignalsForBidding& browser_signals,
+    cbor_item_t& interest_group_root) {
   ScopedCbor browser_signals_map(cbor_new_definite_map(kNumBrowserSignalKeys));
 
   PS_RETURN_IF_ERROR(CborSerializeKeyValue(kJoinCount, &cbor_build_uint64,
@@ -182,6 +184,7 @@ absl::Status CborSerializeBrowserSignals(absl::string_view key,
           "Unable to serialize the complete prev wins data");
     }
   }
+
   struct cbor_pair kv = {
       .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
       .value = *browser_signals_map};
@@ -194,7 +197,8 @@ absl::Status CborSerializeBrowserSignals(absl::string_view key,
 }
 
 absl::Status CborSerializeInterestGroup(
-    const BuyerInput::InterestGroup& interest_group, cbor_item_t& root) {
+    const BuyerInputForBidding::InterestGroupForBidding& interest_group,
+    cbor_item_t& root) {
   cbor_item_t* interest_group_serialized =
       cbor_new_definite_map(kNumInterestGroupKeys);
   PS_RETURN_IF_ERROR(CborSerializeString(kName, interest_group.name(),
@@ -307,7 +311,7 @@ absl::StatusOr<std::string> CborEncodeProtectedAuctionProto(
 }
 
 absl::StatusOr<BuyerInputMapEncoded> GetEncodedBuyerInputMap(
-    const BuyerInputMap& buyer_inputs) {
+    const BuyerInputForBiddingMap& buyer_inputs) {
   BuyerInputMapEncoded encoded_buyer_input;
   for (const auto& [owner, buyer_input] : buyer_inputs) {
     // Serialize the list of interest groups.

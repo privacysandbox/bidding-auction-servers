@@ -57,7 +57,7 @@ void CustomMetricCallBack(
   if (!log_metric.ok()) {
     wrapper.io_proto.set_output_string("fail log metric");
     PS_LOG(ERROR, (*roma_request_context)->GetLogContext())
-        << "Failed call LogUDFMetrics" << result.message();
+        << "Failed call LogUDFMetrics" << log_metric.message();
     return;
   }
   wrapper.io_proto.set_output_string("log metric success");

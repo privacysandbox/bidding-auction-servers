@@ -46,6 +46,7 @@
 #include "services/seller_frontend_service/k_anon/k_anon_utils.h"
 #include "services/seller_frontend_service/kv_seller_signals_adapter.h"
 #include "services/seller_frontend_service/private_aggregation/private_aggregation_helper.h"
+#include "services/seller_frontend_service/util/buyer_input_proto_utils.h"
 #include "services/seller_frontend_service/util/key_fetcher_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
 #include "src/communication/ohttp_utils.h"
@@ -63,7 +64,8 @@ using ScoreAdsRawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
 using AdScore = ScoreAdsResponse::AdScore;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
-using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
+using DecodedBuyerInputs =
+    absl::flat_hash_map<absl::string_view, BuyerInputForBidding>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
 using KVLookUpResult =
     absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesResponse>>;
@@ -90,7 +92,8 @@ SelectAdReactor::SelectAdReactor(
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
-    bool fail_fast, int max_buyers_solicited)
+    int per_adtech_paapi_contributions_limit, bool fail_fast,
+    int max_buyers_solicited)
     : request_context_(context),
       request_(request),
       response_(response),
@@ -122,6 +125,8 @@ SelectAdReactor::SelectAdReactor(
       enable_enforce_kanon_(enable_kanon),
       enable_buyer_private_aggregate_reporting_(
           enable_buyer_private_aggregate_reporting),
+      per_adtech_paapi_contributions_limit_(
+          per_adtech_paapi_contributions_limit),
       priority_signals_vector_(rapidjson::kObjectType),
       async_task_tracker_(
           0, log_context_,  // NumTasksToTrack is set appropriately in Execute()
@@ -221,10 +226,10 @@ AdWithBidMetadata SelectAdReactor::BuildAdWithBidMetadata(
   result.set_interest_group_owner(interest_group_owner);
 
   // Finally, find the AdWithBid's IG and copy the last fields from there.
-  const BuyerInput& buyer_input =
+  const BuyerInputForBidding& buyer_input_for_bidding =
       buyer_inputs_->find(interest_group_owner)->second;
   int interest_group_idx = 0;
-  for (const auto& interest_group : buyer_input.interest_groups()) {
+  for (const auto& interest_group : buyer_input_for_bidding.interest_groups()) {
     if (interest_group.name() == result.interest_group_name()) {
       result.set_interest_group_origin(interest_group.origin());
       if (request_->client_type() == CLIENT_TYPE_BROWSER) {
@@ -756,8 +761,9 @@ void SelectAdReactor::Execute() {
 }
 
 std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
-                                      const BuyerInput& buyer_input) {
+SelectAdReactor::CreateGetBidsRequest(
+    const std::string& buyer_ig_owner,
+    const BuyerInputForBidding& buyer_input_for_bidding) {
   auto get_bids_request = std::make_unique<GetBidsRequest::GetBidsRawRequest>();
   get_bids_request->set_is_chaff(false);
   get_bids_request->set_seller(auction_config_.seller());
@@ -786,7 +792,11 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
     }
   }
 
-  *get_bids_request->mutable_buyer_input() = buyer_input;
+  *get_bids_request->mutable_buyer_input() =
+      ToBuyerInput(buyer_input_for_bidding);
+  *get_bids_request->mutable_buyer_input_for_bidding() =
+      buyer_input_for_bidding;
+
   get_bids_request->set_top_level_seller(auction_config_.top_level_seller());
   std::visit(
       [&get_bids_request, &buyer_debug_id,
@@ -812,11 +822,13 @@ SelectAdReactor::CreateGetBidsRequest(const std::string& buyer_ig_owner,
       protected_auction_input_);
 
   if (!is_protected_audience_enabled_ &&
-      get_bids_request->mutable_buyer_input()->interest_groups_size() > 0) {
+      get_bids_request->mutable_buyer_input_for_bidding()
+              ->interest_groups_size() > 0) {
     PS_VLOG(kNoisyWarn)
         << "Clearing interest groups in the input since protected "
            "audience support is disabled";
-    get_bids_request->mutable_buyer_input()->clear_interest_groups();
+    get_bids_request->mutable_buyer_input_for_bidding()
+        ->clear_interest_groups();
   }
 
   if (config_client_.HasParameter(ENABLE_PRIORITY_VECTOR) &&
@@ -1248,12 +1260,17 @@ void SelectAdReactor::CancellableFetchScoringSignalsV2(
     return;
   }
   grpc::ClientContext* client_context = client_contexts_.Add();
+
+  EventMessage::KvSignal score_signal = KvEventMessage(
+      (*maybe_scoring_signals_request)->ShortDebugString(), log_context_);
+
   auto status = clients_.kv_async_client->ExecuteInternal(
       *std::move(maybe_scoring_signals_request), client_context,
       CancellationWrapper(
           request_context_, enable_cancellation_,
-          [this, kv_request](KVLookUpResult kv_look_up_result,
-                             ResponseMetadata response_metadata) mutable {
+          [this, kv_request, score_signal = std::move(score_signal)](
+              KVLookUpResult kv_look_up_result,
+              ResponseMetadata response_metadata) mutable {
             {
               // Only logs KV request and response sizes if fetching signals
               // succeeds.
@@ -1278,10 +1295,17 @@ void SelectAdReactor::CancellableFetchScoringSignalsV2(
                           ErrorCode::SERVER_SIDE);
               OnScoreAdsDone(
                   std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>());
+              if (server_common::log::PS_VLOG_IS_ON(kKVLog)) {
+                log_context_.SetEventMessageField(std::move(score_signal));
+              }
               return;
             }
             auto signals = ConvertV2ResponseToV1ScoringSignals(
                 *std::move(kv_look_up_result));
+
+            SetKvEventMessage("KVAsyncGrpcClient",
+                              *((*signals)->scoring_signals),
+                              std::move(score_signal), log_context_);
             maybe_scoring_signals_ = *std::move(signals);
             fetch_scoring_signals_query_kanon_tracker_.TaskCompleted(
                 TaskStatus::SUCCESS);
@@ -1304,11 +1328,12 @@ void SelectAdReactor::CancellableFetchScoringSignals() {
     scoring_signals_request.seller_kv_experiment_group_id_ = absl::StrCat(
         auction_config_.code_experiment_spec().seller_kv_experiment_group_id());
   }
-  if (UseKvV2(
-          request_->client_type(), is_tkv_v2_browser_enabled_,
-          config_client_.GetBooleanParameter(TEST_MODE),
-          config_client_.GetStringParameter(TRUSTED_KEY_VALUE_V2_SIGNALS_HOST)
-              .empty())) {
+  absl::string_view kv_v2_signals_host =
+      config_client_.GetStringParameter(TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
+  if (UseKvV2(request_->client_type(), is_tkv_v2_browser_enabled_,
+              config_client_.GetBooleanParameter(TEST_MODE),
+              kv_v2_signals_host.empty() ||
+                  kv_v2_signals_host == kIgnoredPlaceholderValue)) {
     CancellableFetchScoringSignalsV2(scoring_signals_request);
   } else {
     CancellableFetchScoringSignalsV1(scoring_signals_request);
@@ -1552,8 +1577,8 @@ void SelectAdReactor::OnScoreAdsDone(
   if (HaveClientVisibleErrors()) {
     error = std::move(error_);
   }
-  absl::StatusOr<std::string> non_encrypted_response =
-      GetNonEncryptedResponse(high_score, error, ghost_winners);
+  absl::StatusOr<std::string> non_encrypted_response = GetNonEncryptedResponse(
+      high_score, error, ghost_winners, per_adtech_paapi_contributions_limit_);
   if (!non_encrypted_response.ok()) {
     FinishWithStatus(grpc::Status(grpc::INTERNAL, kInternalServerError));
     return;

@@ -39,6 +39,7 @@
 #include "services/seller_frontend_service/private_aggregation/private_aggregation_helper.h"
 #include "services/seller_frontend_service/test/constants.h"
 #include "services/seller_frontend_service/test/kanon_test_utils.h"
+#include "services/seller_frontend_service/util/buyer_input_proto_utils.h"
 #include "services/seller_frontend_service/util/cbor_common_util.h"
 #include "src/core/test/utils/proto_test_utils.h"
 
@@ -141,14 +142,19 @@ struct cbor_item_t* BuildSampleCborInterestGroup(
         BuildIntMapPair(kRecencyMs,
                         cbor_interest_group_config.recency_ms.value())));
   }
+
   // Build prevWins arrays.
   cbor_item_t* child_arr_1 = cbor_new_definite_array(2);
-  EXPECT_TRUE(cbor_array_push(child_arr_1, cbor_move(cbor_build_uint64(-20))));
+  int child_arr_1_int_val = -20;
+  EXPECT_TRUE(cbor_array_push(
+      child_arr_1, cbor_move(cbor_build_uint64(child_arr_1_int_val))));
   EXPECT_TRUE(cbor_array_push(
       child_arr_1, cbor_move(cbor_build_stringn(
                        kSampleAdRenderId1, sizeof(kSampleAdRenderId1) - 1))));
   cbor_item_t* child_arr_2 = cbor_new_definite_array(2);
-  EXPECT_TRUE(cbor_array_push(child_arr_2, cbor_move(cbor_build_uint64(-100))));
+  int child_arr_2_int_val = -100;
+  EXPECT_TRUE(cbor_array_push(
+      child_arr_2, cbor_move(cbor_build_uint64(child_arr_2_int_val))));
   EXPECT_TRUE(cbor_array_push(
       child_arr_2, cbor_move(cbor_build_stringn(
                        kSampleAdRenderId2, sizeof(kSampleAdRenderId2) - 1))));
@@ -161,6 +167,7 @@ struct cbor_item_t* BuildSampleCborInterestGroup(
       browser_signals,
       {cbor_move(cbor_build_stringn(kPrevWins, sizeof(kPrevWins) - 1)),
        cbor_move(parent_arr)}));
+
   cbor_item_t* browser_signals_key =
       cbor_build_stringn(kBrowserSignals, sizeof(kBrowserSignals) - 1);
   EXPECT_TRUE(cbor_map_add(interest_group, {cbor_move(browser_signals_key),
@@ -256,6 +263,7 @@ PrivateAggregateReportingResponses GetTestPrivateAggregateReportingResponses() {
   PrivateAggregateContribution contribution1 =
       GetTestContributionWithIntegers(EVENT_TYPE_CUSTOM, kTestEvent1);
   contribution1.set_ig_idx(1);
+  *buyer_pagg_response.add_contributions() = contribution1;
   *buyer_pagg_response.add_contributions() = std::move(contribution1);
   buyer_pagg_response.set_adtech_origin(kTestBuyerOrigin);
   PrivateAggregateReportingResponses responses;
@@ -399,14 +407,14 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   if (cbor_interest_group_config.recency_ms) {
     signals->set_recency_ms(cbor_interest_group_config.recency_ms.value());
   }
+
   std::string prev_wins_json_str = absl::StrFormat(
       R"([[-20,"%s"],[-100,"%s"]])", kSampleAdRenderId1, kSampleAdRenderId2);
   signals->set_prev_wins(prev_wins_json_str);
 
-  BuyerInput buyer_input;
-  *buyer_input.add_interest_groups() = expected_ig;
-  expected_ig.mutable_browser_signals()->set_prev_wins(prev_wins_json_str);
-  google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
+  BuyerInputForBidding buyer_input;
+  *buyer_input.add_interest_groups() = ToInterestGroupForBidding(expected_ig);
+  google::protobuf::Map<std::string, BuyerInputForBidding> buyer_inputs;
   buyer_inputs.emplace(kSampleIgOwner, std::move(buyer_input));
 
   absl::StatusOr<EncodedBuyerInputs> encoded_buyer_inputs =
@@ -447,7 +455,7 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
     bi_differencer.ReportDifferencesToString(&bi_differences);
     ABSL_LOG(INFO) << "\nExpected BuyerInput:\n"
                    << expected_buyer_input.DebugString();
-    BuyerInput actual_buyer_input =
+    BuyerInputForBidding actual_buyer_input =
         DecodeBuyerInputs(actual.buyer_input(), error_accumulator)
             .begin()
             ->second;
@@ -541,7 +549,7 @@ TEST(ChromeRequestUtils, Decode_FailOnMalformedCompresedBytestring) {
       Decode<ProtectedAuctionInput>(serialized_cbor, error_accumulator);
   ASSERT_FALSE(error_accumulator.HasErrors());
 
-  absl::flat_hash_map<absl::string_view, BuyerInput> buyer_inputs =
+  absl::flat_hash_map<absl::string_view, BuyerInputForBidding> buyer_inputs =
       DecodeBuyerInputs(actual.buyer_input(), error_accumulator);
   ASSERT_TRUE(error_accumulator.HasErrors());
   EXPECT_TRUE(ContainsClientError(
@@ -882,7 +890,8 @@ TEST(ChromeResponseUtils, SerializesBothWinnerAndKAnonGhostWinner) {
 
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
-      /*error=*/std::nullopt, [](const grpc::Status& status) {}, "",
+      /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100, "",
       std::move(kanon_auction_result_data));
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -966,6 +975,7 @@ TEST(ChromeResponseUtils, SerializesKAnonGhostWinnerAndDoesntSetChaff) {
              std::nullopt, /*bidding_group_map=*/{},
              /*update_group_map=*/{},
              /*error=*/std::nullopt, [](const grpc::Status& status) {},
+             /*per_adtech_paapi_contributions_limit=*/100,
              kSampleAdAuctionResultNonce, std::move(kanon_auction_result_data));
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -1149,6 +1159,7 @@ TEST(ChromeResponseUtils, EncodesNonceWithError) {
       /*high_score=*/
       std::nullopt, /*bidding_group_map=*/{},
       /*update_group_map=*/{}, error, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100,
       kSampleAdAuctionResultNonce);
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -1165,6 +1176,7 @@ TEST(ChromeResponseUtils, EncodesNonceWithChaff) {
       std::nullopt, /*bidding_group_map=*/{},
       /*update_group_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100,
       kSampleAdAuctionResultNonce);
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -1181,6 +1193,7 @@ TEST(ChromeResponseUtils, EncodesNonceWithAdScore) {
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100,
       kSampleAdAuctionResultNonce);
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -1200,6 +1213,7 @@ TEST(ChromeResponseUtils, DoesNotContainNonceWithErrorWhenEmpty) {
       /*high_score=*/
       std::nullopt, /*bidding_group_map=*/{},
       /*update_group_map=*/{}, error, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100,
       /*ad_auction_result_nonce=*/"");
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -1218,6 +1232,7 @@ TEST(ChromeResponseUtils, DoesNotContainNonceWithChaffWhenEmpty) {
       std::nullopt, /*bidding_group_map=*/{},
       /*update_group_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100,
       /*ad_auction_result_nonce=*/"");
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -1236,6 +1251,7 @@ TEST(ChromeResponseUtils, DoesNotContainNonceWithAdScoreWhenEmpty) {
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100,
       /*ad_auction_result_nonce=*/"");
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
@@ -1390,6 +1406,7 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100,
       /*ad_auction_result_nonce=*/"", std::move(kanon_auction_result_data));
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
   absl::StatusOr<AuctionResult> decoded_result =
@@ -1679,7 +1696,8 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
 
   auto ret = Encode(
       std::move(winner), bidding_group_map, update_group_map,
-      /*error=*/std::nullopt, [](auto error) {}, kSampleAdAuctionResultNonce,
+      /*error=*/std::nullopt, [](auto error) {},
+      /*per_adtech_paapi_contributions_limit=*/100, kSampleAdAuctionResultNonce,
       std::move(kanon_auction_result_data));
 
   ASSERT_TRUE(ret.ok()) << ret.status();
@@ -1739,8 +1757,10 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncodingWithBuyerReportingId) {
       bidding_group_map = GetTestBiddingGroupMap();
   UpdateGroupMap update_group_map = GetTestUpdateGroupMap();
 
-  auto ret = Encode(std::move(winner), bidding_group_map, update_group_map,
-                    /*error=*/std::nullopt, [](auto error) {});
+  auto ret = Encode(
+      std::move(winner), bidding_group_map, update_group_map,
+      /*error=*/std::nullopt, [](auto error) {},
+      /*per_adtech_paapi_contributions_limit=*/1);
   ASSERT_TRUE(ret.ok()) << ret.status();
   // Conversion can be verified at: https://cbor.me/
   EXPECT_THAT(

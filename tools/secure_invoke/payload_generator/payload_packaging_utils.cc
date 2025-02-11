@@ -77,13 +77,15 @@ PackagePayload(const ProtectedAuctionInput& protected_auction_input,
 
 absl::StatusOr<google::protobuf::Map<std::string, std::string>>
 PackageBuyerInputsForApp(
-    const google::protobuf::Map<std::string, BuyerInput>& buyer_inputs) {
+    const google::protobuf::Map<std::string, BuyerInputForBidding>&
+        buyer_inputs) {
   return GetProtoEncodedBuyerInputs(buyer_inputs);
 }
 
 absl::StatusOr<google::protobuf::Map<std::string, std::string>>
 PackageBuyerInputsForBrowser(
-    const google::protobuf::Map<std::string, BuyerInput>& buyer_inputs) {
+    const google::protobuf::Map<std::string, BuyerInputForBidding>&
+        buyer_inputs) {
   return GetEncodedBuyerInputMap(buyer_inputs);
 }
 

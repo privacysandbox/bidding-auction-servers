@@ -40,7 +40,7 @@ ABSL_DECLARE_FLAG(std::string, key_id);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_debug_reporting);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_debug_info);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_unlimited_egress);
-ABSL_DECLARE_FLAG(bool, enforce_kanon);
+ABSL_DECLARE_FLAG(std::optional<bool>, enforce_kanon);
 ABSL_DECLARE_FLAG(std::string, pas_buyer_input_json);
 
 #endif  // TOOLS_SECURE_INVOKE_FLAGS_H_

@@ -28,6 +28,7 @@
 #include "services/common/util/priority_vector/priority_vector_utils.h"
 #include "services/common/util/request_metadata.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/seller_frontend_service/util/buyer_input_proto_utils.h"
 
 #include "kv_buyer_signals_adapter.h"
 
@@ -96,8 +97,8 @@ void LogIgMetric(const GetBidsRequest::GetBidsRawRequest& raw_request,
   int ad_render_ids = 0;
   int component_ads = 0;
   int igs_count = 0;
-  for (const BuyerInput::InterestGroup& interest_group :
-       raw_request.buyer_input().interest_groups()) {
+  for (const BuyerInputForBidding::InterestGroupForBidding& interest_group :
+       raw_request.buyer_input_for_bidding().interest_groups()) {
     igs_count += 1;
     user_bidding_signals += interest_group.user_bidding_signals().size();
     for (const auto& bidding_signal_key :
@@ -139,7 +140,7 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
     ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client, KVAsyncClient* kv_async_client,
-    bool enable_benchmarking)
+    server_common::Executor& executor, bool enable_benchmarking)
     : context_(&context),
       request_(&get_bids_request),
       get_bids_response_(&get_bids_response),
@@ -182,7 +183,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       enable_cancellation_(config.enable_cancellation),
       enable_enforce_kanon_(config.enable_kanon &&
                             raw_request_.enforce_kanon()),
-      bidding_signals_fetch_mode_(config.bidding_signals_fetch_mode) {
+      bidding_signals_fetch_mode_(config.bidding_signals_fetch_mode),
+      executor_(executor) {
   if (enable_benchmarking) {
     std::string request_id = FormatTime(absl::Now());
     benchmarking_logger_ =
@@ -215,12 +217,12 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
     BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client, KVAsyncClient* kv_async_client,
-    bool enable_benchmarking)
+    server_common::Executor& executor, bool enable_benchmarking)
     : GetBidsUnaryReactor(context, get_bids_request, get_bids_response,
                           bidding_signals_async_provider, bidding_async_client,
                           config, /*pas_bidding_async_client=*/nullptr,
                           key_fetcher_manager, crypto_client, kv_async_client,
-                          enable_benchmarking) {}
+                          executor, enable_benchmarking) {}
 
 void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
   if (enable_cancellation_ && context_->IsCancelled()) {
@@ -362,10 +364,12 @@ grpc::Status GetBidsUnaryReactor::DecryptRequest() {
 int GetBidsUnaryReactor::GetNumberOfMaximumBiddingCalls() {
   int num_expected_calls = 0;
   if (config_.is_protected_audience_enabled &&
-      raw_request_.buyer_input().interest_groups_size() > 0) {
+      (!raw_request_.buyer_input().interest_groups().empty() ||
+       !raw_request_.buyer_input_for_bidding().interest_groups().empty())) {
     PS_VLOG(5, log_context_) << "Interest groups found in the request";
     ++num_expected_calls;
   }
+
   if (config_.is_protected_app_signals_enabled &&
       raw_request_.has_protected_app_signals_buyer_input()) {
     PS_VLOG(5, log_context_) << "Protected app signals found in the request";
@@ -407,6 +411,11 @@ void GetBidsUnaryReactor::CancellableExecute() {
     return;
   }
 
+  if (raw_request_.has_buyer_input()) {
+    *raw_request_.mutable_buyer_input_for_bidding() =
+        ToBuyerInputForBidding(raw_request_.buyer_input());
+  }
+
   const int num_bidding_calls = GetNumberOfMaximumBiddingCalls();
   if (num_bidding_calls == 0) {
     // This is unlikely to happen since we already have this check in place
@@ -444,8 +453,6 @@ void GetBidsUnaryReactor::CancellableExecuteChaffRequest() {
   if (generator_.has_value()) {
     chaff_request_duration = request_duration_dist(*generator_);
   }
-  absl::SleepFor(absl::Milliseconds((int)chaff_request_duration));
-
   // Produce chaff response.
   size_t chaff_response_size = 0;
   std::uniform_int_distribution<size_t> chaff_response_size_dist(
@@ -472,10 +479,12 @@ void GetBidsUnaryReactor::CancellableExecuteChaffRequest() {
     return;
   }
 
-  PS_VLOG(kNoisyInfo, log_context_) << "Chaff request encrypted successfully";
+  PS_VLOG(kNoisyInfo, log_context_) << "Chaff response encrypted successfully";
   get_bids_response_->set_response_ciphertext(
       aead_encrypt->encrypted_data().ciphertext());
-  FinishWithStatus(grpc::Status::OK);
+
+  executor_.RunAfter(absl::Milliseconds((int)chaff_request_duration),
+                     [this]() { FinishWithStatus(grpc::Status::OK); });
 }
 
 void GetBidsUnaryReactor::LogInitiatedRequestErrorMetrics(
@@ -646,7 +655,8 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV1(
 }
 
 void GetBidsUnaryReactor::HandleV2Failure(const absl::Status& status,
-                                          absl::string_view error_message) {
+                                          absl::string_view error_message,
+                                          EventMessage::KvSignal bid_signal) {
   LogIfError(
       metric_context_->AccumulateMetric<metric::kBfeErrorCountByErrorCode>(
           1, metric::kBfeBiddingSignalsResponseError));
@@ -656,6 +666,9 @@ void GetBidsUnaryReactor::HandleV2Failure(const absl::Status& status,
   async_task_tracker_.TaskCompleted(TaskStatus::ERROR, [this, &status]() {
     bid_errors_.push_back(status.ToString());
   });
+  if (server_common::log::PS_VLOG_IS_ON(kKVLog)) {
+    log_context_.SetEventMessageField(std::move(bid_signal));
+  }
 }
 
 void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
@@ -681,12 +694,16 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
                                       << maybe_bidding_signals_request.status();
     return;
   }
+  EventMessage::KvSignal bid_signal = KvEventMessage(
+      (*maybe_bidding_signals_request)->ShortDebugString(), log_context_);
+
   auto status = kv_async_client_->ExecuteInternal(
       *std::move(maybe_bidding_signals_request), client_context,
       CancellationWrapper(
           context_, enable_cancellation_,
-          [this, kv_request](KVLookUpResult kv_look_up_result,
-                             ResponseMetadata response_metadata) mutable {
+          [this, kv_request, bid_signal = std::move(bid_signal)](
+              KVLookUpResult kv_look_up_result,
+              ResponseMetadata response_metadata) mutable {
             {
               // Only logs KV request and response sizes if fetching signals
               // succeeds.
@@ -699,16 +716,21 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
             }
             if (!kv_look_up_result.ok()) {
               HandleV2Failure(kv_look_up_result.status(),
-                              "GetBiddingSignals request failed with status:");
+                              "GetBiddingSignals request failed with status:",
+                              std::move(bid_signal));
               return;
             }
             auto signals =
                 ConvertV2BiddingSignalsToV1(*std::move(kv_look_up_result));
             if (!signals.ok()) {
               HandleV2Failure(signals.status(),
-                              "Failed converting TKV response. ");
+                              "Failed converting TKV response. ",
+                              std::move(bid_signal));
               return;
             }
+            SetKvEventMessage("KVAsyncGrpcClient",
+                              *((*signals)->trusted_signals),
+                              std::move(bid_signal), log_context_);
             // Sends protected audience bid request to bidding service.
             PrepareAndGenerateProtectedAudienceBid(*std::move(signals));
           },
@@ -733,7 +755,8 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
     return;
   }
 
-  if (raw_request_.buyer_input().interest_groups().empty()) {
+  if (raw_request_.buyer_input().interest_groups().empty() &&
+      raw_request_.buyer_input_for_bidding().interest_groups().empty()) {
     PS_VLOG(kNoisyWarn, log_context_)
         << "No interest groups found, skipping bidding for protected audience";
     return;
@@ -758,7 +781,7 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
   uint32_t data_version = bidding_signals->data_version;
   absl::StatusOr<BiddingSignalJsonComponents> parsed_bidding_signals =
       ParseTrustedBiddingSignals(std::move(bidding_signals),
-                                 raw_request_.buyer_input());
+                                 raw_request_.buyer_input_for_bidding());
   if (parsed_bidding_signals.ok()) {
     get_bids_raw_response_->mutable_update_interest_group_list()->Swap(
         &(parsed_bidding_signals->update_igs));

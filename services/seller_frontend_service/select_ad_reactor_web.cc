@@ -38,7 +38,8 @@ using ::google::protobuf::RepeatedPtrField;
 using BiddingGroupsMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
-using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
+using DecodedBuyerInputs =
+    absl::flat_hash_map<absl::string_view, BuyerInputForBidding>;
 using ReportErrorSignature = std::function<void(
     log::ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
     const std::string& msg, ErrorCode error_code)>;
@@ -70,10 +71,12 @@ SelectAdReactorForWeb::SelectAdReactorForWeb(
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
-    bool fail_fast, int max_buyers_solicited)
+    int per_adtech_paapi_contributions_limit, bool fail_fast,
+    int max_buyers_solicited)
     : SelectAdReactor(context, request, response, clients, config_client,
                       report_win_map, enable_cancellation, enable_kanon,
-                      enable_buyer_private_aggregate_reporting, fail_fast,
+                      enable_buyer_private_aggregate_reporting,
+                      per_adtech_paapi_contributions_limit, fail_fast,
                       max_buyers_solicited) {}
 
 KAnonJoinCandidate SelectAdReactorForWeb::GetKAnonJoinCandidate(
@@ -85,7 +88,8 @@ KAnonJoinCandidate SelectAdReactorForWeb::GetKAnonJoinCandidate(
 absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error,
-    const AdScores* ghost_winning_scores) {
+    const AdScores* ghost_winning_scores,
+    int per_adtech_paapi_contributions_limit) {
   auto error_handler =
       absl::bind_front(&SelectAdReactorForWeb::FinishWithStatus, this);
   std::string encoded_data;
@@ -156,6 +160,7 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
         Encode(high_score,
                GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
                shared_ig_updates_map_, error, error_handler,
+               per_adtech_paapi_contributions_limit,
                auction_config_.ad_auction_result_nonce(),
                std::move(kanon_data)));
     PS_VLOG(kPlain, log_context_) << "AuctionResult:\n" << (decode_lambda());

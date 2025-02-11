@@ -103,6 +103,7 @@ cc_test(
     ],
     deps = [
         ":kv_v2",
+        "//services/common/test/utils:proto_utils",
         "//services/common/test/utils:test_utils",
         "@com_google_googletest//:gtest_main",
     ],

@@ -191,10 +191,10 @@ KAnonCacheManagerConfig GetKAnonCacheManagerConfig(
           config_client.GetBooleanParameter(ENABLE_K_ANON_QUERY_CACHE)};
 
   if (config_client.GetBooleanParameter(TEST_MODE)) {
-    config.k_anon_ttl = absl::Seconds(
-        config_client.GetInt64Parameter(TEST_MODE_K_ANON_CACHE_TTL_SECONDS));
-    config.non_k_anon_ttl = absl::Seconds(config_client.GetInt64Parameter(
-        TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS));
+    config.k_anon_ttl = absl::Milliseconds(
+        config_client.GetInt64Parameter(TEST_MODE_K_ANON_CACHE_TTL_MS));
+    config.non_k_anon_ttl = absl::Milliseconds(
+        config_client.GetInt64Parameter(TEST_MODE_NON_K_ANON_CACHE_TTL_MS));
   }
   return config;
 }
@@ -301,9 +301,9 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_num_k_anon_shards, NUM_K_ANON_SHARDS);
   config_client.SetFlag(FLAGS_num_non_k_anon_shards, NUM_NON_K_ANON_SHARDS);
   config_client.SetFlag(FLAGS_test_mode_k_anon_cache_ttl_seconds,
-                        TEST_MODE_K_ANON_CACHE_TTL_SECONDS);
+                        TEST_MODE_K_ANON_CACHE_TTL_MS);
   config_client.SetFlag(FLAGS_test_mode_non_k_anon_cache_ttl_seconds,
-                        TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS);
+                        TEST_MODE_NON_K_ANON_CACHE_TTL_MS);
   config_client.SetFlag(FLAGS_enable_k_anon_query_cache,
                         ENABLE_K_ANON_QUERY_CACHE);
   if (absl::GetFlag(FLAGS_init_config_client)) {
@@ -366,10 +366,12 @@ absl::Status RunServer() {
                       GetConfigClient(config_util.GetConfigParameterPrefix()));
   // InitTelemetry right after config_client being initialized
   // Do not log to SystemLogContext() before InitTelemetry
-  InitTelemetry<SelectAdRequest>(
-      config_util, config_client, metric::kSfe,
-      FetchIgOwnerList(ParseIgOwnerToBfeDomainMap(
-          config_client.GetStringParameter(BUYER_SERVER_HOSTS))));
+  const auto buyer_server_hosts_map = ParseIgOwnerToBfeDomainMap(
+      config_client.GetStringParameter(BUYER_SERVER_HOSTS));
+  ABSL_CHECK_OK(buyer_server_hosts_map)
+      << "Error in fetching IG Owner to BFE domain map.";
+  InitTelemetry<SelectAdRequest>(config_util, config_client, metric::kSfe,
+                                 FetchIgOwnerList(*buyer_server_hosts_map));
   PS_LOG(INFO, SystemLogContext()) << "server parameters:\n"
                                    << config_client.DebugString();
 
@@ -419,9 +421,10 @@ absl::Status RunServer() {
         GetKAnonCacheManagerConfig(config_client));
   }
 
-  PS_ASSIGN_OR_RETURN(std::unique_ptr<server_common::PublicKeyFetcherInterface>
-                          public_key_fetcher,
-                      CreateSfePublicKeyFetcher(config_client));
+  PS_ASSIGN_OR_RETURN(
+      std::unique_ptr<server_common::PublicKeyFetcherInterface>
+          public_key_fetcher,
+      CreateSfePublicKeyFetcher(config_client, *buyer_server_hosts_map));
   SellerFrontEndService seller_frontend_service(
       &config_client,
       CreateKeyFetcherManager(config_client, std::move(public_key_fetcher)),

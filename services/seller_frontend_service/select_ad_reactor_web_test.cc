@@ -450,20 +450,20 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
   protected_auction_input.clear_generation_id();
   protected_auction_input.clear_publisher_name();
 
-  google::protobuf::Map<std::string, BuyerInput> buyer_input_map;
+  google::protobuf::Map<std::string, BuyerInputForBidding> buyer_input_map;
   // A Buyer input with IGs.
-  BuyerInput input_with_igs;
+  BuyerInputForBidding input_with_igs;
   // We don't validate anything about IGs.
   input_with_igs.mutable_interest_groups()->Add();
   buyer_input_map.emplace(kSampleBuyer, input_with_igs);
 
   // A Buyer input with no IGs is fine as long as there is at least one buyer
   // in the buyer input map with IGs.
-  BuyerInput input_with_no_igs;
+  BuyerInputForBidding input_with_no_igs;
   buyer_input_map.emplace(kSampleBuyer2, input_with_no_igs);
 
   // Malformed buyer input (empty interest group owner name).
-  BuyerInput ok_buyer_input;
+  BuyerInputForBidding ok_buyer_input;
   auto* ok_interest_groups = ok_buyer_input.mutable_interest_groups();
   auto* ok_interest_group = ok_interest_groups->Add();
   ok_interest_group->set_name(kSampleInterestGroupName);
@@ -605,8 +605,8 @@ TYPED_TEST(SelectAdReactorForWebTest,
 
   // Set up a buyer input map with no usable buyer/IGs that could be used to get
   // a bid and expect that this is reported as an error.
-  google::protobuf::Map<std::string, BuyerInput> buyer_input_map;
-  BuyerInput input_with_igs;
+  google::protobuf::Map<std::string, BuyerInputForBidding> buyer_input_map;
+  BuyerInputForBidding input_with_igs;
   input_with_igs.mutable_interest_groups()->Add();
   buyer_input_map.emplace(kEmptyBuyer, input_with_igs);
   auto encoded_buyer_inputs = GetEncodedBuyerInputMap(buyer_input_map);
@@ -1088,6 +1088,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyPopulatedKAnonAuctionResultData) {
           this->config_, clients, request_with_context.select_ad_request,
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
+          /*per_adtech_paapi_contributions_limit=*/100,
           /*fail_fast=*/false,
           /*report_win_map=*/test_report_win_map);
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
@@ -1295,6 +1296,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
           this->config_, clients, request_with_context.select_ad_request,
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
+          /*per_adtech_paapi_contributions_limit=*/100,
           /*fail_fast=*/false, /*report_win_map=*/test_report_win_map);
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
                  << MessageToJson(response_with_proto);
@@ -1489,6 +1491,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
           this->config_, clients, request_with_context.select_ad_request,
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
+          /*per_adtech_paapi_contributions_limit=*/100,
           /*fail_fast=*/false, /*report_win_map=*/test_report_win_map);
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
                  << MessageToJson(response_with_cbor);
@@ -1693,6 +1696,7 @@ TYPED_TEST(SelectAdReactorForWebTest, QueriesAllRequiredHashes) {
           this->config_, clients, request_with_context.select_ad_request,
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
+          /*per_adtech_paapi_contributions_limit=*/100,
           /*fail_fast=*/false,
           /*report_win_map=*/test_report_win_map);
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
@@ -1815,6 +1819,7 @@ TYPED_TEST(SelectAdReactorForWebTest, SetsKAnonStatusOnScoringRequests) {
           this->config_, clients, request_with_context.select_ad_request,
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
+          /*per_adtech_paapi_contributions_limit=*/100,
           /*fail_fast=*/false,
           /*report_win_map=*/test_report_win_map);
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
@@ -1944,6 +1949,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
           this->config_, clients, request_with_context.select_ad_request,
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
+          /*per_adtech_paapi_contributions_limit=*/100,
           /*fail_fast=*/false,
           /*report_win_map=*/test_report_win_map);
 }
@@ -2040,6 +2046,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
           this->config_, clients, request_with_context.select_ad_request,
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
+          /*per_adtech_paapi_contributions_limit=*/100,
           /*fail_fast=*/false,
           /*report_win_map=*/test_report_win_map);
 }
@@ -2132,6 +2139,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
           this->config_, clients, request_with_context.select_ad_request,
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
+          /*per_adtech_paapi_contributions_limit=*/100,
           /*fail_fast=*/false,
           /*report_win_map=*/test_report_win_map);
 }

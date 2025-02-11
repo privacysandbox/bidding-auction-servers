@@ -30,6 +30,7 @@ using std::vector;
 
 namespace {
 inline constexpr char kKeys[] = "keys";
+inline constexpr char kInterestGroupNames[] = "interestGroupNames";
 inline constexpr char kClient[] = "Bna.PA.Buyer.20240930";
 inline constexpr char kHostname[] = "hostname";
 inline constexpr char kClientType[] = "client_type";
@@ -51,9 +52,9 @@ kv_server::v2::GetValuesRequest GetRequest(
   return req;
 }
 
-UDFArgument BuildArgument(vector<std::string> keys) {
+UDFArgument BuildArgument(std::string tag, vector<std::string> keys) {
   UDFArgument arg;
-  arg.mutable_tags()->add_values()->set_string_value(kKeys);
+  arg.mutable_tags()->add_values()->set_string_value(std::move(tag));
   auto* key_list = arg.mutable_data()->mutable_list_value();
   for (auto& key : keys) {
     key_list->add_values()->set_string_value(std::move(key));
@@ -61,7 +62,7 @@ UDFArgument BuildArgument(vector<std::string> keys) {
   return arg;
 }
 
-absl::Status ValidateInterestGroups(const BuyerInput& buyer_input) {
+absl::Status ValidateInterestGroups(const BuyerInputForBidding& buyer_input) {
   if (buyer_input.interest_groups().empty()) {
     return absl::InvalidArgumentError("No interest groups in the buyer input");
   }
@@ -78,8 +79,9 @@ absl::Status ValidateInterestGroups(const BuyerInput& buyer_input) {
 
 absl::StatusOr<std::unique_ptr<BiddingSignals>> ConvertV2BiddingSignalsToV1(
     std::unique_ptr<kv_server::v2::GetValuesResponse> response) {
-  PS_ASSIGN_OR_RETURN(auto trusted_signals,
-                      ConvertKvV2ResponseToV1String({kKeys}, *response));
+  PS_ASSIGN_OR_RETURN(
+      auto trusted_signals,
+      ConvertKvV2ResponseToV1String({kKeys, kInterestGroupNames}, *response));
   return std::make_unique<BiddingSignals>(BiddingSignals{
       std::make_unique<std::string>(std::move(trusted_signals))});
 }
@@ -88,7 +90,8 @@ absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesRequest>>
 CreateV2BiddingRequest(const BiddingSignalsRequest& bidding_signals_request,
                        bool propagate_buyer_signals_to_tkv) {
   auto& bids_request = bidding_signals_request.get_bids_raw_request_;
-  PS_RETURN_IF_ERROR(ValidateInterestGroups(bids_request.buyer_input()));
+  PS_RETURN_IF_ERROR(
+      ValidateInterestGroups(bids_request.buyer_input_for_bidding()));
   std::unique_ptr<kv_server::v2::GetValuesRequest> req =
       std::make_unique<kv_server::v2::GetValuesRequest>(
           GetRequest(bids_request));
@@ -105,12 +108,14 @@ CreateV2BiddingRequest(const BiddingSignalsRequest& bidding_signals_request,
   int compression_and_partition_id = 0;
   // TODO (b/369181315): this needs to be reworked to include multiple IGs's
   // keys per partition.
-  for (auto& ig : bids_request.buyer_input().interest_groups()) {
+  for (auto& ig : bids_request.buyer_input_for_bidding().interest_groups()) {
     kv_server::v2::RequestPartition* partition = req->add_partitions();
+    *partition->add_arguments() =
+        BuildArgument(kInterestGroupNames, {ig.name()});
     for (auto& key : ig.bidding_signals_keys()) {
       std::vector<std::string> keys;
       keys.push_back(key);
-      *partition->add_arguments() = BuildArgument(std::move(keys));
+      *partition->add_arguments() = BuildArgument(kKeys, std::move(keys));
       partition->set_id(compression_and_partition_id);
       partition->set_compression_group_id(compression_and_partition_id);
     }

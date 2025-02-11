@@ -62,6 +62,7 @@ constexpr char kBidCount[] = "bidCount";
 constexpr char kRecency[] = "recency";
 constexpr char kMultiBidLimit[] = "multiBidLimit";
 constexpr char kPrevWins[] = "prevWins";
+constexpr char kPrevWinsMs[] = "prevWinsMs";
 constexpr char kJsonStringEnd[] = R"JSON(",")JSON";
 constexpr char kJsonStringValueStart[] = R"JSON(":")JSON";
 constexpr char kJsonValueStart[] = R"JSON(":)JSON";
@@ -69,12 +70,11 @@ constexpr char kJsonValueEnd[] = R"JSON(,")JSON";
 constexpr char kJsonEmptyString[] = R"JSON("")JSON";
 constexpr char kEmptyDeviceSignals[] = R"JSON({})JSON";
 
-std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
-                                        absl::string_view seller,
-                                        absl::string_view top_level_seller,
-                                        const BrowserSignals& browser_signals,
-                                        uint32_t data_version,
-                                        int32_t multi_bid_limit) {
+std::string MakeBrowserSignalsForScript(
+    absl::string_view publisher_name, absl::string_view seller,
+    absl::string_view top_level_seller,
+    const BrowserSignalsForBidding& browser_signals, uint32_t data_version,
+    int32_t multi_bid_limit) {
   std::string device_signals_str = absl::StrCat(
       R"JSON({")JSON", kTopWindowHostname, kJsonStringValueStart,
       publisher_name, kJsonStringEnd, kSeller, kJsonStringValueStart, seller);
@@ -82,12 +82,15 @@ std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
     absl::StrAppend(&device_signals_str, kJsonStringEnd, kTopLevelSeller,
                     kJsonStringValueStart, top_level_seller);
   }
+
   int64_t recency_ms;
   if (browser_signals.has_recency_ms()) {
     recency_ms = browser_signals.recency_ms();
   } else {
     recency_ms = browser_signals.recency() * 1000;
   }
+
+  // TODO(b/394397742): Deprecate prevWins in favor of prevWinsMs.
   absl::StrAppend(
       &device_signals_str, kJsonStringEnd, kJoinCount, kJsonValueStart,
       browser_signals.join_count(), kJsonValueEnd, kBidCount, kJsonValueStart,
@@ -96,6 +99,9 @@ std::string MakeBrowserSignalsForScript(absl::string_view publisher_name,
       recency_ms, kJsonValueEnd, kPrevWins, kJsonValueStart,
       browser_signals.prev_wins().empty() ? kJsonEmptyString
                                           : browser_signals.prev_wins(),
+      kJsonValueEnd, kPrevWinsMs, kJsonValueStart,
+      browser_signals.prev_wins_ms().empty() ? kJsonEmptyString
+                                             : browser_signals.prev_wins_ms(),
       kJsonValueEnd, kDataVersion, kJsonValueStart, data_version, kJsonValueEnd,
       kMultiBidLimit, kJsonValueStart,
       multi_bid_limit > 0 ? multi_bid_limit : kDefaultMultiBidLimit, "}");
@@ -218,21 +224,24 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
 
   // IG must have device signals to participate in Bidding.
   google::protobuf::util::MessageDifferencer differencer;
-  if (interest_group.has_browser_signals() &&
-      interest_group.browser_signals().IsInitialized() &&
-      !differencer.Equals(BrowserSignals::default_instance(),
-                          interest_group.browser_signals())) {
+  if (interest_group.has_browser_signals_for_bidding() &&
+      interest_group.browser_signals_for_bidding().IsInitialized() &&
+      !differencer.Equals(BrowserSignalsForBidding::default_instance(),
+                          interest_group.browser_signals_for_bidding())) {
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>(MakeBrowserSignalsForScript(
             raw_request.publisher_name(), raw_request.seller(),
-            raw_request.top_level_seller(), interest_group.browser_signals(),
+            raw_request.top_level_seller(),
+            interest_group.browser_signals_for_bidding(),
             raw_request.data_version(), raw_request.multi_bid_limit()));
-  } else if (interest_group.has_android_signals() &&
-             interest_group.android_signals().IsInitialized() &&
-             !differencer.Equals(AndroidSignals::default_instance(),
-                                 interest_group.android_signals())) {
-    PS_ASSIGN_OR_RETURN(std::string serialized_android_signals,
-                        ProtoToJson(interest_group.android_signals()));
+  } else if (interest_group.has_android_signals_for_bidding() &&
+             interest_group.android_signals_for_bidding().IsInitialized() &&
+             !differencer.Equals(
+                 AndroidSignalsForBidding::default_instance(),
+                 interest_group.android_signals_for_bidding())) {
+    PS_ASSIGN_OR_RETURN(
+        std::string serialized_android_signals,
+        ProtoToJson(interest_group.android_signals_for_bidding()));
     generate_bid_request.input[ArgIndex(GenerateBidArgs::kDeviceSignals)] =
         std::make_shared<std::string>((serialized_android_signals.empty())
                                           ? kEmptyDeviceSignals

@@ -257,27 +257,8 @@ absl::Status RunServer() {
   bool enable_bidding_compression =
       config_client.GetBooleanParameter(ENABLE_BIDDING_COMPRESSION);
 
-  if (buyer_tkv_v2_server_addr == kIgnoredPlaceholderValue) {
-    if (use_tkv_v2_browser) {
-      return absl::InvalidArgumentError(
-          "Missing: Buyer Trusted KV server address");
-    }
-    PS_LOG(WARNING, SystemLogContext())
-        << "BUYER_TKV_V2_SERVER_ADDR is set to " << kIgnoredPlaceholderValue
-        << ", this can affect Android auctions";
-    // Consider the placeholder string as being empty.
-    buyer_tkv_v2_server_addr = "";
-  }
-
   if (bidding_server_addr.empty()) {
     return absl::InvalidArgumentError("Missing: Bidding server address");
-  }
-  if (!use_tkv_v2_browser && buyer_kv_server_addr.empty()) {
-    return absl::InvalidArgumentError("Missing: Buyer KV BYOS server address");
-  }
-  if (use_tkv_v2_browser && buyer_tkv_v2_server_addr.empty()) {
-    return absl::InvalidArgumentError(
-        "Missing: Buyer Trusted KV server address");
   }
   BiddingSignalsFetchMode bidding_signals_fetch_mode =
       BiddingSignalsFetchMode::REQUIRED;
@@ -288,11 +269,17 @@ absl::Status RunServer() {
              kSignalsNotFetched) {
     bidding_signals_fetch_mode = BiddingSignalsFetchMode::NOT_FETCHED;
   }
+
+  if (buyer_tkv_v2_server_addr == kIgnoredPlaceholderValue) {
+    buyer_tkv_v2_server_addr = "";
+  }
+  if (buyer_kv_server_addr == kIgnoredPlaceholderValue) {
+    buyer_kv_server_addr = "";
+  }
+  bool tkv_invalid = use_tkv_v2_browser && buyer_tkv_v2_server_addr.empty();
+  bool http_kv_invalid = !use_tkv_v2_browser && buyer_kv_server_addr.empty();
   if (bidding_signals_fetch_mode != BiddingSignalsFetchMode::NOT_FETCHED &&
-      (buyer_kv_server_addr.empty() ||
-       buyer_kv_server_addr == kIgnoredPlaceholderValue) &&
-      (buyer_tkv_v2_server_addr.empty() ||
-       buyer_tkv_v2_server_addr == kIgnoredPlaceholderValue)) {
+      (tkv_invalid || http_kv_invalid)) {
     return absl::InvalidArgumentError(
         "The server is configured to perform the trusted bidding signals fetch "
         "(which is the default) yet no host has been provided, BYOS or Trusted "
@@ -332,7 +319,7 @@ absl::Status RunServer() {
         std::make_unique<HttpBiddingSignalsAsyncProvider>(
             std::move(buyer_kv_async_http_client));
   } else {
-    PS_LOG(INFO) << "Using TKV V2 for browser traffic";
+    PS_LOG(INFO, SystemLogContext()) << "Using TKV V2 for browser traffic";
   }
 
   if (!buyer_tkv_v2_server_addr.empty()) {
@@ -344,10 +331,11 @@ absl::Status RunServer() {
     kv_async_client = std::make_unique<KVAsyncGrpcClient>(
         key_fetcher_manager.get(), std::move(kv_v2_stub));
   } else {
-    PS_LOG(WARNING) << "TKV V2 endpoint not set. All CLIENT_TYPE_ANDROID "
-                       "protected audience requests will fail.";
+    PS_LOG(WARNING, SystemLogContext())
+        << "TKV V2 endpoint not set. All CLIENT_TYPE_ANDROID "
+           "protected audience requests will fail.";
     if (use_tkv_v2_browser) {
-      PS_LOG(WARNING)
+      PS_LOG(WARNING, SystemLogContext())
           << " TKV V2 endpoint not set, but ENABLE_TKV_V2_BROWSER is true. "
              "All CLIENT_TYPE_BROWSER requests will fail.";
     }
@@ -384,7 +372,7 @@ absl::Status RunServer() {
           bidding_signals_fetch_mode,
           config_client.GetBooleanParameter(PROPAGATE_BUYER_SIGNALS_TO_TKV),
       },
-      enable_buyer_frontend_benchmarking);
+      *executor, enable_buyer_frontend_benchmarking);
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();

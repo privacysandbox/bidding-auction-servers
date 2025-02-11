@@ -68,6 +68,7 @@ void HandlePrivateAggregationContributions(
 
 // Groups PrivateAggregateContributions per AdTech
 ContributionsPerAdTechMap GroupContributionsByAdTech(
+    int per_adtech_paapi_contributions_limit,
     const PrivateAggregateReportingResponses& responses);
 
 // Converts array of 64 bit integers in Bucket128Bit to
@@ -109,7 +110,8 @@ CborDecodePAggIgContributions(cbor_item_t& serialized_ig_contributions);
 // PrivateAggregateContributions to create paggResponse.
 absl::Status CborSerializePAggResponse(
     const PrivateAggregateReportingResponses& responses,
-    ErrorHandler error_handler, cbor_item_t& root);
+    int per_adtech_paapi_contributions_limit, ErrorHandler error_handler,
+    cbor_item_t& root);
 
 // Decodes reporting_origin and PrivateAggregateContributions from serialized
 // igContributions and returns list of PrivateAggregateReportingResponse.

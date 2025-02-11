@@ -39,7 +39,8 @@ SelectAdResponse RunRequest(const TrustedServersConfigClient& config_client,
   SelectAuctionResultReactor reactor(
       &context, &request, &response, clients, config_client,
       /*enable_cancellation=*/false,
-      /*enable_buyer_private_aggregate_reporting=*/false, enable_kanon);
+      /*enable_buyer_private_aggregate_reporting=*/true,
+      /*per_adtech_paapi_contributions_limit=*/100, enable_kanon);
   reactor.Execute();
   return response;
 }

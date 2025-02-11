@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "absl/synchronization/notification.h"
+#include "api/bidding_auction_servers_cc_proto_builder.h"
 #include "google/protobuf/util/message_differencer.h"
 #include "gtest/gtest.h"
 #include "services/buyer_frontend_service/util/buyer_frontend_test_utils.h"
@@ -31,10 +32,10 @@
 #include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
+#include "services/common/test/utils/proto_utils.h"
 #include "services/common/test/utils/test_init.h"
 #include "services/common/test/utils/test_utils.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
-
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
@@ -184,8 +185,9 @@ class GetBidUnaryReactorTest : public ::testing::Test {
     SetupMockCryptoClientWrapper(*crypto_client_);
 
     raw_request_ = MakeARandomGetBidsRawRequest();
-    auto interest_group =
-        raw_request_.mutable_buyer_input()->mutable_interest_groups()->Add();
+    auto interest_group = raw_request_.mutable_buyer_input_for_bidding()
+                              ->mutable_interest_groups()
+                              ->Add();
     interest_group->set_name(kTestInterestGroupName);
     interest_group->add_bidding_signals_keys("key");
     request_.set_request_ciphertext(raw_request_.SerializeAsString());
@@ -206,6 +208,7 @@ class GetBidUnaryReactorTest : public ::testing::Test {
       key_fetcher_manager_;
   std::unique_ptr<KVAsyncClientMock> kv_async_client_ =
       std::make_unique<KVAsyncClientMock>();
+  MockExecutor executor_;
 };
 
 TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServer) {
@@ -230,7 +233,7 @@ TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServer) {
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
 
   class_under_test.Execute();
   // Wait for reactor to set response_.
@@ -261,7 +264,7 @@ TEST_F(GetBidUnaryReactorTest, LoadsBiddingSignalsAndCallsBiddingServerV2) {
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   // Wait for reactor to set response_.
   notification.WaitForNotification();
@@ -304,7 +307,7 @@ TEST_F(GetBidUnaryReactorTest,
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   // Wait for reactor to set response_.
   notification.WaitForNotification();
@@ -333,7 +336,7 @@ TEST_F(GetBidUnaryReactorTest,
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   // Wait for reactor to set response_.
   notification.WaitForNotification();
@@ -376,7 +379,7 @@ TEST_F(GetBidUnaryReactorTest,
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   // Wait for reactor to set response_.
   notification.WaitForNotification();
@@ -412,7 +415,7 @@ TEST_F(GetBidUnaryReactorTest,
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   // Wait for reactor to set response_.
   notification.WaitForNotification();
@@ -469,7 +472,7 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagates) {
   GetBidsUnaryReactor get_bids_unary_reactor(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   get_bids_unary_reactor.Execute();
   notification.WaitForNotification();
 }
@@ -513,7 +516,7 @@ TEST_F(GetBidUnaryReactorTest, VerifyLogContextPropagatesV2) {
   GetBidsUnaryReactor get_bids_unary_reactor(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   get_bids_unary_reactor.Execute();
   notification.WaitForNotification();
 }
@@ -538,10 +541,18 @@ TEST_F(GetBidUnaryReactorTest, HandleChaffRequest) {
           config_proto))
       ->Get(&request);
 
+  EXPECT_CALL(executor_, RunAfter)
+      .Times(1)
+      .WillOnce([](const absl::Duration duration,
+                   absl::AnyInvocable<void()> closure) {
+        closure();
+        server_common::TaskId id;
+        return id;
+      });
   GetBidsUnaryReactor class_under_test(
       context_, request, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
 
   ASSERT_FALSE(response_.response_ciphertext().empty());
@@ -582,10 +593,18 @@ TEST_F(GetBidUnaryReactorTest, HandleChaffRequestV2) {
           config_proto))
       ->Get(&request);
 
+  EXPECT_CALL(executor_, RunAfter)
+      .Times(1)
+      .WillOnce([](const absl::Duration duration,
+                   absl::AnyInvocable<void()> closure) {
+        closure();
+        server_common::TaskId id;
+        return id;
+      });
   GetBidsUnaryReactor class_under_test(
       context_, request, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
 
   ASSERT_FALSE(response_.response_ciphertext().empty());
@@ -627,8 +646,9 @@ TEST_F(GetBidUnaryReactorTest, ValidatePriorityVectorFiltering) {
     }
 })JSON";
 
-  auto interest_group =
-      raw_request_.mutable_buyer_input()->mutable_interest_groups()->Add();
+  auto interest_group = raw_request_.mutable_buyer_input_for_bidding()
+                            ->mutable_interest_groups()
+                            ->Add();
   interest_group->set_name("test_ig_2");
   interest_group->add_bidding_signals_keys("key");
 
@@ -664,8 +684,97 @@ TEST_F(GetBidUnaryReactorTest, ValidatePriorityVectorFiltering) {
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
 
+  class_under_test.Execute();
+  notification.WaitForNotification();
+}
+
+TEST_F(GetBidUnaryReactorTest, ValidatePriorityVectorFilteringV2) {
+  get_bids_config_.is_tkv_v2_browser_enabled = true;
+  std::string compression_group =
+      R"JSON(
+  [
+    {
+      "id": 0,
+      "keyGroupOutputs": [
+        {
+          "tags": [
+            "keys"
+          ],
+          "keyValues": {
+            "key": {
+              "value": "[123,456]"
+            }
+          }
+        },
+        {
+          "tags": [
+            "interestGroupNames"
+          ],
+          "keyValues": {
+            "test_ig": {
+              "value": "{\"priorityVector\":{\"entry\":-1}, \"updateIfOlderThanMs\": 123}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "keyGroupOutputs": [
+        {
+          "tags": [
+            "interestGroupNames"
+          ],
+          "keyValues": {
+            "test_ig_2": {
+              "value": "{\"priorityVector\":{\"entry\":1}, \"updateIfOlderThanMs\": 123}"
+            }
+          }
+        }
+      ]
+    }
+  ])JSON";
+  kv_server::v2::GetValuesResponse response =
+      ParseTextOrDie<kv_server::v2::GetValuesResponse>(
+          absl::StrFormat(kCompressionGroupWrapper,
+                          absl::CEscape(RemoveWhiteSpaces(compression_group))));
+  SetupBiddingProviderMockV2(kv_async_client_.get(), response);
+
+  *raw_request_.mutable_buyer_input()->mutable_interest_groups()->Add() =
+      BuyerInput_InterestGroupBuilder()
+          .SetName("test_ig_2")
+          .AddBiddingSignalsKeys("key");
+  raw_request_.set_priority_signals(R"JSON({"entry": 1.0})JSON");
+  request_.set_request_ciphertext(raw_request_.SerializeAsString());
+
+  absl::Notification notification;
+  EXPECT_CALL(bidding_client_mock_, ExecuteInternal)
+      .WillOnce([&notification](
+                    std::unique_ptr<GenerateBidsRequest::GenerateBidsRawRequest>
+                        generate_bids_raw_request,
+                    grpc::ClientContext* context, auto on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
+        // 'test_ig_2's is the only IG with a priority greater than zero, so it
+        // should not have been filtered out.
+        EXPECT_EQ(generate_bids_raw_request->interest_group_for_bidding_size(),
+                  1);
+        EXPECT_EQ(
+            generate_bids_raw_request->interest_group_for_bidding(0).name(),
+            "test_ig_2");
+
+        std::move(on_done)(
+            std::make_unique<GenerateBidsResponse::GenerateBidsRawResponse>(),
+            /*response_metadata=*/{});
+        notification.Notify();
+        return absl::OkStatus();
+      });
+  get_bids_config_.priority_vector_enabled = true;
+  GetBidsUnaryReactor class_under_test(
+      context_, request_, response_, &bidding_signals_provider_,
+      bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   notification.WaitForNotification();
 }
@@ -681,7 +790,7 @@ TEST_F(GetBidUnaryReactorTest, DoesNotCallBiddingForEmptyBiddingSignals) {
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
 
   class_under_test.Execute();
 }
@@ -722,7 +831,7 @@ TEST_F(GetBidUnaryReactorTest,
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
 
   class_under_test.Execute();
   notification.WaitForNotification();
@@ -764,7 +873,7 @@ TEST_F(GetBidUnaryReactorTest, SkipsKVLookupWhenSignalsFetchModeNotFetched) {
   GetBidsUnaryReactor class_under_test(
       context_, request_, response_, /*bidding_signals_async_provider=*/nullptr,
       bidding_client_mock_, get_bids_config_, key_fetcher_manager_.get(),
-      crypto_client_.get(), /*kv_async_client=*/nullptr);
+      crypto_client_.get(), /*kv_async_client=*/nullptr, executor_);
 
   class_under_test.Execute();
   notification.WaitForNotification();
@@ -812,6 +921,7 @@ class GetProtectedAppSignalsTest : public ::testing::Test {
       key_fetcher_manager_;
   std::unique_ptr<KVAsyncClientMock> kv_async_client_ =
       std::make_unique<KVAsyncClientMock>();
+  MockExecutor executor_;
 };
 
 auto EqProtectedAppSignals(const ProtectedAppSignals& expected) {
@@ -892,7 +1002,7 @@ TEST_F(GetProtectedAppSignalsTest, CorrectGenerateBidSentToBiddingService) {
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_,
       &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
 }
 
@@ -916,7 +1026,7 @@ TEST_F(GetProtectedAppSignalsTest, TimeoutIsRespected) {
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_,
       &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
 }
 
@@ -955,7 +1065,7 @@ TEST_F(GetProtectedAppSignalsTest, RespectsFeatureFlagOff) {
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_,
       &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   notification.WaitForNotification();
 }
@@ -984,7 +1094,7 @@ TEST_F(GetProtectedAppSignalsTest, RespectsProtectedAudienceFeatureFlagOff) {
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_,
       &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
 }
 
@@ -1041,7 +1151,7 @@ TEST_F(GetProtectedAppSignalsTest, GetBidsResponseAggregatedBackToSfe) {
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_,
       &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   bids_counter.Wait();
 
@@ -1128,7 +1238,7 @@ TEST_F(GetProtectedAppSignalsTest,
       context_, request_, response_, &bidding_signals_provider_,
       bidding_client_mock_, get_bids_config_,
       &protected_app_signals_bidding_client_mock_, key_fetcher_manager_.get(),
-      crypto_client_.get(), kv_async_client_.get());
+      crypto_client_.get(), kv_async_client_.get(), executor_);
   class_under_test.Execute();
   bids_counter.Wait();
 

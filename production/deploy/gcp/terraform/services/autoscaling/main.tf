@@ -67,6 +67,7 @@ resource "google_compute_instance_template" "frontends" {
     enable_vtpm                 = true
   }
   confidential_instance_config {
+    confidential_instance_type  = "SEV"
     enable_confidential_compute = true
   }
 
@@ -223,6 +224,7 @@ resource "google_compute_instance_template" "backends" {
     enable_vtpm                 = true
   }
   confidential_instance_config {
+    confidential_instance_type  = "SEV"
     enable_confidential_compute = true
   }
 

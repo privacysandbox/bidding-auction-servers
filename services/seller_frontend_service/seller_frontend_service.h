@@ -159,7 +159,9 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
         enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)),
         report_win_map_(std::move(report_win_map)),
         enable_buyer_private_aggregate_reporting_(
-            absl::GetFlag(FLAGS_enable_buyer_private_aggregate_reporting)) {
+            absl::GetFlag(FLAGS_enable_buyer_private_aggregate_reporting)),
+        per_adtech_paapi_contributions_limit_(
+            absl::GetFlag(FLAGS_per_adtech_paapi_contributions_limit)) {
     if (config_client_.HasParameter(SELLER_CLOUD_PLATFORMS_MAP)) {
       seller_cloud_platforms_map_ = ParseSellerCloudPlarformMap(
           config_client_.GetStringParameter(SELLER_CLOUD_PLATFORMS_MAP));
@@ -173,7 +175,9 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
         enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
         enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)),
         enable_buyer_private_aggregate_reporting_(
-            absl::GetFlag(FLAGS_enable_buyer_private_aggregate_reporting)) {
+            absl::GetFlag(FLAGS_enable_buyer_private_aggregate_reporting)),
+        per_adtech_paapi_contributions_limit_(
+            absl::GetFlag(FLAGS_per_adtech_paapi_contributions_limit)) {
     if (config_client_.HasParameter(SELLER_CLOUD_PLATFORMS_MAP)) {
       seller_cloud_platforms_map_ = ParseSellerCloudPlarformMap(
           config_client_.GetStringParameter(SELLER_CLOUD_PLATFORMS_MAP));
@@ -237,6 +241,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
   const bool enable_kanon_;
   ReportWinMap report_win_map_;
   const bool enable_buyer_private_aggregate_reporting_;
+  int per_adtech_paapi_contributions_limit_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

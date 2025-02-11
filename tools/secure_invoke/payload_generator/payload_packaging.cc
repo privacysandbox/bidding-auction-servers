@@ -88,7 +88,7 @@ ProtectedAuctionInput GetProtectedAuctionInput(
     std::optional<bool> enable_debug_reporting = std::nullopt,
     std::optional<bool> enable_debug_info = std::nullopt,
     std::optional<bool> enable_unlimited_egress = std::nullopt,
-    bool enforce_kanon = false) {
+    std::optional<bool> enforce_kanon = std::nullopt) {
   CHECK(input_json != nullptr) << "Input JSON must be non null";
   rapidjson::Value& protected_auction_json =
       (*input_json)[kProtectedAuctionInputField];
@@ -111,13 +111,15 @@ ProtectedAuctionInput GetProtectedAuctionInput(
     protected_auction_input.set_enable_unlimited_egress(
         *enable_unlimited_egress);
   }
-  protected_auction_input.set_enforce_kanon(enforce_kanon);
+  if (enforce_kanon) {
+    protected_auction_input.set_enforce_kanon(*enforce_kanon);
+  }
 
   CHECK(protected_auction_input_parse.ok()) << protected_auction_input_parse;
   return protected_auction_input;
 }
 
-absl::flat_hash_map<std::string, BuyerInput> GetProtectedAppSignals(
+absl::flat_hash_map<std::string, BuyerInputForBidding> GetProtectedAppSignals(
     ClientType client_type, absl::string_view protected_app_signals_json) {
   if (client_type == ClientType::CLIENT_TYPE_BROWSER ||
       protected_app_signals_json.empty()) {
@@ -127,12 +129,13 @@ absl::flat_hash_map<std::string, BuyerInput> GetProtectedAppSignals(
   auto protected_app_signals_obj = ParseJsonString(protected_app_signals_json);
   CHECK_OK(protected_app_signals_obj);
 
-  absl::flat_hash_map<std::string, BuyerInput> protected_app_signals_map;
+  absl::flat_hash_map<std::string, BuyerInputForBidding>
+      protected_app_signals_map;
   google::protobuf::json::ParseOptions parse_options;
   parse_options.ignore_unknown_fields = true;
   for (auto it = protected_app_signals_obj->MemberBegin();
        it != protected_app_signals_obj->MemberEnd(); ++it) {
-    BuyerInput buyer_input_proto;
+    BuyerInputForBidding buyer_input_proto;
     auto serialized_buyer_input = SerializeJsonDoc(it->value.GetObject());
     CHECK_OK(serialized_buyer_input);
     auto buyer_input_parse = google::protobuf::util::JsonStringToMessage(
@@ -145,7 +148,7 @@ absl::flat_hash_map<std::string, BuyerInput> GetProtectedAppSignals(
   return protected_app_signals_map;
 }
 
-google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
+google::protobuf::Map<std::string, BuyerInputForBidding> GetBuyerInputMap(
     ClientType client_type, rapidjson::Document* input_json,
     absl::string_view protected_app_signals_json) {
   CHECK(input_json != nullptr) << "Input JSON must be non null";
@@ -158,15 +161,15 @@ google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
   rapidjson::Value& buyer_map_json =
       (*input_json)[kProtectedAuctionInputField][kBuyerInputMapField];
 
-  absl::flat_hash_map<std::string, BuyerInput> buyer_input_map;
-  absl::flat_hash_map<std::string, BuyerInput> protected_app_signals =
+  absl::flat_hash_map<std::string, BuyerInputForBidding> buyer_input_map;
+  absl::flat_hash_map<std::string, BuyerInputForBidding> protected_app_signals =
       GetProtectedAppSignals(client_type, protected_app_signals_json);
   for (auto& buyer_input : buyer_map_json.GetObject()) {
     std::string buyer_input_json = ValueToJson(&buyer_input.value);
 
     google::protobuf::json::ParseOptions parse_options;
     parse_options.ignore_unknown_fields = true;
-    BuyerInput buyer_input_proto;
+    BuyerInputForBidding buyer_input_proto;
     auto buyer_input_parse = google::protobuf::util::JsonStringToMessage(
         buyer_input_json, &buyer_input_proto, parse_options);
     CHECK(buyer_input_parse.ok()) << buyer_input_parse;
@@ -184,8 +187,8 @@ google::protobuf::Map<std::string, BuyerInput> GetBuyerInputMap(
   }
 
   buyer_input_map.merge(protected_app_signals);
-  return google::protobuf::Map<std::string, BuyerInput>(buyer_input_map.begin(),
-                                                        buyer_input_map.end());
+  return google::protobuf::Map<std::string, BuyerInputForBidding>(
+      buyer_input_map.begin(), buyer_input_map.end());
 }
 
 SelectAdRequest::ComponentAuctionResult GetComponentAuctionResult(
@@ -226,7 +229,7 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
                                 std::optional<bool> enable_debug_info,
                                 absl::string_view protected_app_signals_json,
                                 std::optional<bool> enable_unlimited_egress,
-                                bool enforce_kanon) {
+                                std::optional<bool> enforce_kanon) {
   rapidjson::Document input_json = ParseRequestInputJson(input_json_str);
   auto select_ad_request = std::make_unique<SelectAdRequest>();
   ProtectedAuctionInput protected_auction_input = GetProtectedAuctionInput(
@@ -244,7 +247,7 @@ PackagePlainTextSelectAdRequest(absl::string_view input_json_str,
                                     keyset);
     }
   } else {
-    google::protobuf::Map<std::string, BuyerInput> buyer_map_proto =
+    google::protobuf::Map<std::string, BuyerInputForBidding> buyer_map_proto =
         GetBuyerInputMap(client_type, &input_json, protected_app_signals_json);
     // Encode buyer map.
     absl::StatusOr<google::protobuf::Map<std::string, std::string>>
@@ -280,7 +283,8 @@ std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str, ClientType client_type,
     const HpkeKeyset& keyset, std::optional<bool> enable_debug_reporting,
     std::optional<bool> enable_debug_info,
-    std::optional<bool> enable_unlimited_egress, bool enforce_kanon) {
+    std::optional<bool> enable_unlimited_egress,
+    std::optional<bool> enforce_kanon) {
   auto req = std::move(
       PackagePlainTextSelectAdRequest(input_json_str, client_type, keyset,
                                       enable_debug_reporting, enable_debug_info,

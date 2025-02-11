@@ -118,7 +118,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
       const ReportWinMap& report_win_map, bool enable_cancellation = false,
       bool enable_kanon = false,
       bool enable_buyer_private_aggregate_reporting = false,
-      bool fail_fast = true,
+      int per_adtech_paapi_contributions_limit = 0, bool fail_fast = true,
       int max_buyers_solicited = metric::kMaxBuyersSolicited);
 
   // Initiate the asynchronous execution of the SelectAdRequest.
@@ -136,7 +136,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   virtual absl::StatusOr<std::string> GetNonEncryptedResponse(
       const std::optional<ScoreAdsResponse::AdScore>& high_score,
       const std::optional<AuctionResult::Error>& error,
-      const AdScores* ghost_winning_scores = nullptr) = 0;
+      const AdScores* ghost_winning_scores = nullptr,
+      int per_adtech_paapi_contributions_limit = 0) = 0;
 
   // Decodes the plaintext payload and returns a `ProtectedAudienceInput` proto.
   // Any errors while decoding are reported to error accumulator object.
@@ -150,13 +151,13 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Returns the decoded BuyerInput from the encoded/compressed BuyerInput.
   // Any errors while decoding are reported to error accumulator object.
-  virtual absl::flat_hash_map<absl::string_view, BuyerInput>
+  virtual absl::flat_hash_map<absl::string_view, BuyerInputForBidding>
   GetDecodedBuyerinputs(const google::protobuf::Map<std::string, std::string>&
                             encoded_buyer_inputs) = 0;
 
   virtual std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
   CreateGetBidsRequest(const std::string& buyer_ig_owner,
-                       const BuyerInput& buyer_input);
+                       const BuyerInputForBidding& buyer_input);
 
   virtual std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
   CreateScoreAdsRequest();
@@ -203,14 +204,14 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
     } else {
       bool is_any_buyer_input_valid = false;
       std::set<std::string> observed_errors;
-      for (const auto& [buyer, buyer_input] : *buyer_inputs_) {
+      for (const auto& [buyer, buyer_input_for_bidding] : *buyer_inputs_) {
         bool any_error = false;
         if (buyer.empty()) {
           observed_errors.insert(kEmptyInterestGroupOwner);
           any_error = true;
         }
-        if (buyer_input.interest_groups().empty() &&
-            !buyer_input.has_protected_app_signals()) {
+        if (buyer_input_for_bidding.interest_groups().empty() &&
+            !buyer_input_for_bidding.has_protected_app_signals()) {
           observed_errors.insert(absl::StrFormat(
               kMissingInterestGroupsAndProtectedSignals, buyer));
           any_error = true;
@@ -453,7 +454,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   RequestLogContext log_context_;
 
   // Decompressed and decoded buyer inputs.
-  absl::StatusOr<absl::flat_hash_map<absl::string_view, BuyerInput>>
+  absl::StatusOr<absl::flat_hash_map<absl::string_view, BuyerInputForBidding>>
       buyer_inputs_;
 
   // Used to log metric, same life time as reactor.
@@ -494,6 +495,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   bool enable_buyer_private_aggregate_reporting_;
 
+  int per_adtech_paapi_contributions_limit_;
   // Pseudo random number generator for use in chaffing.
   std::optional<std::mt19937> generator_;
 

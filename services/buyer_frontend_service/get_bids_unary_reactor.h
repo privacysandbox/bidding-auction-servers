@@ -43,6 +43,7 @@
 #include "services/common/util/async_task_tracker.h"
 #include "services/common/util/cancellation_wrapper.h"
 #include "services/common/util/client_contexts.h"
+#include "src/concurrent/executor.h"
 #include "src/encryption/key_fetcher/interface/key_fetcher_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -93,7 +94,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
       BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      KVAsyncClient* kv_async_client, bool enable_benchmarking = false);
+      KVAsyncClient* kv_async_client, server_common::Executor& executor,
+      bool enable_benchmarking = false);
 
   explicit GetBidsUnaryReactor(
       grpc::CallbackServerContext& context,
@@ -105,7 +107,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
       ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
       server_common::KeyFetcherManagerInterface* key_fetcher_manager,
       CryptoClientWrapperInterface* crypto_client,
-      KVAsyncClient* kv_async_client, bool enable_benchmarking = false);
+      KVAsyncClient* kv_async_client, server_common::Executor& executor,
+      bool enable_benchmarking = false);
 
   // GetBidsUnaryReactor is neither copyable nor movable.
   GetBidsUnaryReactor(const GetBidsUnaryReactor&) = delete;
@@ -249,7 +252,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   void MayGetProtectedAudienceBidsV2(
       const BiddingSignalsRequest& bidding_signals_request);
   void HandleV2Failure(const absl::Status& status,
-                       absl::string_view error_message);
+                       absl::string_view error_message,
+                       EventMessage::KvSignal bid_signal);
 
   // Compression used in the request object; the response will use the same.
   CompressionType compression_type_;
@@ -265,6 +269,8 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
 
   // Should the debug data be exported based on reply from bidding
   bool should_export_debug_ = false;
+
+  server_common::Executor& executor_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

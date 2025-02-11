@@ -79,30 +79,14 @@ absl::Status SellerKeyValueAsyncHttpClient::Execute(
     request_size += header.size();
   }
   request_size += request.url.size();
-  EventMessage::KvSignal score_signal = [&]() {
-    EventMessage::KvSignal signal;
-    if (!AllowAnyEventLogging(context.log)) {
-      return signal;
-    }
-    signal.set_request(request.url);
-    for (absl::string_view header : request.headers) {
-      signal.add_request_header(header);
-    }
-    return signal;
-  }();
+  EventMessage::KvSignal score_signal =
+      KvEventMessage(request.url, context.log, request.headers);
   auto done_callback = [on_done = std::move(on_done), request_size,
                         score_signal = std::move(score_signal), context](
                            absl::StatusOr<HTTPResponse> httpResponse) mutable {
     if (httpResponse.ok()) {
-      if (server_common::log::PS_VLOG_IS_ON(kKVLog)) {
-        PS_VLOG(kKVLog, context.log)
-            << "SellerKeyValueAsyncHttpClient response exported in "
-               "EventMessage if consented";
-        if (AllowAnyEventLogging(context.log)) {
-          score_signal.set_response(httpResponse->body);
-          context.log.SetEventMessageField(std::move(score_signal));
-        }
-      }
+      SetKvEventMessage("SellerKeyValueAsyncHttpClient", httpResponse->body,
+                        std::move(score_signal), context.log);
       size_t response_size = httpResponse->body.size();
       uint32_t data_version_value = 0;
       if (auto dv_header_it =

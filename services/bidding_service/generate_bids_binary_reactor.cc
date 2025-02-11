@@ -64,31 +64,35 @@ BuildProtectedAudienceBidRequest(RawRequest& raw_request,
       std::move(*ig_for_bidding.mutable_trusted_bidding_signals());
 
   // Populate (oneof) device signals.
-  if (ig_for_bidding.has_android_signals() &&
-      ig_for_bidding.android_signals().IsInitialized()) {
+  if (ig_for_bidding.has_android_signals_for_bidding() &&
+      ig_for_bidding.android_signals_for_bidding().IsInitialized()) {
     roma_service::ProtectedAudienceAndroidSignals* android_signals =
         bid_request.mutable_android_signals();
     android_signals->set_top_level_seller(raw_request.top_level_seller());
-  } else if (ig_for_bidding.has_browser_signals() &&
-             ig_for_bidding.browser_signals().IsInitialized()) {
+  } else if (ig_for_bidding.has_browser_signals_for_bidding() &&
+             ig_for_bidding.browser_signals_for_bidding().IsInitialized()) {
     roma_service::ProtectedAudienceBrowserSignals* browser_signals =
         bid_request.mutable_browser_signals();
     browser_signals->set_top_window_hostname(raw_request.publisher_name());
     browser_signals->set_seller(raw_request.seller());
     browser_signals->set_top_level_seller(raw_request.top_level_seller());
     browser_signals->set_join_count(
-        ig_for_bidding.browser_signals().join_count());
+        ig_for_bidding.browser_signals_for_bidding().join_count());
     browser_signals->set_bid_count(
-        ig_for_bidding.browser_signals().bid_count());
-    if (ig_for_bidding.browser_signals().has_recency_ms()) {
+        ig_for_bidding.browser_signals_for_bidding().bid_count());
+    if (ig_for_bidding.browser_signals_for_bidding().has_recency_ms()) {
       browser_signals->set_recency(
-          ig_for_bidding.browser_signals().recency_ms());
+          ig_for_bidding.browser_signals_for_bidding().recency_ms());
     } else {
-      browser_signals->set_recency(ig_for_bidding.browser_signals().recency() *
-                                   1000);
+      browser_signals->set_recency(
+          ig_for_bidding.browser_signals_for_bidding().recency() * 1000);
     }
-    *browser_signals->mutable_prev_wins() = std::move(
-        *ig_for_bidding.mutable_browser_signals()->mutable_prev_wins());
+    *browser_signals->mutable_prev_wins() =
+        std::move(*ig_for_bidding.mutable_browser_signals_for_bidding()
+                       ->mutable_prev_wins());
+    *browser_signals->mutable_prev_wins_ms() =
+        std::move(*ig_for_bidding.mutable_browser_signals_for_bidding()
+                       ->mutable_prev_wins_ms());
     browser_signals->set_multi_bid_limit(raw_request.multi_bid_limit() > 0
                                              ? raw_request.multi_bid_limit()
                                              : kDefaultMultiBidLimit);
@@ -287,7 +291,7 @@ void GenerateBidsBinaryReactor::ExecuteForInterestGroup(int ig_index) {
   // Make asynchronous execute call using the BYOB client.
   PS_VLOG(kNoisyInfo) << "Starting UDF execution for IG: " << ig_name;
   absl::Status execute_status = byob_client_->Execute(
-      std::move(bid_request), roma_timeout_duration_,
+      bid_request, roma_timeout_duration_,
       [this, ig_index, ig_name, logging_enabled, debug_reporting_enabled](
           absl::StatusOr<roma_service::GenerateProtectedAudienceBidResponse>
               bid_response_status) mutable {

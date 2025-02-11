@@ -21,6 +21,7 @@
 #include "services/common/compression/gzip.h"
 #include "services/common/util/hash_util.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/seller_frontend_service/util/buyer_input_proto_utils.h"
 #include "services/seller_frontend_service/util/framing_utils.h"
 #include "services/seller_frontend_service/util/proto_mapping_util.h"
 #include "src/communication/encoding_utils.h"
@@ -31,7 +32,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 using BiddingGroupsMap =
     ::google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
-using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
+using DecodedBuyerInputs =
+    absl::flat_hash_map<absl::string_view, BuyerInputForBidding>;
 using ReportErrorSignature = std::function<void(
     log::ParamWithSourceLoc<ErrorVisibility> error_visibility_with_loc,
     const std::string& msg, ErrorCode error_code)>;
@@ -73,7 +75,7 @@ SelectAdReactorForApp::SelectAdReactorForApp(
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
-    bool fail_fast)
+    int per_adtech_paapi_contributions_limit, bool fail_fast)
     : SelectAdReactor(context, request, response, clients, config_client,
                       report_win_map, enable_cancellation, enable_kanon,
                       fail_fast) {}
@@ -81,7 +83,8 @@ SelectAdReactorForApp::SelectAdReactorForApp(
 absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error,
-    const AdScores* ghost_winning_scores) {
+    const AdScores* ghost_winning_scores,
+    int per_adtech_paapi_contributions_limit) {
   AuctionResult auction_result;
   if (high_score) {
     auction_result = AdScoreToAuctionResult(
@@ -161,7 +164,9 @@ DecodedBuyerInputs SelectAdReactorForApp::GetDecodedBuyerinputs(
       continue;
     }
 
-    decoded_buyer_inputs.insert({owner, std::move(buyer_input)});
+    BuyerInputForBidding buyer_input_for_bidding =
+        ToBuyerInputForBidding(buyer_input);
+    decoded_buyer_inputs.insert({owner, std::move(buyer_input_for_bidding)});
   }
 
   return decoded_buyer_inputs;
@@ -175,7 +180,15 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
                                 "hence not populating PAS buyer input";
     // We don't want to forward the protected signals when feature is disabled,
     // even if client sent them erroneously.
-    get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
+    if (get_bids_raw_request->has_buyer_input()) {
+      get_bids_raw_request->mutable_buyer_input()
+          ->clear_protected_app_signals();
+    }
+
+    if (get_bids_raw_request->has_buyer_input_for_bidding()) {
+      get_bids_raw_request->mutable_buyer_input_for_bidding()
+          ->clear_protected_app_signals();
+    }
     return;
   }
 
@@ -186,7 +199,27 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
           .empty()) {
     PS_VLOG(8, log_context_)
         << "No protected app signals in buyer inputs from client";
-    get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
+    if (get_bids_raw_request->has_buyer_input()) {
+      get_bids_raw_request->mutable_buyer_input()
+          ->clear_protected_app_signals();
+    }
+
+    return;
+  }
+
+  if (!get_bids_raw_request->buyer_input_for_bidding()
+           .has_protected_app_signals() ||
+      get_bids_raw_request->buyer_input_for_bidding()
+          .protected_app_signals()
+          .app_install_signals()
+          .empty()) {
+    PS_VLOG(8, log_context_)
+        << "No protected app signals in buyer inputs from client";
+
+    if (get_bids_raw_request->has_buyer_input_for_bidding()) {
+      get_bids_raw_request->mutable_buyer_input_for_bidding()
+          ->clear_protected_app_signals();
+    }
     return;
   }
 
@@ -195,9 +228,11 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
   auto* protected_app_signals_buyer_input =
       get_bids_raw_request->mutable_protected_app_signals_buyer_input();
   protected_app_signals_buyer_input->mutable_protected_app_signals()->Swap(
-      get_bids_raw_request->mutable_buyer_input()
+      get_bids_raw_request->mutable_buyer_input_for_bidding()
           ->mutable_protected_app_signals());
   get_bids_raw_request->mutable_buyer_input()->clear_protected_app_signals();
+  get_bids_raw_request->mutable_buyer_input_for_bidding()
+      ->clear_protected_app_signals();
 
   // Add contextual Protected App Signals data to PAS buyer input.
   auto& per_buyer_config = request_->auction_config().per_buyer_config();
@@ -224,8 +259,9 @@ void SelectAdReactorForApp::MayPopulateProtectedAppSignalsBuyerInput(
 }
 
 std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
-SelectAdReactorForApp::CreateGetBidsRequest(const std::string& buyer_ig_owner,
-                                            const BuyerInput& buyer_input) {
+SelectAdReactorForApp::CreateGetBidsRequest(
+    const std::string& buyer_ig_owner,
+    const BuyerInputForBidding& buyer_input) {
   auto request =
       SelectAdReactor::CreateGetBidsRequest(buyer_ig_owner, buyer_input);
   // Debug reporting is not supported for Android.

@@ -180,23 +180,23 @@ module "seller" {
     #                              "https://buyerC_origin.com":"https://buyerC.com/generateBid.js"},
     #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
     #  }"
-    UDF_NUM_WORKERS                        = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
-    JS_WORKER_QUEUE_LEN                    = "" # Example: "200".
-    ROMA_TIMEOUT_MS                        = "" # Example: "10000"
-    TELEMETRY_CONFIG                       = "" # Example: "mode: EXPERIMENT"
-    COLLECTOR_ENDPOINT                     = "" # Example: "collector-seller-1-${each.key}.sfe-gcp.com:4317"
-    ENABLE_OTEL_BASED_LOGGING              = "" # Example: "false"
-    CONSENTED_DEBUG_TOKEN                  = "" # Example: "<unique_id>". Consented debugging requests increase server load in production. A high QPS of these requests can lead to unhealthy servers.
-    DEBUG_SAMPLE_RATE_MICRO                = "0"
-    ENABLE_REPORT_WIN_INPUT_NOISING        = "" # Example: "true"
-    K_ANON_TOTAL_NUM_HASH                  = "" # Example: "1000"
-    EXPECTED_K_ANON_TO_NON_K_ANON_RATIO    = "" # Example: "1.0"
-    K_ANON_CLIENT_TIME_OUT_MS              = "" # Example: "60000"
-    NUM_K_ANON_SHARDS                      = "" # Example: "1"
-    NUM_NON_K_ANON_SHARDS                  = "" # Example: "1"
-    TEST_MODE_K_ANON_CACHE_TTL_SECONDS     = "" # Example: "180"
-    TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS = "" # Example: "180"
-    ENABLE_K_ANON_QUERY_CACHE              = "" # Example: "true"
+    UDF_NUM_WORKERS                     = "" # Example: "64" Must be <=vCPUs in auction_machine_type.
+    JS_WORKER_QUEUE_LEN                 = "" # Example: "200".
+    ROMA_TIMEOUT_MS                     = "" # Example: "10000"
+    TELEMETRY_CONFIG                    = "" # Example: "mode: EXPERIMENT"
+    COLLECTOR_ENDPOINT                  = "" # Example: "collector-seller-1-${each.key}.sfe-gcp.com:4317"
+    ENABLE_OTEL_BASED_LOGGING           = "" # Example: "false"
+    CONSENTED_DEBUG_TOKEN               = "" # Example: "<unique_id>". Consented debugging requests increase server load in production. A high QPS of these requests can lead to unhealthy servers.
+    DEBUG_SAMPLE_RATE_MICRO             = "0"
+    ENABLE_REPORT_WIN_INPUT_NOISING     = "" # Example: "true"
+    K_ANON_TOTAL_NUM_HASH               = "" # Example: "1000"
+    EXPECTED_K_ANON_TO_NON_K_ANON_RATIO = "" # Example: "1.0"
+    K_ANON_CLIENT_TIME_OUT_MS           = "" # Example: "60000"
+    NUM_K_ANON_SHARDS                   = "" # Example: "1"
+    NUM_NON_K_ANON_SHARDS               = "" # Example: "1"
+    TEST_MODE_K_ANON_CACHE_TTL_MS       = "" # Example: "180"
+    TEST_MODE_NON_K_ANON_CACHE_TTL_MS   = "" # Example: "180"
+    ENABLE_K_ANON_QUERY_CACHE           = "" # Example: "true"
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.
     # Reach out to the Privacy Sandbox B&A team to enroll with Coordinators.

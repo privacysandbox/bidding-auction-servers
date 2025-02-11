@@ -54,11 +54,11 @@ constexpr char bar_browser_signals[] =
 constexpr char kExpectedBrowserSignalsWithRecencyMs[] =
     R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1868"],[1,"1954"]],"dataVersion":1787})json";
 absl::string_view kComponentBrowserSignals =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787,"multiBidLimit":2})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]],"prevWinsMs":[[1000,"1689"],[1000,"1776"]],"dataVersion":1787,"multiBidLimit":2})json";
 absl::string_view kComponentBrowserSignalsWithRecencyMs =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787,"multiBidLimit":2})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":123456000,"prevWins":[[1,"1689"],[1,"1776"]],"prevWinsMs":[[1000,"1689"],[1000,"1776"]],"dataVersion":1787,"multiBidLimit":2})json";
 absl::string_view kComponentBrowserSignalsWithMultiBidLimit =
-    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]],"dataVersion":1787,"multiBidLimit":3})json";
+    R"json({"topWindowHostname":"www.example-publisher.com","seller":"https://www.example-ssp.com","topLevelSeller":"https://www.example-top-ssp.com","joinCount":5,"bidCount":25,"recency":1684134092000,"prevWins":[[1,"1689"],[1,"1776"]],"prevWinsMs":[[1000,"1689"],[1000,"1776"]],"dataVersion":1787,"multiBidLimit":3})json";
 using ::google::protobuf::TextFormat;
 
 using ::google::protobuf::util::MessageToJsonString;
@@ -258,6 +258,7 @@ class GenerateBidsReactorTest : public testing::Test {
           .enable_buyer_debug_url_generation = false,
       };
     }
+
     request_.set_request_ciphertext(raw_request.SerializeAsString());
     grpc::CallbackServerContext context;
     GenerateBidsReactor reactor(&context, dispatcher_, &request_, &response,
@@ -306,12 +307,17 @@ IGForBidding GetIGForBiddingFoo() {
   interest_group.mutable_ad_render_ids()->Add(kIgFooFirstAdRenderId);
   interest_group.mutable_ad_render_ids()->Add(kIgFooSecondAdRenderId);
 
-  BrowserSignals browser_signals;
-  interest_group.mutable_browser_signals()->set_join_count(5);
-  interest_group.mutable_browser_signals()->set_bid_count(25);
-  interest_group.mutable_browser_signals()->set_recency(1684134092);
-  interest_group.mutable_browser_signals()->set_prev_wins(
-      MakeRandomPreviousWins(interest_group.ad_render_ids(), true));
+  interest_group.mutable_browser_signals_for_bidding()->set_join_count(5);
+  interest_group.mutable_browser_signals_for_bidding()->set_bid_count(25);
+  interest_group.mutable_browser_signals_for_bidding()->set_recency(1684134092);
+  interest_group.mutable_browser_signals_for_bidding()->set_prev_wins(
+      MakeRandomPreviousWins(interest_group.ad_render_ids(),
+                             /* set_times_to_one= */ true,
+                             /* time_in_ms= */ false));
+  interest_group.mutable_browser_signals_for_bidding()->set_prev_wins_ms(
+      MakeRandomPreviousWins(interest_group.ad_render_ids(),
+                             /* set_times_to_one= */ true));
+
   return interest_group;
 }
 
@@ -326,11 +332,17 @@ IGForBidding GetIGForBiddingBar(bool make_browser_signals = true) {
   interest_group.mutable_ad_render_ids()->Add(kIgBarSecondAdRenderId);
 
   if (make_browser_signals) {
-    interest_group.mutable_browser_signals()->set_join_count(5);
-    interest_group.mutable_browser_signals()->set_bid_count(25);
-    interest_group.mutable_browser_signals()->set_recency(1684134093);
-    interest_group.mutable_browser_signals()->set_prev_wins(
-        MakeRandomPreviousWins(interest_group.ad_render_ids(), true));
+    interest_group.mutable_browser_signals_for_bidding()->set_join_count(5);
+    interest_group.mutable_browser_signals_for_bidding()->set_bid_count(25);
+    interest_group.mutable_browser_signals_for_bidding()->set_recency(
+        1684134093);
+    interest_group.mutable_browser_signals_for_bidding()->set_prev_wins(
+        MakeRandomPreviousWins(interest_group.ad_render_ids(),
+                               /* set_times_to_one= */ true,
+                               /* time_in_ms= */ false));
+    interest_group.mutable_browser_signals_for_bidding()->set_prev_wins_ms(
+        MakeRandomPreviousWins(interest_group.ad_render_ids(),
+                               /* set_times_to_one= */ true));
   }
   return interest_group;
 }
@@ -377,7 +389,7 @@ void CheckCorrectnessOfIg(std::string& serialized_actual,
   // Expected IG needs trusted bidding signals and device signals cleared since
   // they will not be in the actual bar. These are not passed as part of the
   // serialized IG, but as separate parameters to GenerateBid.
-  expected.clear_DeviceSignals();
+  expected.clear_DeviceSignalsForBidding();
   expected.clear_trusted_bidding_signals();
   // Since UBS will not be equal after re-serialization, clear those as well in
   // both.
@@ -738,7 +750,7 @@ TEST_F(GenerateBidsReactorTest,
   *ads.mutable_response_ciphertext() = raw_response.SerializeAsString();
   std::vector<IGForBidding> igs;
   auto ig = GetIGForBiddingBar();
-  ig.mutable_browser_signals()->set_recency_ms(123456000);
+  ig.mutable_browser_signals_for_bidding()->set_recency_ms(123456000);
   igs.push_back(std::move(ig));
 
   EXPECT_CALL(dispatcher_, BatchExecute)
@@ -806,7 +818,7 @@ TEST_F(GenerateBidsReactorTest,
   InterestGroupForBidding ig_foo = GetIGForBiddingFoo();
   AdWithBid bid = GetAdWithBidFromIgFoo(kTestRenderUrl, 1);
   bid.set_allow_component_auction(true);
-  ig_foo.mutable_browser_signals()->set_recency_ms(123456000);
+  ig_foo.mutable_browser_signals_for_bidding()->set_recency_ms(123456000);
   Response ads;
   GenerateBidsResponse::GenerateBidsRawResponse raw_response;
   *raw_response.add_bids() = bid;

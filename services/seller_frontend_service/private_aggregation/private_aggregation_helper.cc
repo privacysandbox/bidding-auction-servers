@@ -370,6 +370,7 @@ void HandlePrivateAggregationContributions(
 
 // Groups PrivateAggregateContributions per AdTech
 ContributionsPerAdTechMap GroupContributionsByAdTech(
+    int per_adtech_paapi_contributions_limit,
     const PrivateAggregateReportingResponses& responses) {
   absl::flat_hash_map<std::string,
                       std::vector<const PrivateAggregateContribution*>>
@@ -382,7 +383,9 @@ ContributionsPerAdTechMap GroupContributionsByAdTech(
                          std::vector<const PrivateAggregateContribution*>())
             .first->second;
     for (const auto& contribution : response.contributions()) {
-      contributions_list.push_back(&contribution);
+      if (contributions_list.size() < per_adtech_paapi_contributions_limit) {
+        contributions_list.push_back(&contribution);
+      }
     }
   }
   return contributions_map;
@@ -678,10 +681,11 @@ CborDecodePAggIgContributions(cbor_item_t& serialized_ig_contributions) {
 
 absl::Status CborSerializePAggResponse(
     const PrivateAggregateReportingResponses& responses,
-    ErrorHandler error_handler, cbor_item_t& root) {
+    int per_adtech_paapi_contributions_limit, ErrorHandler error_handler,
+    cbor_item_t& root) {
   // Group contributions by AdTech.
-  ContributionsPerAdTechMap grouped_contributions =
-      GroupContributionsByAdTech(responses);
+  ContributionsPerAdTechMap grouped_contributions = GroupContributionsByAdTech(
+      per_adtech_paapi_contributions_limit, responses);
   ScopedCbor all_serialized_adtech_contributions(
       cbor_new_definite_array(grouped_contributions.size()));
   for (const auto& [adtech_origin, contributions] : grouped_contributions) {

@@ -82,16 +82,16 @@ locals {
     #     "protectedAppSignalsBuyerReportWinJsUrls": {"https://buyerA_origin.com":"https://buyerA.com/generateBid.js"}
 
     #  }"
-    ROMA_TIMEOUT_MS                        = "" # Example: "10000"
-    ENABLE_REPORT_WIN_INPUT_NOISING        = "" # Example: "true"
-    K_ANON_TOTAL_NUM_HASH                  = "" # Example: "1000"
-    EXPECTED_K_ANON_TO_NON_K_ANON_RATIO    = "" # Example: "1.0"
-    K_ANON_CLIENT_TIME_OUT_MS              = "" # Example: "60000"
-    NUM_K_ANON_SHARDS                      = "" # Example: "1"
-    NUM_NON_K_ANON_SHARDS                  = "" # Example: "1"
-    TEST_MODE_K_ANON_CACHE_TTL_SECONDS     = "" # Example: "180"
-    TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS = "" # Example: "180"
-    ENABLE_K_ANON_QUERY_CACHE              = "" # Example: "true"
+    ROMA_TIMEOUT_MS                     = "" # Example: "10000"
+    ENABLE_REPORT_WIN_INPUT_NOISING     = "" # Example: "true"
+    K_ANON_TOTAL_NUM_HASH               = "" # Example: "1000"
+    EXPECTED_K_ANON_TO_NON_K_ANON_RATIO = "" # Example: "1.0"
+    K_ANON_CLIENT_TIME_OUT_MS           = "" # Example: "60000"
+    NUM_K_ANON_SHARDS                   = "" # Example: "1"
+    NUM_NON_K_ANON_SHARDS               = "" # Example: "1"
+    TEST_MODE_K_ANON_CACHE_TTL_MS       = "" # Example: "180"
+    TEST_MODE_NON_K_ANON_CACHE_TTL_MS   = "" # Example: "180"
+    ENABLE_K_ANON_QUERY_CACHE           = "" # Example: "true"
 
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.

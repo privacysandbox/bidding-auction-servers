@@ -152,6 +152,35 @@ inline bool AllowAnyUdfLogging(RequestLogContext& log_context) {
          AllowAnyEventLogging(log_context);
 }
 
+inline EventMessage::KvSignal KvEventMessage(
+    absl::string_view request, RequestLogContext& log_context,
+    absl::Span<const std::string> headers = {}) {
+  EventMessage::KvSignal signal;
+  if (!AllowAnyEventLogging(log_context)) {
+    return signal;
+  }
+  signal.set_request(request);
+  for (absl::string_view header : headers) {
+    signal.add_request_header(header);
+  }
+  return signal;
+}
+
+inline void SetKvEventMessage(absl::string_view kv_client,
+                              absl::string_view response,
+                              EventMessage::KvSignal kv_signal,
+                              RequestLogContext& log_context) {
+  if (!server_common::log::PS_VLOG_IS_ON(kKVLog)) {
+    return;
+  }
+  PS_VLOG(kKVLog, log_context)
+      << kv_client << " response exported in EventMessage if consented";
+  if (AllowAnyEventLogging(log_context)) {
+    kv_signal.set_response(response);
+    log_context.SetEventMessageField(std::move(kv_signal));
+  }
+}
+
 inline bool RandomSample(int sample_rate_micro, absl::BitGenRef bitgen) {
   absl::discrete_distribution dist(
       {1e6 - sample_rate_micro, (double)sample_rate_micro});

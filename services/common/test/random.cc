@@ -134,10 +134,10 @@ google::protobuf::ListValue MakeARandomListOfNumbers() {
 
 std::string MakeRandomPreviousWins(
     const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids,
-    bool set_times_to_one) {
+    bool set_times_to_one, bool time_in_ms) {
   std::string previous_wins = "[";
   for (int i = 0; i < ad_render_ids.size(); i++) {
-    int time_val = 1;
+    int time_val = 1 * (time_in_ms ? 1000 : 1);
     if (!set_times_to_one) {
       time_val = (unsigned)time(NULL);
     }
@@ -151,14 +151,30 @@ std::string MakeRandomPreviousWins(
   return previous_wins;
 }
 
-BrowserSignals MakeRandomBrowserSignalsForIG(
+BrowserSignalsForBidding MakeRandomBrowserSignalsForBiddingForIG(
     const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids) {
+  BrowserSignalsForBidding browser_signals;
+  browser_signals.set_join_count(MakeARandomInt(0, 10));
+  browser_signals.set_bid_count(MakeARandomInt(0, 50));
+  browser_signals.set_recency(60);  // secs
+  browser_signals.set_recency_ms(60000);
+  browser_signals.set_prev_wins(MakeRandomPreviousWins(
+      ad_render_ids, /* set_times_to_one= */ false, /* time_in_ms= */ false));
+  browser_signals.set_prev_wins_ms(
+      MakeRandomPreviousWins(ad_render_ids, /* set_times_to_one= */ false));
+  return browser_signals;
+}
+
+BrowserSignals MakeRandomBrowserSignalsForIG(
+    const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids,
+    bool internal) {
   BrowserSignals browser_signals;
   browser_signals.set_join_count(MakeARandomInt(0, 10));
   browser_signals.set_bid_count(MakeARandomInt(0, 50));
   browser_signals.set_recency(60);  // secs
   browser_signals.set_recency_ms(60000);
-  browser_signals.set_prev_wins(MakeRandomPreviousWins(ad_render_ids));
+  browser_signals.set_prev_wins(MakeRandomPreviousWins(
+      ad_render_ids, /* set_times_to_one= */ false, /* time_in_ms= */ false));
   return browser_signals;
 }
 
@@ -390,11 +406,13 @@ InterestGroupForBidding MakeARandomInterestGroupForBidding(
   }
   if (build_android_signals) {
     // Empty message for now.
-    ig_for_bidding.mutable_android_signals();
+    ig_for_bidding.mutable_android_signals_for_bidding();
   } else {
-    ig_for_bidding.mutable_browser_signals()->CopyFrom(
-        MakeRandomBrowserSignalsForIG(ig_for_bidding.ad_render_ids()));
+    ig_for_bidding.mutable_browser_signals_for_bidding()->CopyFrom(
+        MakeRandomBrowserSignalsForBiddingForIG(
+            ig_for_bidding.ad_render_ids()));
   }
+
   return ig_for_bidding;
 }
 
@@ -434,11 +452,11 @@ InterestGroupForBidding MakeALargeInterestGroupForBiddingForLatencyTesting() {
 }
 
 InterestGroupForBidding MakeARandomInterestGroupForBiddingFromAndroid() {
-  return MakeARandomInterestGroupForBidding(true);
+  return MakeARandomInterestGroupForBidding(true, false);
 }
 
 InterestGroupForBidding MakeARandomInterestGroupForBiddingFromBrowser() {
-  return MakeARandomInterestGroupForBidding(false);
+  return MakeARandomInterestGroupForBidding(false, false);
 }
 
 GenerateBidsRequest::GenerateBidsRawRequest
@@ -700,7 +718,7 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
     int rejection_reason_ig_per_owner) {
   ScoreAdsResponse::AdScore ad_score;
   float bid = MakeARandomNumber<float>(1, 2.5);
-  float score = MakeARandomNumber<float>(1, 2.5);
+  float score = MakeARandomNumber<float>(100, 250);
   ad_score.set_desirability(score);
   ad_score.set_render(MakeARandomString());
   ad_score.set_interest_group_name(MakeARandomString());
@@ -710,7 +728,7 @@ ScoreAdsResponse::AdScore MakeARandomAdScore(
       absl::StrCat("interest_group_origin_", MakeARandomString()));
   ad_score.set_ad_metadata(MakeARandomString());
   ad_score.set_allow_component_auction(false);
-  ad_score.set_bid(MakeARandomNumber<float>(1, 2.5));
+  ad_score.set_bid(MakeARandomNumber<float>(3, 4.5));
   *ad_score.mutable_debug_report_urls() = MakeARandomDebugReportUrls();
   *ad_score.mutable_win_reporting_urls() = MakeARandomWinReportingUrls();
   for (int index = 0; index < hob_buyer_entries; index++) {
@@ -831,12 +849,22 @@ BuyerInput MakeARandomBuyerInput() {
   return buyer_input;
 }
 
+BuyerInputForBidding MakeARandomBuyerInputForBidding() {
+  BuyerInputForBidding buyer_input;
+  std::unique_ptr<BuyerInput::InterestGroup> ig =
+      MakeARandomInterestGroup(/*for_android=*/false);
+  BuyerInputForBidding::InterestGroupForBidding ig_for_bidding =
+      ToInterestGroupForBidding(*ig.get());
+  *buyer_input.mutable_interest_groups()->Add() = ig_for_bidding;
+  return buyer_input;
+}
+
 ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type) {
   ProtectedAuctionInput input;
   input.set_publisher_name(MakeARandomString());
   input.set_generation_id(MakeARandomString());
-  google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
-  buyer_inputs.emplace(MakeARandomString(), MakeARandomBuyerInput());
+  google::protobuf::Map<std::string, BuyerInputForBidding> buyer_inputs;
+  buyer_inputs.emplace(MakeARandomString(), MakeARandomBuyerInputForBidding());
   absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input;
   switch (client_type) {
     case CLIENT_TYPE_BROWSER:

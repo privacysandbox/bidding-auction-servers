@@ -28,8 +28,11 @@
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 inline constexpr char kTags[] = "tags";
+inline constexpr char kInterestGroupNames[] = "interestGroupNames";
+inline constexpr char kPerInterestGroupData[] = "perInterestGroupData";
 inline constexpr char kKeyGroupOutputs[] = "keyGroupOutputs";
 inline constexpr char kKeyValues[] = "keyValues";
+inline constexpr char kValue[] = "value";
 
 absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
     std::string_view key_tag, std::vector<rapidjson::Document>& docs) {
@@ -61,7 +64,7 @@ absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
       for (auto& key_group_output : key_group_outputs->value.GetArray()) {
         auto tags = key_group_output.FindMember(kTags);
         if (tags == key_group_output.MemberEnd() || tags->value.Size() != 1 ||
-            tags->value[0].GetString() != key_tag) {
+            std::string(tags->value[0].GetString()) != key_tag) {
           continue;
         }
         auto key_values = key_group_output.FindMember(kKeyValues);
@@ -75,9 +78,38 @@ absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
         for (auto& key_value_pair : key_values->value.GetObject()) {
           if (ig_signals.FindMember(key_value_pair.name) ==
               ig_signals.MemberEnd()) {
-            ig_signals.AddMember(key_value_pair.name.Move(),
-                                 key_value_pair.value.Move(),
-                                 ig_signals.GetAllocator());
+            // Get the value inside the value wrapper and add it to the
+            // ig_signals.
+            if (!key_value_pair.value.IsObject()) {
+              PS_VLOG(8) << __func__ << "Skip value for key "
+                         << key_value_pair.name.GetString()
+                         << " because value is not object";
+              continue;
+            }
+            auto value = key_value_pair.value.FindMember(kValue);
+            if (value != key_value_pair.value.MemberEnd()) {
+              if (std::string(tags->value[0].GetString()) ==
+                  kInterestGroupNames) {
+                if (auto ig_value = ParseJsonString(value->value.GetString());
+                    ig_value.ok()) {
+                  ig_signals.AddMember(
+                      key_value_pair.name.Move(),
+                      rapidjson::Value(*ig_value, ig_signals.GetAllocator())
+                          .Move(),
+                      ig_signals.GetAllocator());
+                }
+                continue;
+              }
+              ig_signals.AddMember(key_value_pair.name.Move(),
+                                   value->value.Move(),
+                                   ig_signals.GetAllocator());
+
+            } else {
+              PS_VLOG(8) << __func__
+                         << "Unable to find value inside the value wrapper "
+                            "from the key value pair with key:"
+                         << key_value_pair.name.GetString();
+            }
           } else {
             PS_VLOG(8) << __func__
                        << "Key value response has multiple different values "
@@ -119,9 +151,16 @@ absl::StatusOr<std::string> ConvertKvV2ResponseToV1String(
   }
   for (auto& [key_tag, ig_signals] : ig_signals_map) {
     if (!ig_signals.ObjectEmpty()) {
-      top_level_doc.AddMember(
-          rapidjson::StringRef(key_tag.data(), key_tag.length()),
-          ig_signals.Move(), top_level_doc.GetAllocator());
+      if (key_tag == kInterestGroupNames) {
+        // TKV V2 protocol returns an interestGroupNames tag. However, BYOS
+        // expects perInterestGroupData in the response.
+        top_level_doc.AddMember(kPerInterestGroupData, ig_signals.Move(),
+                                top_level_doc.GetAllocator());
+      } else {
+        top_level_doc.AddMember(
+            rapidjson::StringRef(key_tag.data(), key_tag.length()),
+            ig_signals.Move(), top_level_doc.GetAllocator());
+      }
     }
   }
   if (top_level_doc.ObjectEmpty()) {
@@ -137,17 +176,9 @@ bool UseKvV2(ClientType client_type, bool is_tkv_v2_browser_enabled,
   }
 
   if (client_type == ClientType::CLIENT_TYPE_ANDROID) {
-    // TODO(b/378676724): Remove test_mode conditions. All CLIENT_TYPE_ANDROID
-    // requests should go to TKV V2.
-    // TEST_MODE=false. Android requests MUST go to TKV V2
-    if (!is_test_mode_enabled) {
-      return true;
-    }
-    // TEST_MODE=true. Android requests go to TKV V2 only if TKV V2 address is
-    // not empty.
-    if (!is_tkv_v2_empty) {
-      return true;
-    }
+    // TODO(b/378676724): Remove test_mode conditions.
+    // Android must use TKV, unless TEST_MODE=false and TKV V2 address is empty
+    return !(is_test_mode_enabled && is_tkv_v2_empty);
   }
   return false;
 }

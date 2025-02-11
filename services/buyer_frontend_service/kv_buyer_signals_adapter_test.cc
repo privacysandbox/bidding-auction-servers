@@ -24,6 +24,7 @@
 #include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
 #include "services/common/test/utils/test_utils.h"
+#include "services/common/util/json_util.h"
 #include "src/core/test/utils/proto_test_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -43,6 +44,16 @@ TEST(KvBuyerSignalsAdapter, Convert) {
     {
       "id": 0,
       "keyGroupOutputs": [
+        {
+          "tags": [
+            "interestGroupNames"
+          ],
+          "keyValues": {
+            "ig_name_0": {
+              "value": "{\"priorityVector\":{\"someSignal\":0}, \"updateIfOlderThanMs\": 10000}"
+            }
+          }
+        },
         {
           "tags": [
             "keys"
@@ -69,6 +80,16 @@ TEST(KvBuyerSignalsAdapter, Convert) {
     {
       "id": 1,
       "keyGroupOutputs": [
+        {
+          "tags": [
+            "interestGroupNames"
+          ],
+          "keyValues": {
+            "ig_name_1": {
+              "value": "{\"priorityVector\":{\"someSignal\":1}, \"updateIfOlderThanMs\": 10000}"
+            }
+          }
+        },
         {
           "tags": [
             "keys"
@@ -95,18 +116,28 @@ TEST(KvBuyerSignalsAdapter, Convert) {
   CHECK_OK(result) << result.status();
   std::string expected_parsed_signals =
       R"json(
-      {
-        "keys": {
-          "hello": {
-            "value": "world"
-          },
-          "hello2": {
-            "value": "world2"
-          }
+    {
+      "keys": {
+        "hello": "world",
+        "hello2": "world2"
+      },
+      "perInterestGroupData": {
+        "ig_name_0": {
+            "priorityVector": { "someSignal": 0 },
+            "updateIfOlderThanMs": 10000
+        },
+        "ig_name_1": {
+            "priorityVector": { "someSignal": 1 },
+            "updateIfOlderThanMs": 10000
+        }
       }
     })json";
-  ASSERT_EQ(*((*result)->trusted_signals),
-            RemoveWhiteSpaces(expected_parsed_signals));
+  auto actual = ParseJsonString(*((*result)->trusted_signals));
+  auto expected = ParseJsonString(expected_parsed_signals);
+  ASSERT_TRUE(actual.ok()) << actual.status();
+  ASSERT_TRUE(expected.ok()) << expected.status();
+  ASSERT_EQ(*actual, *expected)
+      << SerializeJsonDoc(*actual) << SerializeJsonDoc(*expected);
 }
 
 TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
@@ -116,6 +147,16 @@ TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
     {
       "id": 0,
       "keyGroupOutputs": [
+        {
+          "tags": [
+            "interestGroupNames"
+          ],
+          "keyValues": {
+            "ig_name_0": {
+              "value": "{\"priorityVector\":{\"someSignal\":0}, \"updateIfOlderThanMs\": 10000}"
+            }
+          }
+        },
         {
           "tags": [
             "keys"
@@ -144,6 +185,16 @@ TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
       "keyGroupOutputs": [
         {
           "tags": [
+            "interestGroupNames"
+          ],
+          "keyValues": {
+            "ig_name_1": {
+              "value": "{\"priorityVector\":{\"someSignal\":1}, \"updateIfOlderThanMs\": 10000}"
+            }
+          }
+        },
+        {
+          "tags": [
             "keys"
           ],
           "keyValues": {
@@ -161,6 +212,16 @@ TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
     {
       "id": 3,
       "keyGroupOutputs": [
+        {
+          "tags": [
+            "interestGroupNames"
+          ],
+          "keyValues": {
+            "ig_name_2": {
+              "value": "{\"priorityVector\":{\"someSignal\":2}, \"updateIfOlderThanMs\": 10000}"
+            }
+          }
+        },
         {
           "tags": [
             "keys"
@@ -187,6 +248,16 @@ TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
     {
       "id": 4,
       "keyGroupOutputs": [
+        {
+          "tags": [
+            "interestGroupNames"
+          ],
+          "keyValues": {
+            "ig_name_3": {
+              "value": "{\"priorityVector\":{\"someSignal\":3}, \"updateIfOlderThanMs\": 10000}"
+            }
+          }
+        },
         {
           "tags": [
             "keys"
@@ -220,24 +291,34 @@ TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
   CHECK_OK(result) << result.status();
   std::string expected_parsed_signals =
       R"json(
-      {
-        "keys": {
-          "hello": {
-            "value": "world"
-          },
-          "hello2": {
-            "value": "world2"
-          },
-          "hello44": {
-            "value": "world44"
-          },
-          "hello24": {
-            "value": "world24"
-          }
+    {
+      "keys": {
+        "hello": "world",
+        "hello2": "world2",
+        "hello44": "world44",
+        "hello24": "world24"
+      },
+      "perInterestGroupData": {
+        "ig_name_0": {
+            "priorityVector": { "someSignal": 0 },
+            "updateIfOlderThanMs": 10000
+        },
+        "ig_name_1": {
+            "priorityVector": { "someSignal": 1 },
+            "updateIfOlderThanMs": 10000
+        },
+        "ig_name_2": {
+            "priorityVector": { "someSignal": 2 },
+            "updateIfOlderThanMs": 10000
+        },
+        "ig_name_3": {
+            "priorityVector": { "someSignal": 3 },
+            "updateIfOlderThanMs": 10000
+        }
       }
     })json";
-  ASSERT_EQ(*((*result)->trusted_signals),
-            RemoveWhiteSpaces(expected_parsed_signals));
+  ASSERT_EQ(ParseJsonString(*((*result)->trusted_signals)),
+            ParseJsonString(expected_parsed_signals));
 }
 
 TEST(KvBuyerSignalsAdapter, MalformedJson) {
@@ -313,9 +394,9 @@ TEST(KvBuyerSignalsAdapter, EmptyJson) {
   ASSERT_FALSE(result.ok());
 }
 
-BuyerInput::InterestGroup MakeAnInterestGroup(const std::string& id,
-                                              int keys_number) {
-  BuyerInput::InterestGroup interest_group;
+BuyerInputForBidding::InterestGroupForBidding MakeAnInterestGroupForBidding(
+    const std::string& id, int keys_number) {
+  BuyerInputForBidding::InterestGroupForBidding interest_group;
   interest_group.set_name(absl::StrCat("ig_name_", id));
   for (int i = 0; i < keys_number; i++) {
     interest_group.mutable_bidding_signals_keys()->Add(
@@ -347,6 +428,10 @@ TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestSuccess) {
           id: 0
           compression_group_id: 0
           arguments {
+            tags { values { string_value: "interestGroupNames" } }
+            data { list_value { values { string_value: "ig_name_0" } } }
+          }
+          arguments {
             tags { values { string_value: "keys" } }
             data {
               list_value { values { string_value: "bidding_signal_key_00" } }
@@ -362,6 +447,10 @@ TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestSuccess) {
         partitions {
           id: 1
           compression_group_id: 1
+          arguments {
+            tags { values { string_value: "interestGroupNames" } }
+            data { list_value { values { string_value: "ig_name_1" } } }
+          }
           arguments {
             tags { values { string_value: "keys" } }
             data {
@@ -397,8 +486,9 @@ TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestSuccess) {
       std::move(consented_debug_configuration);
   *bids_request.mutable_log_context() = std::move(log_context);
   for (int i = 0; i < 2; i++) {
-    *bids_request.mutable_buyer_input()->mutable_interest_groups()->Add() =
-        MakeAnInterestGroup(std::to_string(i), 2);
+    *bids_request.mutable_buyer_input_for_bidding()
+         ->mutable_interest_groups()
+         ->Add() = MakeAnInterestGroupForBidding(std::to_string(i), 2);
   }
   BiddingSignalsRequest bidding_signals_request(bids_request, {});
   auto maybe_result = CreateV2BiddingRequest(bidding_signals_request);
@@ -457,6 +547,10 @@ TEST(KvBuyerSignalsAdapter,
           id: 0
           compression_group_id: 0
           arguments {
+            tags { values { string_value: "interestGroupNames" } }
+            data { list_value { values { string_value: "ig_name_0" } } }
+          }
+          arguments {
             tags { values { string_value: "keys" } }
             data {
               list_value { values { string_value: "bidding_signal_key_00" } }
@@ -472,6 +566,10 @@ TEST(KvBuyerSignalsAdapter,
         partitions {
           id: 1
           compression_group_id: 1
+          arguments {
+            tags { values { string_value: "interestGroupNames" } }
+            data { list_value { values { string_value: "ig_name_1" } } }
+          }
           arguments {
             tags { values { string_value: "keys" } }
             data {
@@ -508,8 +606,9 @@ TEST(KvBuyerSignalsAdapter,
       std::move(consented_debug_configuration);
   *bids_request.mutable_log_context() = std::move(log_context);
   for (int i = 0; i < 2; i++) {
-    *bids_request.mutable_buyer_input()->mutable_interest_groups()->Add() =
-        MakeAnInterestGroup(std::to_string(i), 2);
+    *bids_request.mutable_buyer_input_for_bidding()
+         ->mutable_interest_groups()
+         ->Add() = MakeAnInterestGroupForBidding(std::to_string(i), 2);
   }
   BiddingSignalsRequest bidding_signals_request(bids_request, {});
   auto maybe_result =

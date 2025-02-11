@@ -84,7 +84,7 @@ TEST(ParsePerInterestGroupData, SkipsNonObjectPerInterestGroupData) {
     "perInterestGroupData": 123
 }
     )JSON");
-  BuyerInput input;
+  BuyerInputForBidding input;
   auto output = ParseTrustedBiddingSignals(std::move(bidding_signals), input);
   EXPECT_TRUE(output.ok());
   EXPECT_TRUE(output->update_igs.interest_groups().empty());
@@ -92,10 +92,10 @@ TEST(ParsePerInterestGroupData, SkipsNonObjectPerInterestGroupData) {
 
 TEST(ParsePerInterestGroupData,
      ParsesUpdateInterestGroupDataInBuyerInputOrder) {
-  BuyerInput input;
-  BuyerInput::InterestGroup input_ig_first;
+  BuyerInputForBidding input;
+  BuyerInputForBidding::InterestGroupForBidding input_ig_first;
   input_ig_first.set_name("first");
-  BuyerInput::InterestGroup input_ig_second;
+  BuyerInputForBidding::InterestGroupForBidding input_ig_second;
   input_ig_second.set_name("second");
   *input.add_interest_groups() = std::move(input_ig_first);
   *input.add_interest_groups() = std::move(input_ig_second);
@@ -129,8 +129,8 @@ TEST(ParsePerInterestGroupData,
 }
 
 TEST(ParsePerInterestGroupData, SkipBadUpdateIfOlderThanMsValue) {
-  BuyerInput input;
-  BuyerInput::InterestGroup input_ig_first;
+  BuyerInputForBidding input;
+  BuyerInputForBidding::InterestGroupForBidding input_ig_first;
   input_ig_first.set_name("first");
   *input.add_interest_groups() = std::move(input_ig_first);
   auto bidding_signals = std::make_unique<BiddingSignals>();
@@ -154,10 +154,10 @@ TEST(ParsePerInterestGroupData, SkipBadUpdateIfOlderThanMsValue) {
 }
 
 TEST(ParsePerInterestGroupData, ParsesPriorityVector) {
-  BuyerInput input;
-  BuyerInput::InterestGroup input_ig_first;
+  BuyerInputForBidding input;
+  BuyerInputForBidding::InterestGroupForBidding input_ig_first;
   input_ig_first.set_name("first_ig_name");
-  BuyerInput::InterestGroup input_ig_second;
+  BuyerInputForBidding::InterestGroupForBidding input_ig_second;
   input_ig_second.set_name("second_ig_name");
   *input.add_interest_groups() = std::move(input_ig_first);
   *input.add_interest_groups() = std::move(input_ig_second);

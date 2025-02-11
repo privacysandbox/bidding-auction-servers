@@ -22,12 +22,24 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "include/gtest/gtest.h"
 #include "services/common/public_key_url_allowlist.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 
+using ::testing::ContainsRegex;
 using ::testing::Return;
+
+constexpr absl::string_view kBuyerHostMapForSingleBuyer =
+    R"json(
+    {
+      "https://bid1.com": {
+        "url": "dns:///bfe-dev.bidding1.com:443",
+        "cloudPlatform": "AWS"
+      }
+    }
+    )json";
 
 TEST(KeyFetcherUtilsTest, ParseCloudPlatformPublicKeysMap_ValidInput) {
   constexpr absl::string_view platform_format = R"json(
@@ -93,6 +105,30 @@ TEST(ProtoCloudPlatformToScpCloudPlatformTest, ReturnsLocalForUnspecified) {
       server_common::CloudPlatform::kLocal,
       ProtoCloudPlatformToScpCloudPlatform(
           EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_UNSPECIFIED));
+}
+
+TEST(KeyFetcherUtilsTest,
+     ValidateSfePublicKeyEndpoints_FailsOnNoKeysForBuyerCloudPlatform) {
+  constexpr absl::string_view platform_format = R"json(
+{
+  "GCP": "%s"
+}
+)json";
+  std::string per_platform_public_key_endpoints =
+      absl::StrFormat(platform_format, kGCPProdPublicKeyEndpoint);
+  auto cloud_public_keys_map =
+      ParseCloudPlatformPublicKeysMap(per_platform_public_key_endpoints);
+  ASSERT_TRUE(cloud_public_keys_map.ok());
+
+  auto map = ParseIgOwnerToBfeDomainMap(kBuyerHostMapForSingleBuyer);
+  ASSERT_TRUE(map.ok());
+
+  auto error = ValidateSfePublicKeyEndpoints(*cloud_public_keys_map, *map);
+  ASSERT_FALSE(error.ok());
+  EXPECT_EQ(
+      error.message(),
+      "Invalid runtime configs provided - a supplied buyer cloud platform in "
+      "BUYER_SERVER_HOSTS is not present in SFE_PUBLIC_KEYS_ENDPOINTS");
 }
 
 }  // namespace
