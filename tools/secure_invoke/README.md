@@ -373,11 +373,11 @@ The example below queries a live public key endpoint, picks the first key, and p
 `secure_invoke`:
 
 ```bash
-# Setup arguments.
-INPUT_PATH=...
-SFE_HOST_ADDRESS=...
-CLIENT_IP=...
-LIVE_KEY_ENDPOINT="https://..."
+# Setup arguments (and replace the placeholders).
+INPUT_PATH="<Input request path>"
+SFE_HOST_ADDRESS="<DNS of SFE>"
+CLIENT_IP="<client-ip>"
+LIVE_KEY_ENDPOINT="<URL from which public keys can be fetched>"
 
 # Setup keys.
 LIVE_KEYS=$(curl ${LIVE_KEY_ENDPOINT})
@@ -394,6 +394,16 @@ KEY_ID=$(echo $LIVE_KEYS | jq -r .keys[0].id)
     -public_key=${PUBLIC_KEY} \
     -key_id=${KEY_ID}
 ```
+
+Notes about `LIVE_KEY_ENDPOINT`:
+
+-   `LIVE_KEY_ENDPOINT` refers to the public key hosting service endpoint from where public keys are
+    fetched.
+-   For AWS, use the following:
+    LIVE_KEY_ENDPOINT="<https://publickeyservice.pa.aws.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys>"
+-   For GCP, use the following:
+    LIVE_KEY_ENDPOINT="<https://publickeyservice.pa.gcp.privacysandboxservices.com/.well-known/protected-auction/v1/public-keys>"
+-   We will add/update public key endpoints as support for other cloud platforms is added.
 
 ### Interacting with Local Servers
 

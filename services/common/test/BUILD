@@ -66,6 +66,7 @@ cc_library(
         "//services/common/test/utils:cbor_test_utils",
         "//services/common/util:request_response_constants",
         "//services/seller_frontend_service/test:app_test_utils",
+        "//services/seller_frontend_service/util:buyer_input_proto_utils",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/time",

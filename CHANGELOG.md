@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.7.0 (2025-02-11)
+
+
+### Features
+
+* [Private Aggregation] Limit contributions per adtech for private aggregation
+* add TEE KV request response in EventMessage
+* enable_tkv_v2_browser works in local startup scripts
+* Handle interestGroups in TKV v2 adapter
+
+
+### Bug Fixes
+
+* Explicitly set confidential_instance_type
+* Port patch fix for bidding server hash stability
+* Remove common patch causing bidding server hash instability
+* Remove value wrapper from signals fetched from KV V2 response
+* Specify exception in except block
+* Support Intel AMX CPUs in sandbox2
+* udf metric error message
+* Verify buyer clouds are in SFE public key list
+
 ## 4.6.0 (2025-01-29)
 
 

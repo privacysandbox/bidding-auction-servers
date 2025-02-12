@@ -626,6 +626,8 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForAndroid) {
 TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWeb) {
   AuctionResult expected =
       MapBasicScoreFieldsToAuctionResult(this->valid_score_);
+  // For web, the bid is encoded from the buyer_bid field
+  expected.set_bid(this->valid_score_.buyer_bid());
   // IG Origin is Android exclusive and will not be parsed or encoded for web.
   expected.clear_interest_group_origin();
   expected.mutable_bidding_groups()->insert(this->bidding_group_map_.begin(),
@@ -648,6 +650,8 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWeb) {
 TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWebWithNonce) {
   AuctionResult expected =
       MapBasicScoreFieldsToAuctionResult(this->valid_score_);
+  // For web, the bid is encoded from the buyer_bid field
+  expected.set_bid(this->valid_score_.buyer_bid());
   // IG Origin is Android exclusive and will not be parsed or encoded for web.
   expected.clear_interest_group_origin();
   expected.mutable_bidding_groups()->insert(this->bidding_group_map_.begin(),

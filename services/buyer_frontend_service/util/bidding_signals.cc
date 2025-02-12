@@ -33,14 +33,14 @@ namespace {
 // tries to return any result as flexibly as possible.
 // Adtechs may be informed of errors in the KV response via metrics.
 void ParsePerInterestGroupData(rapidjson::Value& per_interest_group_data,
-                               const BuyerInput& buyer_input,
+                               const BuyerInputForBidding& buyer_input,
                                BiddingSignalJsonComponents& result) {
   if (!per_interest_group_data.IsObject()) {
     return;
   }
 
   for (int i = 0; i < buyer_input.interest_groups_size(); i++) {
-    const BuyerInput::InterestGroup& interest_group =
+    const BuyerInputForBidding::InterestGroupForBidding& interest_group =
         buyer_input.interest_groups(i);
     if (interest_group.name().empty()) {
       continue;
@@ -80,7 +80,7 @@ void ParsePerInterestGroupData(rapidjson::Value& per_interest_group_data,
 
 absl::StatusOr<BiddingSignalJsonComponents> ParseTrustedBiddingSignals(
     std::unique_ptr<BiddingSignals> bidding_signals,
-    const BuyerInput& buyer_input) {
+    const BuyerInputForBidding& buyer_input) {
   if (!bidding_signals || !bidding_signals->trusted_signals ||
       bidding_signals->trusted_signals->empty()) {
     return absl::InvalidArgumentError(kGetBiddingSignalsSuccessButEmpty);

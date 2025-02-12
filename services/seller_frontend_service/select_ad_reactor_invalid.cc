@@ -55,7 +55,8 @@ void SelectAdReactorInvalid::Execute() {
 absl::StatusOr<std::string> SelectAdReactorInvalid::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error,
-    const AdScores* ghost_winning_scores) {
+    const AdScores* ghost_winning_scores,
+    int per_adtech_paapi_contributions_limit) {
   return "";
 }
 
@@ -69,7 +70,7 @@ ProtectedAuctionInput SelectAdReactorInvalid::GetDecodedProtectedAuctionInput(
   return {};
 }
 
-absl::flat_hash_map<absl::string_view, BuyerInput>
+absl::flat_hash_map<absl::string_view, BuyerInputForBidding>
 SelectAdReactorInvalid::GetDecodedBuyerinputs(
     const google::protobuf::Map<std::string, std::string>&
         encoded_buyer_inputs) {

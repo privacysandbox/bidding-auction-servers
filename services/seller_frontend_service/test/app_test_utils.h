@@ -26,6 +26,10 @@ namespace privacy_sandbox::bidding_auction_servers {
 google::protobuf::Map<std::string, std::string> GetProtoEncodedBuyerInputs(
     const google::protobuf::Map<std::string, BuyerInput>& buyer_inputs);
 
+google::protobuf::Map<std::string, std::string> GetProtoEncodedBuyerInputs(
+    const google::protobuf::Map<std::string, BuyerInputForBidding>&
+        buyer_inputs);
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_SELLER_FRONTEND_SERVICE_TEST_APP_TEST_UTILS_H_

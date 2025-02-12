@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
       absl::GetFlag(FLAGS_enable_debug_info);
   std::optional<bool> enable_unlimited_egress =
       absl::GetFlag(FLAGS_enable_unlimited_egress);
-  const bool enforce_kanon = absl::GetFlag(FLAGS_enforce_kanon);
+  std::optional<bool> enforce_kanon = absl::GetFlag(FLAGS_enforce_kanon);
 
   if (op == "encrypt") {
     if (target_service == kSfe) {

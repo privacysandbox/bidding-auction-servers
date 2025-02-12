@@ -924,6 +924,7 @@ TEST_F(SelectAdReactorPASTest, KAnonHashesAreQueried) {
   RunReactorRequest<SelectAdReactorForApp>(
       config_, clients_, request_with_context.select_ad_request,
       /*enable_kanon=*/true, /*enable_buyer_private_aggregate_reporting=*/false,
+      /*per_adtech_paapi_contributions_limit=*/100,
       /*fail_fast=*/false,
       /*report_win_map=*/test_report_win_map);
 }
@@ -1036,6 +1037,7 @@ TEST_F(SelectAdReactorPASTest, AdConsideredNonKAnonIfAdRenderHashIsNotKAnon) {
   RunReactorRequest<SelectAdReactorForApp>(
       config_, clients_, request_with_context.select_ad_request,
       /*enable_kanon=*/true, /*enable_buyer_private_aggregate_reporting=*/false,
+      /*per_adtech_paapi_contributions_limit=*/100,
       /*fail_fast=*/false,
       /*report_win_map=*/test_report_win_map);
 }
@@ -1375,6 +1377,68 @@ TEST_F(SelectAdReactorPASTest,
           config_, clients_, request_with_context.select_ad_request);
 }
 
+TEST_F(SelectAdReactorPASTest, FailsWhenPlaceholderSetForTkvV2Address) {
+  this->config_.SetOverride(kIgnoredPlaceholderValue,
+                            TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
+  config_.SetOverride(kTrue, TEST_MODE);
+  auto request_with_context =
+      CreateSelectAdRequest(kSellerOriginDomain,
+                            /*add_interest_group=*/true,
+                            /*add_protected_app_signals=*/true,
+                            /*app_install_signals=*/std::nullopt);
+
+  // Setup BFE to return a PAS bid.
+  auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
+                                  get_bids_raw_request,
+                              grpc::ClientContext* context,
+                              GetBidDoneCallback on_done,
+                              absl::Duration timeout,
+                              RequestConfig request_config) {
+    EXPECT_FALSE(get_bids_raw_request->enable_debug_reporting());
+    auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
+    response->mutable_protected_app_signals_bids()->Add(GetTestPASAdWithBid());
+    std::move(on_done)(std::move(response), /*response_metadata=*/{});
+    return absl::OkStatus();
+  };
+  auto setup_mock_buyer =
+      [&mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal).WillRepeatedly(mock_get_bids);
+        return buyer;
+      };
+  auto MockBuyerFactoryCall = [setup_mock_buyer](absl::string_view hostname) {
+    return setup_mock_buyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
+  };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock_, Get(_))
+      .WillRepeatedly(MockBuyerFactoryCall);
+  MockEntriesCallOnBuyerFactory(
+      request_with_context.protected_auction_input.buyer_input(),
+      buyer_front_end_async_client_factory_mock_);
+
+  EXPECT_CALL(kv_async_client_, ExecuteInternal).Times(0);
+
+  auto expected_get_bids_response =
+      std::make_unique<GetBidsResponse::GetBidsRawResponse>();
+  expected_get_bids_response->mutable_protected_app_signals_bids()->Add(
+      GetTestPASAdWithBid());
+  expected_buyer_bids_.emplace(kSampleBuyer,
+                               std::move(expected_get_bids_response));
+  // Calls V1 to get scoring signals.
+  SetupScoringProviderMock(scoring_signals_provider_, expected_buyer_bids_);
+  EXPECT_CALL(scoring_client_, ExecuteInternal)
+      .WillOnce([](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+                   grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+                   absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_FALSE(request->enable_debug_reporting());
+        std::move(on_done)(
+            std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(),
+            /*response_metadata=*/{});
+        return absl::OkStatus();
+      });
+  SelectAdResponse encrypted_response =
+      RunReactorRequest<SelectAdReactorForApp>(
+          config_, clients_, request_with_context.select_ad_request);
+}
+
 TEST_F(SelectAdReactorPASTest, DisablesDebugReporting) {
   auto request_with_context =
       CreateSelectAdRequest(kSellerOriginDomain,
@@ -1497,7 +1561,7 @@ TEST_F(SelectAdReactorPASTest, EnableUnlimitedEgressPropagatedToGetBids) {
   std::vector<
       std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
-  auto setup_mock_buyer = [](const BuyerInput& buyer_input,
+  auto setup_mock_buyer = [](const BuyerInputForBidding& buyer_input,
                              absl::string_view buyer_ig_owner) {
     auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
     EXPECT_CALL(*buyer, ExecuteInternal)
@@ -1517,7 +1581,7 @@ TEST_F(SelectAdReactorPASTest, EnableUnlimitedEgressPropagatedToGetBids) {
   };
   for (const auto& buyer_ig_owner :
        request_with_context.select_ad_request.auction_config().buyer_list()) {
-    const BuyerInput& buyer_input = DecodeBuyerInput(
+    const BuyerInputForBidding& buyer_input = DecodeBuyerInput(
         buyer_ig_owner,
         request_with_context.protected_auction_input.buyer_input().at(
             buyer_ig_owner),

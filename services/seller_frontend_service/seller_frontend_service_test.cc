@@ -73,7 +73,8 @@ using ScoreAdsDoneCallback = absl::AnyInvocable<
     void(absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
          ResponseMetadata) &&>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
-using DecodedBuyerInputs = ::google::protobuf::Map<std::string, BuyerInput>;
+using DecodedBuyerInputs =
+    ::google::protobuf::Map<std::string, BuyerInputForBidding>;
 
 // Maintains ownership of clients
 struct SellerFrontEndClientOwner {
@@ -132,8 +133,8 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetOverride("0", K_ANON_CLIENT_TIME_OUT_MS);
     config_.SetOverride("0", NUM_K_ANON_SHARDS);
     config_.SetOverride("0", NUM_NON_K_ANON_SHARDS);
-    config_.SetOverride("0", TEST_MODE_K_ANON_CACHE_TTL_SECONDS);
-    config_.SetOverride("0", TEST_MODE_NON_K_ANON_CACHE_TTL_SECONDS);
+    config_.SetOverride("0", TEST_MODE_K_ANON_CACHE_TTL_MS);
+    config_.SetOverride("0", TEST_MODE_NON_K_ANON_CACHE_TTL_MS);
     config_.SetOverride(kTrue, ENABLE_K_ANON_QUERY_CACHE);
   }
 
@@ -197,7 +198,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
   this->config_.SetOverride(kTrue, ALLOW_COMPRESSED_AUCTION_CONFIG);
 
-  BuyerInput buyer_input;
+  BuyerInputForBidding buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
       kSampleInterestGroupName);
   DecodedBuyerInputs decoded_buyer_inputs;
@@ -804,7 +805,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
 TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
-  BuyerInput buyer_input;
+  BuyerInputForBidding buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
       kSampleInterestGroupName);
 
@@ -942,7 +943,7 @@ void SetupBuyerClientMock(
 TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
-  BuyerInput buyer_input;
+  BuyerInputForBidding buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
       kSampleInterestGroupName);
   DecodedBuyerInputs decoded_buyer_inputs;
@@ -1048,7 +1049,7 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
 TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
-  BuyerInput buyer_input;
+  BuyerInputForBidding buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
       kSampleInterestGroupName);
   DecodedBuyerInputs decoded_buyer_inputs;
@@ -1164,7 +1165,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
            BuyerClientFailsWithCorrectOverallStatus) {
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
 
-  BuyerInput buyer_input;
+  BuyerInputForBidding buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(
       kSampleInterestGroupName);
   DecodedBuyerInputs decoded_buyer_inputs;

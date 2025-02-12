@@ -41,12 +41,24 @@ void HttpBiddingSignalsAsyncProvider::Get(
   absl::StatusOr<std::unique_ptr<BiddingSignals>> output =
       std::make_unique<BiddingSignals>();
 
-  for (const auto& interest_group :
-       bidding_signals_request.get_bids_raw_request_.buyer_input()
-           .interest_groups()) {
-    request->interest_group_names.emplace(interest_group.name());
-    request->keys.insert(interest_group.bidding_signals_keys().begin(),
-                         interest_group.bidding_signals_keys().end());
+  if (bidding_signals_request.get_bids_raw_request_
+          .has_buyer_input_for_bidding()) {
+    for (const auto& interest_group :
+         bidding_signals_request.get_bids_raw_request_.buyer_input_for_bidding()
+             .interest_groups()) {
+      request->interest_group_names.emplace(interest_group.name());
+      request->keys.insert(interest_group.bidding_signals_keys().begin(),
+                           interest_group.bidding_signals_keys().end());
+    }
+  } else {
+    // Client supplied the buyer_input field instead.
+    for (const auto& interest_group :
+         bidding_signals_request.get_bids_raw_request_.buyer_input()
+             .interest_groups()) {
+      request->interest_group_names.emplace(interest_group.name());
+      request->keys.insert(interest_group.bidding_signals_keys().begin(),
+                           interest_group.bidding_signals_keys().end());
+    }
   }
 
   auto status = http_buyer_kv_async_client_->Execute(

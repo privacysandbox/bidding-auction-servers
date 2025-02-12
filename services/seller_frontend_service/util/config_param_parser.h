@@ -41,8 +41,7 @@ ParseIgOwnerToBfeDomainMap(absl::string_view ig_owner_to_bfe_domain);
 
 // Iterate over the above IgOwnerToBfeDomain Map into a span of IgOwners.
 std::vector<std::string> FetchIgOwnerList(
-    const absl::StatusOr<
-        absl::flat_hash_map<std::string, BuyerServiceEndpoint>>&
+    const absl::flat_hash_map<std::string, BuyerServiceEndpoint>&
         ig_owner_to_bfe_domain_map);
 
 // Parses a JSON string containing a map of sellers to cloud platforms

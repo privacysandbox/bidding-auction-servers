@@ -528,20 +528,12 @@ TEST(KvSellerSignalsAdapter, ConvertV2ResponseToV1ScoringSignalsSuccess) {
       R"JSON(
       {
         "renderUrls": {
-          "www.exampleRenderUrl.com/ad1": {
-            "value": "scoringSignalForAd1"
-          },
-          "www.exampleRenderUrl.com/ad2": {
-            "value": "scoringSignalForAd2"
-          }
+          "www.exampleRenderUrl.com/ad1": "scoringSignalForAd1",
+          "www.exampleRenderUrl.com/ad2": "scoringSignalForAd2"
         },
         "adComponentRenderUrls": {
-          "www.exampleRenderUrl.com/adComponent1": {
-            "value": "scoringSignalForAdComponent1"
-          },
-          "www.exampleRenderUrl.com/adComponent2": {
-            "value": "scoringSignalForAdComponent2"
-          }
+          "www.exampleRenderUrl.com/adComponent1": "scoringSignalForAdComponent1",
+          "www.exampleRenderUrl.com/adComponent2": "scoringSignalForAdComponent2"
         }
       })JSON";
   auto actual_signals_json = ParseJsonString(*((*result)->scoring_signals));

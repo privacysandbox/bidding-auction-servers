@@ -51,7 +51,7 @@ class ByobDispatchClient : public UdfCodeLoaderInterface {
   //         processed by the implementing class. This should not be confused
   //         with the output of the execution itself, which is sent to callback.
   virtual absl::Status Execute(
-      ServiceRequest request, absl::Duration timeout,
+      const ServiceRequest& request, absl::Duration timeout,
       absl::AnyInvocable<void(absl::StatusOr<ServiceResponse>) &&>
           callback) = 0;
 };

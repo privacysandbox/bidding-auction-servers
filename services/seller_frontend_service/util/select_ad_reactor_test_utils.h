@@ -81,7 +81,7 @@ inline constexpr uint32_t kDefaultSellerDataVersion = 1776;
 inline constexpr char kValidScoringSignalsJson[] =
     R"JSON({"someAdRenderUrl":{"someKey":"someValue"}})JSON";
 inline constexpr char kValidScoringSignalsJsonKvV2[] =
-    R"JSON({"renderUrls":{"someKey":{"value":"someValue"}}})JSON";
+    R"JSON({"renderUrls":{"someKey":"someValue"}})JSON";
 inline constexpr char kKvV2CompressionGroup[] =
     R"pb(compression_groups {
            compression_group_id: 33
@@ -224,13 +224,15 @@ SelectAdResponse RunRequest(
     const ClientRegistry& clients, const SelectAdRequest& request,
     const ReportWinMap& report_win_map, const int max_buyers_solicited = 2,
     const bool enable_kanon = false,
-    const bool enable_buyer_private_aggregate_reporting = false) {
+    const bool enable_buyer_private_aggregate_reporting = false,
+    int per_adtech_paapi_contributions_limit = 100) {
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   T reactor(&context, &request, &response, clients, config_client,
             report_win_map,
             /*enable_cancellation=*/false, enable_kanon,
             enable_buyer_private_aggregate_reporting,
+            per_adtech_paapi_contributions_limit,
             /*fail_fast=*/true, max_buyers_solicited);
   reactor.Execute();
   return response;
@@ -295,16 +297,17 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
     bool is_consented_debug = false, absl::string_view top_level_seller = "",
     EncryptionCloudPlatform top_seller_cloud_platform =
         EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_UNSPECIFIED,
-    bool enable_unlimited_egress = false, bool enforce_kanon = false) {
-  BuyerInput buyer_input;
+    bool enable_unlimited_egress = false, bool enforce_kanon = false,
+    std::string generation_id = kSampleGenerationId) {
+  BuyerInputForBidding buyer_input;
   auto* interest_group = buyer_input.mutable_interest_groups()->Add();
   interest_group->set_name(kSampleInterestGroupName);
   *interest_group->mutable_bidding_signals_keys()->Add() = "[]";
   google::protobuf::RepeatedPtrField<std::string> ad_render_ids;
   ad_render_ids.Add(MakeARandomString());
   interest_group->mutable_browser_signals()->CopyFrom(
-      MakeRandomBrowserSignalsForIG(ad_render_ids));
-  google::protobuf::Map<std::string, BuyerInput> decoded_buyer_inputs;
+      MakeRandomBrowserSignalsForBiddingForIG(ad_render_ids));
+  google::protobuf::Map<std::string, BuyerInputForBidding> decoded_buyer_inputs;
   decoded_buyer_inputs.emplace(kSampleBuyer, buyer_input);
   google::protobuf::Map<std::string, std::string> encoded_buyer_inputs;
   switch (client_type) {
@@ -323,7 +326,7 @@ EncryptedSelectAdRequestWithContext<T> GetSampleSelectAdRequest(
 
   SelectAdRequest request;
   T protected_auction_input;
-  protected_auction_input.set_generation_id(kSampleGenerationId);
+  protected_auction_input.set_generation_id(generation_id);
   protected_auction_input.set_enable_unlimited_egress(enable_unlimited_egress);
   protected_auction_input.set_enforce_kanon(enforce_kanon);
   if (is_consented_debug) {
@@ -417,12 +420,13 @@ GetSelectAdRequestAndClientRegistryForTest(
     ServerComponentAuctionParams server_component_auction_params = {},
     bool enforce_kanon = false,
     const std::vector<ScoreAdsResponse::AdScore>& kanon_ghost_winners = {},
-    std::unique_ptr<KAnonCacheManagerMock> k_anon_cache_manager = nullptr) {
+    std::unique_ptr<KAnonCacheManagerMock> k_anon_cache_manager = nullptr,
+    std::string generation_id = kSampleGenerationId) {
   auto encrypted_request_with_context = GetSampleSelectAdRequest<T>(
       client_type, seller_origin_domain,
       /*is_consented_debug=*/false, top_level_seller,
       server_component_auction_params.top_level_cloud_platform,
-      /*enable_unlimited_egress=*/false, /*enforce_kanon=*/enforce_kanon);
+      /*enable_unlimited_egress=*/false, enforce_kanon, generation_id);
 
   // Sets up buyer client while populating the expected buyer bids that can
   // then be used to setup the scoring signals provider.
@@ -551,14 +555,16 @@ SelectAdResponse RunReactorRequest(
     const ClientRegistry& clients, const SelectAdRequest& request,
     bool enable_kanon = false,
     bool enable_buyer_private_aggregate_reporting = false,
-    bool fail_fast = false, const ReportWinMap& report_win_map = {}) {
+    int per_adtech_paapi_contributions_limit = 100, bool fail_fast = false,
+    const ReportWinMap& report_win_map = {}) {
   metric::SfeContextMap()->Get(&request);
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   T reactor(&context, &request, &response, clients, config_client,
             report_win_map,
             /*enable_cancellation=*/false, enable_kanon,
-            enable_buyer_private_aggregate_reporting, fail_fast);
+            enable_buyer_private_aggregate_reporting,
+            per_adtech_paapi_contributions_limit, fail_fast);
   reactor.Execute();
   return response;
 }

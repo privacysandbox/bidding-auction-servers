@@ -58,7 +58,8 @@ SERVER_START_CMD=$(cat << END
 --enable_protected_audience=${ENABLE_PROTECTED_AUDIENCE} \
 --sfe_tcmalloc_background_release_rate_bytes_per_second=4096 \
 --sfe_tcmalloc_max_total_thread_cache_bytes=10737418240 \
---enable_protected_app_signals=${ENABLE_PROTECTED_APP_SIGNALS} && exit
+--enable_protected_app_signals=${ENABLE_PROTECTED_APP_SIGNALS} \
+--enable_tkv_v2_browser=${ENABLE_TKV_V2_BROWSER} && exit
 END
 )
 

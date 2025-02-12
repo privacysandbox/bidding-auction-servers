@@ -230,8 +230,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
   int buyer_input_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 2);
 
-  auto SetupMockBuyer = [this](const BuyerInput& buyer_input,
-                               absl::string_view buyer_ig_owner) {
+  auto setup_mock_buyer = [this](const BuyerInputForBidding& buyer_input,
+                                 absl::string_view buyer_ig_owner) {
     auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
     EXPECT_CALL(*buyer, ExecuteInternal)
         .Times(1)
@@ -248,8 +248,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
                   buyer_ig_owner);
           EXPECT_EQ(get_bids_request->client_type(),
                     this->request_.client_type());
-          EXPECT_TRUE(
-              diff.Compare(buyer_input, get_bids_request->buyer_input()));
+          EXPECT_TRUE(diff.Compare(
+              buyer_input, get_bids_request->buyer_input_for_bidding()));
           BuyerBlobVersions empty_versions;
           EXPECT_FALSE(
               diff.Compare(empty_versions, get_bids_request->blob_versions()));
@@ -292,8 +292,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
                ErrorVisibility::CLIENT_VISIBLE)
         << "\n\n";
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
-        .WillOnce([SetupMockBuyer, buyer_input](absl::string_view hostname) {
-          return SetupMockBuyer(buyer_input, hostname);
+        .WillOnce([setup_mock_buyer, buyer_input](absl::string_view hostname) {
+          return setup_mock_buyer(buyer_input, hostname);
         });
 
     entries.emplace_back(buyer_ig_owner,
@@ -344,8 +344,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
   int buyer_input_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(buyer_input_count, num_buyers);
 
-  auto SetupMockBuyer = [this](const BuyerInput& buyer_input,
-                               absl::string_view buyer_ig_owner) {
+  auto setup_mock_buyer = [this](const BuyerInputForBidding& buyer_input,
+                                 absl::string_view buyer_ig_owner) {
     auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
     EXPECT_CALL(*buyer, ExecuteInternal)
         .Times(1)
@@ -359,8 +359,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
           diff.ReportDifferencesToString(&diff_output);
           EXPECT_EQ(get_bids_request->client_type(),
                     this->request_.client_type());
-          EXPECT_TRUE(
-              diff.Compare(buyer_input, get_bids_request->buyer_input()));
+          EXPECT_TRUE(diff.Compare(
+              buyer_input, get_bids_request->buyer_input_for_bidding()));
           EXPECT_EQ(this->request_.auction_config().auction_signals(),
                     get_bids_request->auction_signals());
           EXPECT_EQ(this->protected_auction_input_.publisher_name(),
@@ -407,10 +407,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
     EXPECT_FALSE(error_accumulator.HasErrors());
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
         .Times(::testing::AtMost(1))
-        .WillOnce([SetupMockBuyer, buyer_input,
+        .WillOnce([setup_mock_buyer, buyer_input,
                    &num_buyers_solicited](absl::string_view hostname) {
           ++num_buyers_solicited;
-          return SetupMockBuyer(buyer_input, hostname);
+          return setup_mock_buyer(buyer_input, hostname);
         });
     entries.emplace_back(buyer_ig_owner,
                          std::make_shared<BuyerFrontEndAsyncClientMock>());
@@ -463,7 +463,7 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
   int buyer_input_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(buyer_input_count, num_buyers);
 
-  auto SetupMockBuyer = [this](const BuyerInput& buyer_input) {
+  auto setup_mock_buyer = [this](const BuyerInputForBidding& buyer_input) {
     auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
     EXPECT_CALL(*buyer, ExecuteInternal)
         .Times(1)
@@ -477,8 +477,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
           diff.ReportDifferencesToString(&diff_output);
           EXPECT_EQ(get_values_request->client_type(),
                     this->request_.client_type());
-          EXPECT_TRUE(
-              diff.Compare(buyer_input, get_values_request->buyer_input()));
+          EXPECT_TRUE(diff.Compare(
+              buyer_input, get_values_request->buyer_input_for_bidding()));
           EXPECT_EQ(this->request_.auction_config().auction_signals(),
                     get_values_request->auction_signals());
           EXPECT_EQ(this->protected_auction_input_.publisher_name(),
@@ -507,10 +507,10 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
     EXPECT_FALSE(error_accumulator.HasErrors());
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
         .Times(::testing::AtMost(1))
-        .WillOnce([SetupMockBuyer, buyer_input,
+        .WillOnce([setup_mock_buyer, buyer_input,
                    &num_buyers_solicited](absl::string_view hostname) {
           ++num_buyers_solicited;
-          return SetupMockBuyer(buyer_input);
+          return setup_mock_buyer(buyer_input);
         });
     entries.emplace_back(buyer_ig_owner,
                          std::make_shared<BuyerFrontEndAsyncClientMock>());
@@ -562,7 +562,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   int buyer_input_count = this->protected_auction_input_.buyer_input_size();
   EXPECT_EQ(buyer_input_count, 2);
 
-  auto SetupMockBuyer = [this](const BuyerInput& buyer_input) {
+  auto setup_mock_buyer = [this](const BuyerInputForBidding& buyer_input) {
     auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
     EXPECT_CALL(*buyer, ExecuteInternal)
         .Times(1)
@@ -574,8 +574,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
           google::protobuf::util::MessageDifferencer diff;
           std::string diff_output;
           diff.ReportDifferencesToString(&diff_output);
-          EXPECT_TRUE(
-              diff.Compare(buyer_input, get_values_request->buyer_input()));
+          EXPECT_TRUE(diff.Compare(
+              buyer_input, get_values_request->buyer_input_for_bidding()));
           EXPECT_EQ(this->protected_auction_input_.enable_debug_reporting(),
                     get_values_request->enable_debug_reporting());
           EXPECT_EQ(request_config.chaff_request_size, 0);
@@ -598,8 +598,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
         error_accumulator);
     EXPECT_FALSE(error_accumulator.HasErrors());
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
-        .WillOnce([SetupMockBuyer, buyer_input](absl::string_view hostname) {
-          return SetupMockBuyer(buyer_input);
+        .WillOnce([setup_mock_buyer, buyer_input](absl::string_view hostname) {
+          return setup_mock_buyer(buyer_input);
         });
     entries.emplace_back(buyer_ig_owner,
                          std::make_shared<BuyerFrontEndAsyncClientMock>());
@@ -1072,11 +1072,12 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
   std::vector<PrivateAggregateContribution> contributions = {
       win_object_contribution, loss_object_contribution, win_int_contribution,
       loss_int_contribution};
-  for (const auto& [buyer, buyerInput] : decoded_buyer_inputs) {
-    EXPECT_EQ(buyerInput.interest_groups_size(), 1);
+  for (const auto& [buyer, buyer_input_for_bidding] : decoded_buyer_inputs) {
+    EXPECT_EQ(buyer_input_for_bidding.interest_groups_size(), 1);
     auto get_bid_response = BuildGetBidsResponseWithSingleAd(
         buyer_to_ad_url.at(buyer),
-        {.interest_group_name = buyerInput.interest_groups().Get(0).name(),
+        {.interest_group_name =
+             buyer_input_for_bidding.interest_groups().Get(0).name(),
          .contributions = contributions});
     EXPECT_FALSE(get_bid_response.bids(0).render().empty());
     EXPECT_EQ(get_bid_response.bids(0).ad_components_size(),
@@ -1127,13 +1128,13 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
               this->protected_auction_input_.buyer_input()
                   .find(bid.interest_group_owner())
                   ->second;
-          BuyerInput decoded_buyer_input =
+          BuyerInputForBidding decoded_buyer_input =
               DecodeBuyerInput(bid.interest_group_owner(), encoded_buyer_input,
                                error_accumulator);
           EXPECT_FALSE(error_accumulator.HasErrors());
           EXPECT_EQ(decoded_buyer_input.interest_groups_size(), 1);
-          for (const BuyerInput::InterestGroup& interest_group :
-               decoded_buyer_input.interest_groups()) {
+          for (const BuyerInputForBidding::InterestGroupForBidding&
+                   interest_group : decoded_buyer_input.interest_groups()) {
             if (interest_group.name() == bid.interest_group_name()) {
               EXPECT_EQ(bid.join_count(),
                         interest_group.browser_signals().join_count());
@@ -1188,7 +1189,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
       this->config_, clients, this->request_, this->report_win_map_,
       /*max_buyers_solicited=*/3,
       /*enable_kanon=*/false,
-      /*enable_buyer_private_aggregate_reporting=*/true);
+      /*enable_buyer_private_aggregate_reporting=*/true,
+      /*per_adtech_paapi_contributions_limit=*/100);
   scoring_done.Wait();
 
   AuctionResult auction_result =
@@ -1439,13 +1441,13 @@ TYPED_TEST(SellerFrontEndServiceTest,
               this->protected_auction_input_.buyer_input()
                   .find(ad_with_bid_metadata.interest_group_owner())
                   ->second;
-          BuyerInput decoded_buyer_input =
+          BuyerInputForBidding decoded_buyer_input =
               DecodeBuyerInput(ad_with_bid_metadata.interest_group_owner(),
                                encoded_buyer_input, error_accumulator);
           EXPECT_FALSE(error_accumulator.HasErrors());
           EXPECT_EQ(decoded_buyer_input.interest_groups_size(), 1);
-          for (const BuyerInput::InterestGroup& interest_group :
-               decoded_buyer_input.interest_groups()) {
+          for (const BuyerInputForBidding::InterestGroupForBidding&
+                   interest_group : decoded_buyer_input.interest_groups()) {
             if (interest_group.name() ==
                 ad_with_bid_metadata.interest_group_name()) {
               EXPECT_EQ(ad_with_bid_metadata.join_count(),
@@ -1523,7 +1525,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   const std::string unexpected_ig_1 = "unexpected_interest_group_1";
   const std::string unexpected_ig_2 = "unexpected_interest_group_2";
   const std::string buyer = "ad_tech_A.com";
-  BuyerInput buyer_input;
+  BuyerInputForBidding buyer_input;
   buyer_input.mutable_interest_groups()->Add()->set_name(expected_ig_1);
   buyer_input.mutable_interest_groups()->Add()->set_name(expected_ig_2);
   buyer_input.mutable_interest_groups()->Add()->set_name(unexpected_ig_1);
@@ -1532,7 +1534,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
   // Setup a SelectAdRequest with the aforementioned buyer input.
   this->request_ = SelectAdRequest();
   this->request_.mutable_auction_config()->set_seller(kSellerOriginDomain);
-  google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
+  google::protobuf::Map<std::string, BuyerInputForBidding> buyer_inputs;
   buyer_inputs.emplace(buyer, buyer_input);
   auto encoded_buyer_inputs = GetEncodedBuyerInputMap(buyer_inputs);
   EXPECT_TRUE(encoded_buyer_inputs.ok());
@@ -2550,7 +2552,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
   GetBidsResponse::GetBidsRawResponse response;
 
   // Set up buyer calls for chaff buyer.
-  auto MockGetBids =
+  auto mock_get_bids =
       [response](
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
           grpc::ClientContext* context, GetBidDoneCallback on_done,
@@ -2566,21 +2568,21 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
             /*response_metadata=*/{});
         return absl::OkStatus();
       };
-  auto SetupMockBuyer =
-      [MockGetBids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+  auto setup_mock_buyer =
+      [mock_get_bids](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
         EXPECT_CALL(*buyer, ExecuteInternal)
             .Times(testing::Exactly(1))
-            .WillRepeatedly(MockGetBids);
+            .WillRepeatedly(mock_get_bids);
         return buyer;
       };
 
-  auto MockBuyerFactoryCall =
-      [SetupMockBuyer](absl::string_view chaff_buyer_name) {
-        return SetupMockBuyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
-      };
+  auto mock_buyer_Factory_call = [setup_mock_buyer](
+                                     absl::string_view chaff_buyer_name) {
+    return setup_mock_buyer(std::make_unique<BuyerFrontEndAsyncClientMock>());
+  };
   EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(chaff_buyer_name))
       .Times(testing::Exactly(1))
-      .WillRepeatedly(MockBuyerFactoryCall);
+      .WillRepeatedly(mock_buyer_Factory_call);
 
   // Have the Entries() call on the buyer factory return the 'real' and chaff
   // buyer.
@@ -2624,6 +2626,139 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
   EXPECT_EQ(auction_result->bid(), winning_bid);
 }
 
+TYPED_TEST(SellerFrontEndServiceTest, VerifyChaffCandidatesAreRandomlyChosen) {
+  // For chaffing, it's expected that the chaff request candidates list is
+  // shuffled so the chaff buyer is chosen randomly. This test simulates 100
+  // SelectAd requests, each producing two chaff buyer candidates (A and B). The
+  // test confirms that both A and B are selected as the sole chaff buyer at
+  // least once, demonstrating that the chaff candidate list is shuffled before
+  // a buyer is chosen.
+  this->config_.SetOverride(kTrue, ENABLE_CHAFFING);
+
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  const float winning_bid = 999.0F;
+
+  // Set up buyer calls for chaff buyer 1.
+  std::string chaff_buyer1_name = "chaff_buyer1";
+  GetBidsResponse::GetBidsRawResponse response;
+  absl::Time buyer1_invocation_time;
+  auto mock_get_bids1 =
+      [response, &buyer1_invocation_time](
+          std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
+          grpc::ClientContext* context, GetBidDoneCallback on_done,
+          absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_TRUE(get_bids_request->is_chaff());
+        std::move(on_done)(
+            std::make_unique<GetBidsResponse::GetBidsRawResponse>(response),
+            /*response_metadata=*/{});
+        buyer1_invocation_time = absl::Now();
+        return absl::OkStatus();
+      };
+  auto setup_mock_buyer1 =
+      [mock_get_bids1](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal).WillRepeatedly(mock_get_bids1);
+        return buyer;
+      };
+  auto mock_buyer_Factory_call1 = [setup_mock_buyer1](
+                                      absl::string_view chaff_buyer_name) {
+    return setup_mock_buyer1(std::make_unique<BuyerFrontEndAsyncClientMock>());
+  };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(chaff_buyer1_name))
+      .WillRepeatedly(mock_buyer_Factory_call1);
+
+  std::string chaff_buyer2_name = "chaff_buyer2";
+  absl::Time buyer2_invocation_time;
+  auto mock_get_bids2 =
+      [response, &buyer2_invocation_time](
+          std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
+          grpc::ClientContext* context, GetBidDoneCallback on_done,
+          absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_TRUE(get_bids_request->is_chaff());
+        std::move(on_done)(
+            std::make_unique<GetBidsResponse::GetBidsRawResponse>(response),
+            /*response_metadata=*/{});
+        buyer2_invocation_time = absl::Now();
+        return absl::OkStatus();
+      };
+  auto setup_mock_buyer2 =
+      [mock_get_bids2](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal).WillRepeatedly(mock_get_bids2);
+        return buyer;
+      };
+  auto mock_buyer_Factory_call2 = [setup_mock_buyer2](
+                                      absl::string_view chaff_buyer_name) {
+    return setup_mock_buyer2(std::make_unique<BuyerFrontEndAsyncClientMock>());
+  };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(chaff_buyer2_name))
+      .WillRepeatedly(mock_buyer_Factory_call2);
+
+  // Mock Entries() on the buyer factory return the 'real' and chaff buyers.
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
+      entries;
+  entries.emplace_back(kSampleBuyer,  // The non-chaff buyer.
+                       std::make_shared<BuyerFrontEndAsyncClientMock>());
+  entries.emplace_back(chaff_buyer1_name,
+                       std::make_shared<BuyerFrontEndAsyncClientMock>());
+  entries.emplace_back(chaff_buyer2_name,
+                       std::make_shared<BuyerFrontEndAsyncClientMock>());
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Entries)
+      .WillRepeatedly(Return(std::move(entries)));
+
+  // Run the reactor 100 times and validate that, on separate runs, both chaff
+  // request candidates are chosen as the only chaff buyer.
+  bool buyer1_invoked_first = false, buyer2_invoked_first = false;
+  for (int i = 0; i < 100; i++) {
+    absl::Time test_start_time = absl::Now();
+    auto [request_with_context, clients] =
+        GetSelectAdRequestAndClientRegistryForTest<
+            typename TypeParam::InputType, TypeParam::kUseKvV2ForBrowser>(
+            CLIENT_TYPE_BROWSER, winning_bid, &scoring_signals_provider,
+            scoring_client, buyer_front_end_async_client_factory_mock,
+            &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+            kSellerOriginDomain, false, "", false, false, {}, false, {},
+            nullptr, MakeARandomString());
+    SelectAdRequest select_ad_request =
+        std::move(request_with_context.select_ad_request);
+    *select_ad_request.mutable_auction_config()->mutable_buyer_list()->Add() =
+        chaff_buyer1_name;
+    *select_ad_request.mutable_auction_config()->mutable_buyer_list()->Add() =
+        chaff_buyer2_name;
+    (void)RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients,
+                                                   select_ad_request);
+
+    // Both chaff buyers were invoked; ignore this run since the test needs to
+    // look at cases where only 1 chaff request was sent.
+    if (buyer1_invocation_time > test_start_time &&
+        buyer2_invocation_time > test_start_time) {
+      continue;
+    }
+
+    // Verify that in different runs, buyer1 and buyer2 were each invoked,
+    // implying the server randomly selects a chaff buyer from the list of
+    // candidates.
+    buyer1_invoked_first =
+        buyer1_invoked_first || (buyer1_invocation_time > test_start_time);
+    buyer2_invoked_first =
+        buyer2_invoked_first || (buyer2_invocation_time > test_start_time);
+    if (buyer1_invoked_first && buyer2_invoked_first) {
+      return;
+    }
+  }
+
+  FAIL() << "Chaff request candidates are likely not being shuffled";
+}
+
 TYPED_TEST(SellerFrontEndServiceTest, VerifyPrioritySignals) {
   const absl::string_view kPriorityJsonTemplate =
       R"({"priority_field_key":$0})";
@@ -2662,9 +2797,9 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyPrioritySignals) {
   KVAsyncClientMock kv_async_client;
 
   bool success = true;
-  auto SetupMockBuyer = [&expected_priority_signals_jsons, &success](
-                            const BuyerInput& buyer_input,
-                            absl::string_view buyer_ig_owner) {
+  auto setup_mock_buyer = [&expected_priority_signals_jsons, &success](
+                              const BuyerInputForBidding& buyer_input,
+                              absl::string_view buyer_ig_owner) {
     auto buyer = std::make_unique<BuyerFrontEndAsyncClientMock>();
     EXPECT_CALL(*buyer, ExecuteInternal)
         .Times(1)
@@ -2695,13 +2830,13 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyPrioritySignals) {
       entries;
   for (const auto& buyer_ig_owner :
        this->request_.auction_config().buyer_list()) {
-    const BuyerInput& buyer_input = DecodeBuyerInput(
+    const BuyerInputForBidding& buyer_input = DecodeBuyerInput(
         buyer_ig_owner,
         this->protected_auction_input_.buyer_input().at(buyer_ig_owner),
         error_accumulator);
     EXPECT_CALL(buyer_clients, Get(buyer_ig_owner))
-        .WillOnce([SetupMockBuyer, buyer_input](absl::string_view hostname) {
-          return SetupMockBuyer(buyer_input, hostname);
+        .WillOnce([setup_mock_buyer, buyer_input](absl::string_view hostname) {
+          return setup_mock_buyer(buyer_input, hostname);
         });
 
     entries.emplace_back(buyer_ig_owner,

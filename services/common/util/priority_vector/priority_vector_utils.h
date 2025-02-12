@@ -60,7 +60,8 @@ absl::StatusOr<std::string> GetBuyerPrioritySignals(
 // groups without an entry in per_ig_priority_vectors will be assigned a
 // priority of 0.
 absl::flat_hash_map<std::string, double> CalculateInterestGroupPriorities(
-    rapidjson::Document& priority_signals, const BuyerInput& buyer_input,
+    rapidjson::Document& priority_signals,
+    const BuyerInputForBidding& buyer_input,
     const absl::flat_hash_map<std::string, rapidjson::Value>&
         per_ig_priority_vectors);
 

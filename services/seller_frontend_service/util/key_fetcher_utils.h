@@ -18,10 +18,12 @@
 #define SERVICES_SELLER_FRONTEND_SERVICE_UTIL_KEY_FETCHER_UTILS_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
+#include "services/seller_frontend_service/util/config_param_parser.h"
 #include "src/encryption/key_fetcher/interface/public_key_fetcher_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -48,9 +50,19 @@ using PlatformToPublicKeyServiceEndpointMap = absl::flat_hash_map<
 absl::StatusOr<PlatformToPublicKeyServiceEndpointMap>
 ParseCloudPlatformPublicKeysMap(absl::string_view public_keys_endpoint_map_str);
 
+// Validates the cloud platform of every buyer is present in the SFE's public
+// key endpoint map.
+absl::Status ValidateSfePublicKeyEndpoints(
+    const PlatformToPublicKeyServiceEndpointMap& endpoints_map,
+    const absl::flat_hash_map<std::string, BuyerServiceEndpoint>&
+        buyer_server_hosts);
+
 // Creates an instance of PublicKeyFetcherInterface.
 absl::StatusOr<std::unique_ptr<server_common::PublicKeyFetcherInterface>>
-CreateSfePublicKeyFetcher(const TrustedServersConfigClient& config_client);
+CreateSfePublicKeyFetcher(
+    const TrustedServersConfigClient& config_client,
+    const absl::flat_hash_map<std::string, BuyerServiceEndpoint>&
+        buyer_server_hosts);
 
 server_common::CloudPlatform ProtoCloudPlatformToScpCloudPlatform(
     EncryptionCloudPlatform cloud_platform);

@@ -80,7 +80,7 @@ ABSL_FLAG(std::optional<bool>, enable_debug_info, std::nullopt,
           "Set to true to send a request to an SFE server with "
           "DebugInfo enabled for this request");
 
-ABSL_FLAG(bool, enforce_kanon, false,
+ABSL_FLAG(std::optional<bool>, enforce_kanon, std::nullopt,
           "If set to true SFE will validate run k-anonymity check on the ads "
           "participating in the auction");
 

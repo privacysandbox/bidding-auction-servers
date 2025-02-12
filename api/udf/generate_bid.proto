@@ -141,12 +141,9 @@ message ProtectedAudienceBrowserSignals {
 
   string top_level_seller = 3 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Top level seller origin/domain passed in case of component auctions.'}];
 
-  int64 join_count = 4 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Number of times the Interest Group was joined in the last 30 days.'}];
+  int64 join_count = 4 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Number of times the Interest Group was joined in the last "n" days.'}];
 
-  int64 bid_count = 5 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
-      'Number of times the Interest Group bid in an auction in the last 30'
-      ' days.'
-}];
+  int64 bid_count = 5 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description: 'Number of times the Interest Group bid in an auction in the last "n" days.'}];
 
   int64 recency = 6 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
       'The most recent join time for the Interest Group expressed in'
@@ -155,7 +152,7 @@ message ProtectedAudienceBrowserSignals {
 
   string prev_wins = 7 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
       'Tuple of time-ad pairs for a previous win for the Interest Group that'
-      ' occurred in the last 30 days. The time is specified in seconds'
+      ' occurred in the last "n" days. The time is specified in seconds'
       ' before the containing auctionBlob was requested.'
 }];
 
@@ -167,6 +164,12 @@ message ProtectedAudienceBrowserSignals {
       ' generation. For Protected Audience, the limit would be enforced on'
       ' generateBid() execution per Interest Group. If the seller doesn\'t set'
       ' the limit, a default would be set by the Bidding server.'
+}];
+
+  string prev_wins_ms = 9 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
+      'Tuple of time-ad pairs for a previous win for the Interest Group that'
+      ' occurred in the last "n" days. The time is specified in milliseconds'
+      ' before the containing auctionBlob was requested.'
 }];
 }
 // (-- LINT.ThenChange(/api/bidding_auction_servers.proto:browser_signals_bidding) --)

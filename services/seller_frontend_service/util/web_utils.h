@@ -81,6 +81,8 @@ inline constexpr char kBrowserSignalsRecency[] = "browserSignals[x].recency";
 inline constexpr char kBrowserSignalsRecencyMs[] =
     "browserSignals[x].recencyMs";
 inline constexpr char kBrowserSignalsPrevWins[] = "browserSignals[x].prevWins";
+inline constexpr char kBrowserSignalsPrevWinsMs[] =
+    "browserSignals[x].prevWinsMs";
 inline constexpr char kPrevWinsEntry[] = "browserSignals[x].prevWins[y]";
 inline constexpr char kPrevWinsTimeEntry[] = "browserSignals[x].prevWins[y][0]";
 inline constexpr char kPrevWinsAdRenderIdEntry[] =
@@ -144,6 +146,7 @@ absl::StatusOr<std::string> Encode(
     const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
     const std::function<void(const grpc::Status&)>& error_handler,
+    int per_adtech_paapi_contributions_limit = 0,
     absl::string_view ad_auction_result_nonce = "",
     std::unique_ptr<KAnonAuctionResultData> kanon_auction_result_data =
         nullptr);
@@ -344,16 +347,16 @@ absl::Status CborSerializeUpdateGroups(
 
 // Decodes the decompressed but CBOR encoded BuyerInput map to a mapping from
 // owner => BuyerInput. Errors are reported to `error_accumulator`.
-absl::flat_hash_map<absl::string_view, BuyerInput> DecodeBuyerInputs(
+absl::flat_hash_map<absl::string_view, BuyerInputForBidding> DecodeBuyerInputs(
     const google::protobuf::Map<std::string, std::string>& encoded_buyer_inputs,
     ErrorAccumulator& error_accumulator, bool fail_fast = true);
 
 // Decompresses and the decodes the CBOR encoded and compressed BuyerInput.
 // Errors are reported to `error_accumulator`.
-BuyerInput DecodeBuyerInput(absl::string_view owner,
-                            absl::string_view compressed_buyer_input,
-                            ErrorAccumulator& error_accumulator,
-                            bool fail_fast = true);
+BuyerInputForBidding DecodeBuyerInput(absl::string_view owner,
+                                      absl::string_view compressed_buyer_input,
+                                      ErrorAccumulator& error_accumulator,
+                                      bool fail_fast = true);
 
 // Minimally encodes an unsigned int into CBOR. Caller is responsible for
 // decrementing the reference once done with the returned int.

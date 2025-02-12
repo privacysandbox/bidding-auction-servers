@@ -28,7 +28,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 namespace {
 
-absl::Duration GetRecency(const BrowserSignals& browser_signals) {
+absl::Duration GetRecency(const BrowserSignalsForBidding& browser_signals) {
   int64_t recency_ms;
   if (browser_signals.has_recency_ms()) {
     recency_ms = browser_signals.recency_ms();
@@ -57,8 +57,9 @@ double CalculateDotProduct(const rapidjson::Document& vector1,
   return priority;
 }
 
-void PopulateDeviceSignalFields(rapidjson::Document& priority_signals,
-                                const BrowserSignals& browser_signals) {
+void PopulateDeviceSignalFields(
+    rapidjson::Document& priority_signals,
+    const BrowserSignalsForBidding& browser_signals) {
   absl::AnyInvocable<void(const char*, double)> add_or_update_value =
       [&priority_signals](const char* key, double value) {
         rapidjson::Value key_value(key, priority_signals.GetAllocator());
@@ -163,12 +164,13 @@ absl::StatusOr<std::string> GetBuyerPrioritySignals(
 }
 
 absl::flat_hash_map<std::string, double> CalculateInterestGroupPriorities(
-    rapidjson::Document& priority_signals, const BuyerInput& buyer_input,
+    rapidjson::Document& priority_signals,
+    const BuyerInputForBidding& buyer_input,
     const absl::flat_hash_map<std::string, rapidjson::Value>&
         per_ig_priority_vectors) {
   absl::flat_hash_map<std::string, double> priorities_by_ig;
 
-  for (const BuyerInput::InterestGroup& interest_group :
+  for (const BuyerInputForBidding::InterestGroupForBidding& interest_group :
        buyer_input.interest_groups()) {
     PopulateDeviceSignalFields(priority_signals,
                                interest_group.browser_signals());

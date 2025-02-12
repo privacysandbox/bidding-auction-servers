@@ -49,9 +49,11 @@ GetBidsRequest::GetBidsRawRequest CreateGetBidsRawRequest(
         kTestContextualPasAdRenderId;
   }
   if (add_protected_audience_input) {
-    *raw_request.mutable_buyer_input() = MakeARandomBuyerInput();
-    auto interest_group =
-        raw_request.mutable_buyer_input()->mutable_interest_groups()->Add();
+    *raw_request.mutable_buyer_input_for_bidding() =
+        MakeARandomBuyerInputForBidding();
+    auto interest_group = raw_request.mutable_buyer_input_for_bidding()
+                              ->mutable_interest_groups()
+                              ->Add();
     interest_group->set_name("ig_name");
     interest_group->add_bidding_signals_keys("key");
   }
@@ -64,6 +66,7 @@ GetBidsRequest CreateGetBidsRequest(bool add_protected_signals_input,
   GetBidsRequest get_bids_request;
   auto raw_request = CreateGetBidsRawRequest(
       add_protected_signals_input, add_protected_audience_input, client_type);
+  raw_request.PrintDebugString();
   get_bids_request.set_request_ciphertext(raw_request.SerializeAsString());
   get_bids_request.set_key_id(kTestKeyId);
   return get_bids_request;

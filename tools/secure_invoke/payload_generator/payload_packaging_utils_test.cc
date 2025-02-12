@@ -100,9 +100,9 @@ TEST(PackagePayloadForBrowserTest, GeneratesAValidBrowserPayload) {
 // by PackageBuyerInputsForBrowser method is correctly parsed in the
 // SelectAdReactor.
 TEST(PackageBuyerInputsForBrowserTest, GeneratesAValidBuyerInputMap) {
-  BuyerInput expected = MakeARandomBuyerInput();
+  BuyerInputForBidding expected = MakeARandomBuyerInputForBidding();
   std::string owner = MakeARandomString();
-  google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
+  google::protobuf::Map<std::string, BuyerInputForBidding> buyer_inputs;
   buyer_inputs.insert({owner, expected});
   absl::StatusOr<google::protobuf::Map<std::string, std::string>> output =
       PackageBuyerInputsForBrowser(buyer_inputs);
@@ -114,14 +114,21 @@ TEST(PackageBuyerInputsForBrowserTest, GeneratesAValidBuyerInputMap) {
   const auto& buyer_input_it = output->find(owner);
   ASSERT_NE(buyer_input_it, output->end());
   ErrorAccumulator error_accumulator;
-  absl::StatusOr<BuyerInput> actual =
+  BuyerInputForBidding actual =
       DecodeBuyerInput(owner, buyer_input_it->second, error_accumulator);
-  ASSERT_TRUE(actual.ok()) << actual.status();
+
+  // We have to manually set this field because even though only prev_wins is
+  // passed into the SFE request object, the SFE reads the field and sets *both*
+  // prev_wins and prev_wins_ms when decoding.
+  expected.mutable_interest_groups(0)
+      ->mutable_browser_signals()
+      ->set_prev_wins_ms(
+          actual.interest_groups(0).browser_signals().prev_wins_ms());
 
   google::protobuf::util::MessageDifferencer diff;
   std::string difference;
   diff.ReportDifferencesToString(&difference);
-  EXPECT_TRUE(diff.Compare(*actual, expected)) << difference;
+  EXPECT_TRUE(diff.Compare(actual, expected)) << difference;
 }
 
 // This test follows the exact steps for encoding and encryption for the
@@ -142,7 +149,8 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   // Encode.
   auto encoded_data = Encode(
       input, expected.bidding_groups(), expected.update_groups(),
-      /*error=*/std::nullopt, [](const grpc::Status& status) {}, nonce);
+      /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*per_adtech_paapi_contributions_limit=*/100, nonce);
   ASSERT_TRUE(encoded_data.ok()) << encoded_data.status();
 
   // Compress.
@@ -217,9 +225,9 @@ TEST(PackagePayloadForAppTest, GeneratesAValidAppPayload) {
 }
 
 TEST(PackageBuyerInputsForAppTest, GeneratesAValidBuyerInputMap) {
-  BuyerInput expected = MakeARandomBuyerInput();
+  BuyerInputForBidding expected = MakeARandomBuyerInputForBidding();
   std::string owner = MakeARandomString();
-  google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
+  google::protobuf::Map<std::string, BuyerInputForBidding> buyer_inputs;
   buyer_inputs.insert({owner, expected});
   absl::StatusOr<google::protobuf::Map<std::string, std::string>> output =
       PackageBuyerInputsForApp(buyer_inputs);
@@ -233,7 +241,7 @@ TEST(PackageBuyerInputsForAppTest, GeneratesAValidBuyerInputMap) {
   auto decompressed_buyer_input = GzipDecompress(buyer_input_it->second);
   ASSERT_TRUE(decompressed_buyer_input.ok())
       << decompressed_buyer_input.status();
-  BuyerInput actual;
+  BuyerInputForBidding actual;
   ASSERT_TRUE(actual.ParseFromArray(decompressed_buyer_input->data(),
                                     decompressed_buyer_input->size()));
 

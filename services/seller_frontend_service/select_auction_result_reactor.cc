@@ -382,7 +382,8 @@ SelectAuctionResultReactor::SelectAuctionResultReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client, bool enable_cancellation,
-    bool enable_buyer_private_aggregate_reporting, bool enable_kanon)
+    bool enable_buyer_private_aggregate_reporting,
+    int per_adtech_paapi_contributions_limit, bool enable_kanon)
     : request_context_(context),
       request_(request),
       response_(response),

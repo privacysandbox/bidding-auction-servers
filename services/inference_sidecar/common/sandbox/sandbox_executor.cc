@@ -150,6 +150,11 @@ void AllowTensorFlow(sandbox2::PolicyBuilder& builder) {
   builder.AllowReaddir();
 }
 
+void AllowAmx(sandbox2::PolicyBuilder& builder) {
+  // arch_prctl is required for Intel AMX.
+  builder.AllowSyscall(__NR_arch_prctl);
+}
+
 std::unique_ptr<sandbox2::Policy> MakePolicy() {
   if (absl::GetFlag(FLAGS_testonly_disable_sandbox)) {
     return sandbox2::PolicyBuilder()
@@ -167,6 +172,7 @@ std::unique_ptr<sandbox2::Policy> MakePolicy() {
   AllowAws(builder);
   AllowPyTorch(builder);
   AllowTensorFlow(builder);
+  AllowAmx(builder);
   builder.AllowStaticStartup().AllowLogForwarding();
 
   return builder.BuildOrDie();

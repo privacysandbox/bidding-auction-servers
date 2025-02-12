@@ -107,7 +107,7 @@ class CostEstimator:
                 # only add values from metrics that can be converted to floats
                 float(value)
                 self._expression_evaluator.add_to_context(metric, value)
-            except:
+            except Exception:
                 pass
 
         # Add all the defined values to the context.

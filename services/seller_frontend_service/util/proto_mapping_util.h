@@ -162,9 +162,12 @@ ProtectedAuctionInput DecryptProtectedAuctionInput(
 
 // Gets the bidding groups after scoring is done.
 google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
-GetBiddingGroups(
-    const BuyerBidsResponseMap& shared_buyer_bids_map,
-    const absl::flat_hash_map<absl::string_view, BuyerInput>& buyer_inputs);
+GetBiddingGroups(const BuyerBidsResponseMap& shared_buyer_bids_map,
+                 const absl::flat_hash_map<absl::string_view,
+                                           BuyerInputForBidding>& buyer_inputs);
+
+BuyerInput GenerateExternalBuyerInput(
+    const BuyerInputForBidding& buyer_input_for_bidding);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

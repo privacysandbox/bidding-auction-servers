@@ -24,5 +24,6 @@ ABSL_DECLARE_FLAG(bool, enable_temporary_unlimited_egress);
 ABSL_DECLARE_FLAG(bool, enable_cancellation);
 ABSL_DECLARE_FLAG(bool, enable_kanon);
 ABSL_DECLARE_FLAG(bool, enable_buyer_private_aggregate_reporting);
+ABSL_DECLARE_FLAG(int, per_adtech_paapi_contributions_limit);
 
 #endif  // SERVICES_COMMON_FEATURE_FLAGS_H_

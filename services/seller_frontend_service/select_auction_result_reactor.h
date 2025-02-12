@@ -54,6 +54,7 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
       const TrustedServersConfigClient& config_client,
       bool enable_cancellation = false,
       bool enable_buyer_private_aggregate_reporting = false,
+      int per_adtech_paapi_contributions_limit = 100,
       bool enable_kanon = false);
   virtual ~SelectAuctionResultReactor() = default;
 

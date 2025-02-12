@@ -53,12 +53,12 @@ PerBuyerConfigMap CreatePerBuyerConfig(
   return per_buyer_config;
 }
 
-BuyerInput::InterestGroup CreateInterestGroup(const std::string& name,
-                                              absl::Duration ig_age) {
-  BrowserSignals browser_signals;
+BuyerInputForBidding::InterestGroupForBidding CreateInterestGroup(
+    const std::string& name, absl::Duration ig_age) {
+  BrowserSignalsForBidding browser_signals;
   browser_signals.set_recency_ms(absl::ToInt64Milliseconds(ig_age));
 
-  BuyerInput::InterestGroup interest_group;
+  BuyerInputForBidding::InterestGroupForBidding interest_group;
   interest_group.set_name(name);
   *interest_group.mutable_browser_signals() = std::move(browser_signals);
 
@@ -171,7 +171,7 @@ TEST_F(PriorityVectorUtilsTest,
                             priority_vector_doc.GetAllocator());
 
   absl::Duration ig_age = absl::Minutes(30);
-  BuyerInput::InterestGroup interest_group =
+  BuyerInputForBidding::InterestGroupForBidding interest_group =
       CreateInterestGroup("ig_name", ig_age);
 
   rapidjson::Value priority_vector_copy(rapidjson::kObjectType);
@@ -180,7 +180,7 @@ TEST_F(PriorityVectorUtilsTest,
   per_ig_priority_vectors[interest_group.name()] =
       std::move(priority_vector_copy);
 
-  BuyerInput buyer_input;
+  BuyerInputForBidding buyer_input;
   *buyer_input.mutable_interest_groups()->Add() = std::move(interest_group);
 
   double expected_priority =

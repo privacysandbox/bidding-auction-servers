@@ -254,7 +254,7 @@ inline constexpr server_common::metrics::Definition<
 inline constexpr server_common::metrics::Definition<
     double, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kHistogram>
-    kNonKAnonCacheHitPercentage("sfe.k_anon_cache.hit_percentage",
+    kNonKAnonCacheHitPercentage("sfe.non_k_anon_cache.hit_percentage",
                                 "Percentage of hashes that can be found in "
                                 "non-k-anon cache",
                                 kPercentHistogram, 1, 0);

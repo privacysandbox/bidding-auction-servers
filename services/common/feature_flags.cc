@@ -35,3 +35,6 @@ ABSL_FLAG(bool, enable_kanon, true,
 ABSL_FLAG(bool, enable_buyer_private_aggregate_reporting, true,
           "If true, private aggregate reports from the buyers will be "
           "processed and sent to the device.");
+
+ABSL_FLAG(int, per_adtech_paapi_contributions_limit, 100,
+          "Max number of private aggregate contributions per adtech");

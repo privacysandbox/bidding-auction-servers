@@ -135,7 +135,8 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
     const RequestOptions& request_options, ClientType client_type,
     const HpkeKeyset& keyset, std::optional<bool> enable_debug_reporting,
     std::optional<bool> enable_debug_info,
-    std::optional<bool> enable_unlimited_egress, bool enforce_kanon,
+    std::optional<bool> enable_unlimited_egress,
+    std::optional<bool> enforce_kanon,
     absl::AnyInvocable<void(absl::StatusOr<std::string>) &&> on_done) {
   // Validate input
   if (request_options.host_addr.empty()) {
@@ -279,7 +280,7 @@ absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
                               std::optional<bool> enable_debug_reporting,
                               std::optional<bool> enable_debug_info,
                               std::optional<bool> enable_unlimited_egress,
-                              bool enforce_kanon) {
+                              std::optional<bool> enforce_kanon) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
     raw_select_ad_request_json = LoadFile(absl::GetFlag(FLAGS_input_file));

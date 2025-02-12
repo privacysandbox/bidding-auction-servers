@@ -28,6 +28,7 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "services/common/compression/gzip.h"
+#include "services/common/util/json_util.h"
 #include "services/seller_frontend_service/private_aggregation/private_aggregation_helper.h"
 #include "services/seller_frontend_service/util/cbor_common_util.h"
 #include "src/util/status_macro/status_macros.h"
@@ -42,7 +43,8 @@ using BiddingGroupMap =
 using InteractionUrlMap = ::google::protobuf::Map<std::string, std::string>;
 using RepeatedStringProto = ::google::protobuf::RepeatedPtrField<std::string>;
 using EncodedBuyerInputs = ::google::protobuf::Map<std::string, std::string>;
-using DecodedBuyerInputs = absl::flat_hash_map<absl::string_view, BuyerInput>;
+using DecodedBuyerInputs =
+    absl::flat_hash_map<absl::string_view, BuyerInputForBidding>;
 using GhostWinnerForTopLevelAuction =
     AuctionResult::KAnonGhostWinner::GhostWinnerForTopLevelAuction;
 using GhostWinnerPrivateAggregationSignals =
@@ -102,19 +104,24 @@ RepeatedStringProto DecodeStringArray(absl::Span<cbor_item_t*> span,
 }
 
 // Collects the prevWins arrays into a JSON array and stringifies the result.
-absl::StatusOr<std::string> GetStringifiedPrevWins(
+std::pair<std::string, std::string> GetStringifiedPrevWins(
     absl::Span<cbor_item_t*> prev_wins_entries, absl::string_view owner,
     ErrorAccumulator& error_accumulator, bool fail_fast) {
-  rapidjson::Document document;
-  document.SetArray();
-  rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+  rapidjson::Document document_seconds;
+  document_seconds.SetArray();
+  rapidjson::Document::AllocatorType& allocator_seconds =
+      document_seconds.GetAllocator();
+
+  rapidjson::Document document_ms;
+  document_ms.SetArray();
+  rapidjson::Document::AllocatorType& allocator_ms = document_ms.GetAllocator();
 
   // Previous win entries should be in the form [relative_time, ad_render_id]
   // where relative_time is an int and ad_render_id is a string.
   for (const cbor_item_t* prev_win : prev_wins_entries) {
     bool is_valid = IsTypeValid(&cbor_isa_array, prev_win, kPrevWinsEntry,
                                 kArray, error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, "");
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, std::make_pair("", ""));
     if (!is_valid) {
       continue;
     }
@@ -124,7 +131,8 @@ absl::StatusOr<std::string> GetStringifiedPrevWins(
           absl::StrFormat(kPrevWinsNotCorrectLengthError, owner);
       error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE, error,
                                     ErrorCode::CLIENT_SIDE);
-      RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, "");
+      RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                            std::make_pair("", ""));
     }
 
     // cbor_array_get calls cbor_incref() on the returned object, so call
@@ -132,12 +140,12 @@ absl::StatusOr<std::string> GetStringifiedPrevWins(
     ScopedCbor relative_time(cbor_array_get(prev_win, kRelativeTimeIndex));
     IsTypeValid(&cbor_is_int, *relative_time, kPrevWinsTimeEntry, kInt,
                 error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, "");
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, std::make_pair("", ""));
 
     ScopedCbor maybe_ad_render_id(cbor_array_get(prev_win, kAdRenderIdIndex));
     IsTypeValid(&cbor_isa_string, *maybe_ad_render_id, kPrevWinsAdRenderIdEntry,
                 kString, error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, "");
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, std::make_pair("", ""));
 
     if (error_accumulator.HasErrors()) {
       // No point in processing invalid data but we may continue to validate the
@@ -148,28 +156,45 @@ absl::StatusOr<std::string> GetStringifiedPrevWins(
     const int time = cbor_get_int(*relative_time);
     const std::string ad_render_id = CborDecodeString(*maybe_ad_render_id);
 
-    // Convert to JSON array and add to the running JSON document.
-    rapidjson::Value array(rapidjson::kArrayType);
-    array.PushBack(time, allocator);
-    rapidjson::Value ad_render_id_value(rapidjson::kStringType);
-    ad_render_id_value.SetString(ad_render_id.c_str(), ad_render_id.length(),
-                                 allocator);
-    array.PushBack(ad_render_id_value, allocator);
-    document.PushBack(array, allocator);
+    // Convert to JSON array and add to both JSON documents.
+    rapidjson::Value array_seconds(rapidjson::kArrayType);
+    array_seconds.PushBack(time, allocator_seconds);
+    rapidjson::Value ad_render_id_value_seconds(rapidjson::kStringType);
+    ad_render_id_value_seconds.SetString(
+        ad_render_id.c_str(), ad_render_id.length(), allocator_seconds);
+    array_seconds.PushBack(ad_render_id_value_seconds, allocator_seconds);
+    document_seconds.PushBack(array_seconds.Move(), allocator_seconds);
+
+    rapidjson::Value array_ms(rapidjson::kArrayType);
+    array_ms.PushBack(time * 1000, allocator_ms);
+    rapidjson::Value ad_render_id_value_ms(rapidjson::kStringType);
+    ad_render_id_value_ms.SetString(ad_render_id.c_str(), ad_render_id.length(),
+                                    allocator_ms);
+    array_ms.PushBack(ad_render_id_value_ms, allocator_ms);
+    document_ms.PushBack(array_ms.Move(), allocator_ms);
   }
 
-  rapidjson::StringBuffer string_buffer;
-  rapidjson::Writer<rapidjson::StringBuffer> writer(string_buffer);
-  document.Accept(writer);
-  return string_buffer.GetString();
+  absl::StatusOr<std::string> prev_wins_seconds =
+      SerializeJsonDoc(document_seconds);
+  absl::StatusOr<std::string> prev_wins_ms = SerializeJsonDoc(document_ms);
+
+  if (!prev_wins_seconds.ok() || !prev_wins_ms.ok()) {
+    const absl::StatusOr<std::string>& first_error =
+        !prev_wins_seconds.ok() ? prev_wins_seconds : prev_wins_ms;
+    PS_VLOG(5) << "Unable to serialize prev_wins JSON documents: ";
+    PS_VLOG(5) << first_error.status();
+    return {"", ""};
+  }
+
+  return {*prev_wins_seconds, *prev_wins_ms};
 }
 
 // Decodes browser signals object and sets it in the 'buyer_interest_group'.
-BrowserSignals DecodeBrowserSignals(const cbor_item_t* root,
-                                    absl::string_view owner,
-                                    ErrorAccumulator& error_accumulator,
-                                    bool fail_fast) {
-  BrowserSignals signals;
+BrowserSignalsForBidding DecodeBrowserSignals(
+    const cbor_item_t* root, absl::string_view owner,
+    ErrorAccumulator& error_accumulator, bool fail_fast,
+    BuyerInputForBidding& buyer_input_for_bidding) {
+  BrowserSignalsForBidding signals;
   bool is_signals_valid_type = IsTypeValid(&cbor_isa_map, root, kBrowserSignals,
                                            kMap, error_accumulator);
   RETURN_IF_PREV_ERRORS(error_accumulator, /*fail_fast=*/!is_signals_valid_type,
@@ -227,10 +252,13 @@ BrowserSignals DecodeBrowserSignals(const cbor_item_t* root,
         if (is_win_valid_type) {
           absl::Span<cbor_item_t*> prev_wins_entries(
               cbor_array_handle(signal.value), cbor_array_size(signal.value));
-          absl::StatusOr<std::string> prev_wins = GetStringifiedPrevWins(
-              prev_wins_entries, owner, error_accumulator, fail_fast);
-          *signals.mutable_prev_wins() = std::move(*prev_wins);
+          std::pair<std::string, std::string> prev_wins =
+              GetStringifiedPrevWins(prev_wins_entries, owner,
+                                     error_accumulator, fail_fast);
+          *signals.mutable_prev_wins() = std::move(prev_wins.first);
+          *signals.mutable_prev_wins_ms() = std::move(prev_wins.second);
         }
+
         break;
       }
       case 4: {  // RecencyMs.
@@ -514,6 +542,7 @@ absl::Status CborSerializeScoreAdResponse(
     const ScoreAdsResponse::AdScore& ad_score,
     const BiddingGroupMap& bidding_group_map,
     const UpdateGroupMap& update_group_map,
+    int per_adtech_paapi_contributions_limit,
     absl::string_view ad_auction_result_nonce,
     std::unique_ptr<KAnonAuctionResultData> kanon_auction_result_data,
     ErrorHandler error_handler, cbor_item_t& root) {
@@ -532,7 +561,8 @@ absl::Status CborSerializeScoreAdResponse(
                                          error_handler, root));
   if (ad_score.top_level_contributions().size() > 0) {
     PS_RETURN_IF_ERROR(CborSerializePAggResponse(
-        ad_score.top_level_contributions(), error_handler, root));
+        ad_score.top_level_contributions(),
+        per_adtech_paapi_contributions_limit, error_handler, root));
   }
   PS_RETURN_IF_ERROR(
       CborSerializeUpdateGroups(update_group_map, error_handler, root));
@@ -1592,7 +1622,8 @@ absl::StatusOr<std::string> Encode(
     const BiddingGroupMap& bidding_group_map,
     const UpdateGroupMap& update_group_map,
     const std::optional<AuctionResult::Error>& error,
-    ErrorHandler error_handler, absl::string_view ad_auction_result_nonce,
+    ErrorHandler error_handler, int per_adtech_paapi_contributions_limit,
+    absl::string_view ad_auction_result_nonce,
     std::unique_ptr<KAnonAuctionResultData> kanon_auction_result_data) {
   // CBOR data's root handle. When serializing the auction result to CBOR, we
   // use this handle to keep the temporary data.
@@ -1611,8 +1642,8 @@ absl::StatusOr<std::string> Encode(
   } else if (high_score) {
     PS_RETURN_IF_ERROR(CborSerializeScoreAdResponse(
         *high_score, bidding_group_map, update_group_map,
-        ad_auction_result_nonce, std::move(kanon_auction_result_data),
-        error_handler, *cbor_internal));
+        per_adtech_paapi_contributions_limit, ad_auction_result_nonce,
+        std::move(kanon_auction_result_data), error_handler, *cbor_internal));
   } else if (kanon_auction_result_data != nullptr &&
              kanon_auction_result_data->kanon_ghost_winners != nullptr) {
     // "nonce" must be added before "kAnonGhostWinners".
@@ -1695,8 +1726,8 @@ DecodedBuyerInputs DecodeBuyerInputs(
     ErrorAccumulator& error_accumulator, bool fail_fast) {
   DecodedBuyerInputs decoded_buyer_inputs;
   for (const auto& [owner, compressed_buyer_input] : encoded_buyer_inputs) {
-    BuyerInput buyer_input = DecodeBuyerInput(owner, compressed_buyer_input,
-                                              error_accumulator, fail_fast);
+    BuyerInputForBidding buyer_input = DecodeBuyerInput(
+        owner, compressed_buyer_input, error_accumulator, fail_fast);
     RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, decoded_buyer_inputs);
 
     decoded_buyer_inputs.insert({owner, std::move(buyer_input)});
@@ -1705,11 +1736,12 @@ DecodedBuyerInputs DecodeBuyerInputs(
   return decoded_buyer_inputs;
 }
 
-BuyerInput DecodeBuyerInput(absl::string_view owner,
-                            absl::string_view compressed_buyer_input,
-                            ErrorAccumulator& error_accumulator,
-                            bool fail_fast) {
-  BuyerInput buyer_input;
+BuyerInputForBidding DecodeBuyerInput(absl::string_view owner,
+                                      absl::string_view compressed_buyer_input,
+                                      ErrorAccumulator& error_accumulator,
+                                      bool fail_fast) {
+  BuyerInputForBidding buyer_input_for_bidding;
+
   const absl::StatusOr<std::string> decompressed_buyer_input =
       GzipDecompress(compressed_buyer_input);
   if (!decompressed_buyer_input.ok()) {
@@ -1717,7 +1749,7 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
         ErrorVisibility::CLIENT_VISIBLE,
         absl::StrFormat(kMalformedCompressedIgError, owner),
         ErrorCode::CLIENT_SIDE);
-    return buyer_input;
+    return buyer_input_for_bidding;
   }
 
   cbor_load_result result;
@@ -1730,23 +1762,25 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
         ErrorVisibility::CLIENT_VISIBLE,
         absl::StrFormat(kInvalidBuyerInputCborError, owner),
         ErrorCode::CLIENT_SIDE);
-    return buyer_input;
+    return buyer_input_for_bidding;
   }
 
   bool is_buyer_input_valid_type = IsTypeValid(
       &cbor_isa_array, *root, kBuyerInput, kArray, error_accumulator);
   RETURN_IF_PREV_ERRORS(error_accumulator,
-                        /*fail_fast=*/!is_buyer_input_valid_type, buyer_input);
+                        /*fail_fast=*/!is_buyer_input_valid_type,
+                        buyer_input_for_bidding);
 
   absl::Span<cbor_item_t*> interest_groups(cbor_array_handle(*root),
                                            cbor_array_size(*root));
   for (const cbor_item_t* interest_group : interest_groups) {
-    auto* buyer_interest_group = buyer_input.add_interest_groups();
+    auto* buyer_interest_group = buyer_input_for_bidding.add_interest_groups();
 
     bool is_igs_valid_type =
         IsTypeValid(&cbor_isa_map, interest_group, kBuyerInputEntry, kMap,
                     error_accumulator);
-    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
+    RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                          buyer_input_for_bidding);
 
     if (!is_igs_valid_type) {
       continue;
@@ -1758,7 +1792,8 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
       bool is_key_valid_type =
           IsTypeValid(&cbor_isa_string, ig_entry.key, kBuyerInputKey, kString,
                       error_accumulator);
-      RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
+      RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                            buyer_input_for_bidding);
 
       if (!is_key_valid_type) {
         continue;
@@ -1771,7 +1806,8 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
           bool is_name_valid_type =
               IsTypeValid(&cbor_isa_string, ig_entry.value, kInterestGroupName,
                           kString, error_accumulator);
-          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
+          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                                buyer_input_for_bidding);
           if (is_name_valid_type) {
             buyer_interest_group->set_name(CborDecodeString(ig_entry.value));
           }
@@ -1781,7 +1817,8 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
           bool is_bs_valid_type =
               IsTypeValid(&cbor_isa_array, ig_entry.value, kIgBiddingSignalKeys,
                           kArray, error_accumulator);
-          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
+          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                                buyer_input_for_bidding);
 
           if (is_bs_valid_type) {
             absl::Span<cbor_item_t*> bidding_signals_list(
@@ -1798,7 +1835,8 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
           bool is_bs_valid_type =
               IsTypeValid(&cbor_isa_string, ig_entry.value, kUserBiddingSignals,
                           kString, error_accumulator);
-          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
+          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                                buyer_input_for_bidding);
 
           if (is_bs_valid_type) {
             *buyer_interest_group->mutable_user_bidding_signals() =
@@ -1809,7 +1847,8 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
         case 3: {  // Ad render IDs.
           bool is_ad_render_valid_type = IsTypeValid(
               &cbor_isa_array, ig_entry.value, kAds, kArray, error_accumulator);
-          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
+          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                                buyer_input_for_bidding);
 
           if (is_ad_render_valid_type) {
             absl::Span<cbor_item_t*> ads(cbor_array_handle(ig_entry.value),
@@ -1823,7 +1862,8 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
           bool is_component_valid_type =
               IsTypeValid(&cbor_isa_array, ig_entry.value, kAdComponent, kArray,
                           error_accumulator);
-          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
+          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                                buyer_input_for_bidding);
 
           if (is_component_valid_type) {
             absl::Span<cbor_item_t*> component_ads(
@@ -1837,8 +1877,10 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
         case 5: {  // Browser signals.
           *buyer_interest_group->mutable_browser_signals() =
               DecodeBrowserSignals(ig_entry.value, kIgBiddingSignalKeysEntry,
-                                   error_accumulator, fail_fast);
-          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, buyer_input);
+                                   error_accumulator, fail_fast,
+                                   buyer_input_for_bidding);
+          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                                buyer_input_for_bidding);
         }
         default:
           PS_VLOG(5) << "Serialized CBOR IG has an unexpected key: "
@@ -1847,7 +1889,7 @@ BuyerInput DecodeBuyerInput(absl::string_view owner,
     }
   }
 
-  return buyer_input;
+  return buyer_input_for_bidding;
 }
 
 absl::Status CborSerializeReportingUrls(

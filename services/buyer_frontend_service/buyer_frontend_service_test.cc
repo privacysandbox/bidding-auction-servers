@@ -191,6 +191,7 @@ class BuyerFrontEndServiceTest : public ::testing::Test {
   grpc::ClientContext client_context_;
   GetBidsRequest request_;
   GetBidsResponse response_;
+  MockExecutor executor_;
 };
 
 std::unique_ptr<BiddingAsyncClientMock> GetValidBiddingAsyncClientMock() {
@@ -260,7 +261,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -297,7 +298,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -332,7 +333,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true,
                                   ClientType::CLIENT_TYPE_ANDROID);
@@ -363,7 +364,7 @@ TEST_F(
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -399,7 +400,7 @@ TEST_F(
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -453,7 +454,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -503,7 +504,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
 
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
@@ -555,7 +556,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -590,7 +591,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -643,7 +644,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -678,7 +679,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -728,7 +729,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -763,7 +764,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -816,7 +817,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -851,7 +852,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -878,7 +879,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -913,7 +914,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -941,7 +942,7 @@ TEST_F(
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -980,7 +981,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -1020,7 +1021,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -1055,7 +1056,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
                                   /*add_protected_audience_input=*/true);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -1084,7 +1085,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig());
+      CreateDefaultGetBidsConfig(), executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
                                   /*add_protected_audience_input=*/false);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -1112,7 +1113,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
   request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
                                   /*add_protected_audience_input=*/false);
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
@@ -1139,7 +1140,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      config);
+      config, executor_);
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);
   raw_request.mutable_log_context()->set_generation_id(kTestGenerationId);
@@ -1177,7 +1178,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config);
+      config, executor_);
 
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);

@@ -35,6 +35,7 @@
 #include "services/common/test/utils/cbor_test_utils.h"
 #include "services/common/util/request_response_constants.h"
 #include "services/seller_frontend_service/test/app_test_utils.h"
+#include "services/seller_frontend_service/util/buyer_input_proto_utils.h"
 #include "src/util/status_macro/status_macros.h"
 
 // helper functions to generate random objects for testing
@@ -88,10 +89,14 @@ google::protobuf::ListValue MakeARandomListOfNumbers();
 
 std::string MakeRandomPreviousWins(
     const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids,
-    bool set_times_to_one = false);
+    bool set_times_to_one = false, bool time_in_ms = true);
+
+BrowserSignalsForBidding MakeRandomBrowserSignalsForBiddingForIG(
+    const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids);
 
 BrowserSignals MakeRandomBrowserSignalsForIG(
-    const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids);
+    const google::protobuf::RepeatedPtrField<std::string>& ad_render_ids,
+    bool internal = false);
 
 // Must manually delete/take ownership of underlying pointer
 std::unique_ptr<BuyerInput::InterestGroup> MakeAnInterestGroupSentFromDevice();
@@ -127,10 +132,14 @@ InterestGroupForBidding MakeAnInterestGroupForBiddingSentFromDevice();
 
 // build_android_signals: If false, will insert random values into
 // browser signals, otherwise will insert random values into android signals.
+// populate_old_device_signal_fields is added just for this CL to have the UTs
+// pass and is removed in the next CL.
 InterestGroupForBidding MakeARandomInterestGroupForBidding(
     bool build_android_signals,
     bool set_user_bidding_signals_to_empty_struct = false);
 
+// populate_old_device_signal_fields is added just for this CL to have the UTs
+// pass and is removed in the next CL.
 InterestGroupForBidding MakeALargeInterestGroupForBiddingForLatencyTesting();
 
 InterestGroupForBidding MakeARandomInterestGroupForBiddingFromAndroid();
@@ -199,16 +208,17 @@ GetBidsRequest MakeARandomGetBidsRequest();
 template <typename T>
 T MakeARandomProtectedAuctionInput(int num_buyers = 2,
                                    bool enable_debug_reporting = true) {
-  google::protobuf::Map<std::string, BuyerInput> buyer_inputs;
+  google::protobuf::Map<std::string, BuyerInputForBidding> buyer_inputs;
   for (int i = 0; i < num_buyers; i++) {
-    BuyerInput buyer_input;
+    BuyerInputForBidding buyer_input;
     auto ig_with_two_ads = MakeAnInterestGroupSentFromDevice();
-    buyer_input.mutable_interest_groups()->AddAllocated(
-        ig_with_two_ads.release());
+    *buyer_input.mutable_interest_groups()->Add() =
+        ToInterestGroupForBidding(*ig_with_two_ads.get());
     buyer_inputs.emplace(absl::StrFormat("ad_tech_%d.com", i), buyer_input);
   }
   absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input =
       GetEncodedBuyerInputMap(buyer_inputs);
+
   T protected_auction_input;
   protected_auction_input.set_generation_id(MakeARandomString());
   *protected_auction_input.mutable_buyer_input() =
@@ -291,6 +301,8 @@ struct TestComponentAuctionResultData {
 };
 
 BuyerInput MakeARandomBuyerInput();
+
+BuyerInputForBidding MakeARandomBuyerInputForBidding();
 
 ProtectedAuctionInput MakeARandomProtectedAuctionInput(ClientType client_type);
 

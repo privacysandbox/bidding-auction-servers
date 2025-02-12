@@ -67,7 +67,7 @@ class GenerateBidByobDispatchClient
   //         processed by the implementing class. This should not be confused
   //         with the output of the execution itself, which is sent to callback.
   absl::Status Execute(
-      roma_service::GenerateProtectedAudienceBidRequest request,
+      const roma_service::GenerateProtectedAudienceBidRequest& request,
       absl::Duration timeout,
       absl::AnyInvocable<
           void(absl::StatusOr<

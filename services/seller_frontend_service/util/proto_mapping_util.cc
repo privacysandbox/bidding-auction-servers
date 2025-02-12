@@ -132,7 +132,8 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
     const std::optional<AuctionResult::Error>& error,
     OhttpHpkeDecryptedMessage& decrypted_request,
     RequestLogContext& log_context,
-    std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr) {
+    std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr,
+    int per_adtech_paapi_contributions_limit = 0) {
   std::string error_msg;
   absl::Notification wait_for_error_callback;
   auto error_handler = [&wait_for_error_callback,
@@ -149,7 +150,8 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
       Encode(high_score,
              maybe_bidding_group_map.has_value() ? *maybe_bidding_group_map
                                                  : IgsWithBidsMap(),
-             update_group_map, error, error_handler, auction_result_nonce,
+             update_group_map, error, error_handler,
+             per_adtech_paapi_contributions_limit, auction_result_nonce,
              std::move(kanon_data));
   if (!serialized_data.ok()) {
     wait_for_error_callback.WaitForNotification();
@@ -293,7 +295,7 @@ absl::StatusOr<std::string> CreateNonChaffAuctionResultCiphertext(
       return PackageAuctionResultForWeb(
           auction_result_nonce, ad_score, bidding_group_map, update_group_map,
           /*error =*/std::nullopt, decrypted_request, log_context,
-          std::move(kanon_data));
+          std::move(kanon_data), /*per_adtech_paapi_contributions_limit=*/0);
     default:
       return PackageAuctionResultForInvalid(client_type);
   }
@@ -523,7 +525,8 @@ ProtectedAuctionInput DecryptProtectedAuctionInput(
 
 IgsWithBidsMap GetBiddingGroups(
     const BuyerBidsResponseMap& shared_buyer_bids_map,
-    const absl::flat_hash_map<absl::string_view, BuyerInput>& buyer_inputs) {
+    const absl::flat_hash_map<absl::string_view, BuyerInputForBidding>&
+        buyer_inputs) {
   IgsWithBidsMap bidding_groups;
   for (const auto& [buyer, ad_with_bids] : shared_buyer_bids_map) {
     // Mapping from buyer to interest groups that are associated with non-zero

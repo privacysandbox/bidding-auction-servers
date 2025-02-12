@@ -14,7 +14,6 @@
 
 """Tests for cost_tool."""
 
-
 import unittest
 from unittest.mock import patch, mock_open, MagicMock
 from tools.cost_estimation.cost_tool import CostTool
