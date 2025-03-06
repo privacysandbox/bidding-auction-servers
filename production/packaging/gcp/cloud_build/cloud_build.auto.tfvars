@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-project_id = "gtech-privacy-baservices-dev"
-artifact_registry_repo_name = "bidding-auction-servers-image-repo"
+project_id = "my-gcp-project"
+artifact_registry_repo_name = "my-image-repo"
 artifact_registry_repo_location = "us-central1"
-cloud_build_linked_repository = "projects/gtech-privacy-baservices-dev/locations/us-central1/connections/github-seburan/repositories/Seburan-bidding-auction-servers"
+cloud_build_linked_repository = "projects/my-gcp-project/locations/my-location/connections/my-parent-connection/repositories/my-mirrored-github-repo"
 
 # [1] Uncomment below lines if you like Terraform grant needed permissions to
 # pre-existing service accounts
@@ -23,4 +23,4 @@ cloud_build_linked_repository = "projects/gtech-privacy-baservices-dev/locations
 
 # [2] Uncomment below lines if you like Terraform to create service accounts
 # and needed permissions granted e.g "build-sa" or "worker-sa"
-# cloud_build_service_account_name = "build-sa"
+cloud_build_service_account_name = "build-sa"
