@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+locals {
+  cloud_build_service_account = var.cloud_build_service_account_email != "" ? var.cloud_build_service_account_email : google_service_account.cloud_build_service_account[0].email
+}
+
 variable "artifact_registry_repo_name" {
   description = "The artifact registry name. Will be located at us-docker.pkg.dev/var.project_id/var.artifact_registry_name."
 }
@@ -29,6 +33,45 @@ variable "project_id" {
   description = "The Google Cloud project ID"
 }
 
+variable "cloud_build_service_account_email" {
+  description = "Email address of the service account to use for cloud build triggers. If not provided, the default compute engine service account will be used."
+  type = string
+  default = "" # Set the default to an empty string
+}
+variable "cloud_build_service_account_name" {
+  description = "Name of Cloud Build service account to create and assign permissions to."
+  type = string
+  default = ""
+}
+
+variable "cloud_build_sa_role_name" {
+  description = "The custom role name for cloud build service account."
+  type = string
+  default = "BuildCustomRole"
+}
+
+resource "google_service_account" "cloud_build_service_account" {
+  count        = var.cloud_build_service_account_email == "" && var.cloud_build_service_account_name != "" ? 1 : 0
+  project      = var.project_id
+  account_id   = var.cloud_build_service_account_name
+  display_name = "Cloud Build Service Account"
+}
+
+
+resource "google_project_iam_custom_role" "cloud_build_custom_role" {
+  project     = var.project_id
+  role_id     = var.cloud_build_sa_role_name
+  title       = "Cloud Build Custom Role"
+  description = "Roles for Cloud Build Service Account"
+  permissions = ["artifactregistry.repositories.uploadArtifacts","artifactregistry.repositories.downloadArtifacts", "artifactregistry.repositories.get", "artifactregistry.repositories.list", "artifactregistry.tags.create", "artifactregistry.tags.get","artifactregistry.tags.list","artifactregistry.tags.update", "artifactregistry.versions.list", "artifactregistry.versions.get"]
+}
+
+resource "google_project_iam_member" "cloud_build_custom_role" {
+  role    = "projects/${var.project_id}/roles/${google_project_iam_custom_role.cloud_build_custom_role.role_id}"
+  member  = "serviceAccount:${local.cloud_build_service_account}"
+  project = var.project_id
+}
+
 resource "google_artifact_registry_repository" "cloudbuild_repo" {
   project = var.project_id
   location    = var.artifact_registry_repo_location
@@ -40,6 +83,7 @@ resource "google_cloudbuild_trigger" "prod" {
   name = "prod-trigger"
   project = var.project_id
   location = var.artifact_registry_repo_location
+  service_account = "projects/${var.project_id}/serviceAccounts/${local.cloud_build_service_account}"
   repository_event_config {
     push {
       tag = "v.*"
@@ -58,6 +102,7 @@ resource "google_cloudbuild_trigger" "non_prod" {
   name = "non-prod-trigger"
   project = var.project_id
   location = var.artifact_registry_repo_location
+  service_account = "projects/${var.project_id}/serviceAccounts/${local.cloud_build_service_account}"
   repository_event_config {
     push {
       tag = "v.*"
