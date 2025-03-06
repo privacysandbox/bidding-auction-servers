@@ -63,7 +63,7 @@ resource "google_project_iam_custom_role" "cloud_build_custom_role" {
   role_id     = var.cloud_build_sa_role_name
   title       = "Cloud Build Custom Role"
   description = "Roles for Cloud Build Service Account"
-  permissions = ["artifactregistry.repositories.uploadArtifacts","artifactregistry.repositories.downloadArtifacts", "artifactregistry.repositories.get", "artifactregistry.repositories.list", "artifactregistry.tags.create", "artifactregistry.tags.get","artifactregistry.tags.list","artifactregistry.tags.update", "artifactregistry.versions.list", "artifactregistry.versions.get"]
+  permissions = ["artifactregistry.repositories.downloadArtifacts", "artifactregistry.repositories.get", "artifactregistry.repositories.list","artifactregistry.repositories.listEffectiveTags","artifactregistry.repositories.listTagBindings","artifactregistry.repositories.readViaVirtualRepository", "artifactregistry.repositories.uploadArtifacts","artifactregistry.tags.create", "artifactregistry.tags.get","artifactregistry.tags.list","artifactregistry.tags.update", "artifactregistry.versions.list", "artifactregistry.versions.get", "artifactregistry.dockerimages.get", "artifactregistry.dockerimages.list", "artifactregistry.files.download","artifactregistry.files.get","artifactregistry.files.list","artifactregistry.files.update","artifactregistry.files.upload","logging.logEntries.create","logging.logEntries.route"]
 }
 
 resource "google_project_iam_member" "cloud_build_custom_role" {
@@ -92,7 +92,7 @@ resource "google_cloudbuild_trigger" "prod" {
   }
   filename = "production/packaging/gcp/cloud_build/cloudbuild.yaml"
   substitutions = {
-      _GCP_IMAGE_REPO = "us-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repo_name}/prod"
+      _GCP_IMAGE_REPO = "${var.artifact_registry_repo_location}-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repo_name}/prod"
       _BUILD_FLAVOR = "prod"
   }
 }
@@ -111,7 +111,26 @@ resource "google_cloudbuild_trigger" "non_prod" {
   }
   filename = "production/packaging/gcp/cloud_build/cloudbuild.yaml"
   substitutions = {
-      _GCP_IMAGE_REPO = "us-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repo_name}/non-prod"
+      _GCP_IMAGE_REPO = "${var.artifact_registry_repo_location}-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repo_name}/non-prod"
       _BUILD_FLAVOR = "non_prod"
+  }
+}
+
+resource "google_cloudbuild_trigger" "non_prod_local_testing" {
+  name = "non-prod-local-testing-trigger"
+  project = var.project_id
+  location = var.artifact_registry_repo_location
+  service_account = "projects/${var.project_id}/serviceAccounts/${local.cloud_build_service_account}"
+  repository_event_config {
+    push {
+      tag = "v.*"
+    }
+    repository   = var.cloud_build_linked_repository
+  }
+  filename = "production/packaging/gcp/cloud_build/cloudbuild.yaml"
+  substitutions = {
+      _GCP_IMAGE_REPO = "${var.artifact_registry_repo_location}-docker.pkg.dev/${var.project_id}/${var.artifact_registry_repo_name}/non-prod-local-testing"
+      _BUILD_FLAVOR = "non_prod"
+      _INSTANCE = "local"
   }
 }
