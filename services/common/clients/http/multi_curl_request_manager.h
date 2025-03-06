@@ -40,8 +40,10 @@ struct SocketInfo {
 class MultiCurlRequestManager final {
  public:
   // Initializes the Curl Multi session.
-  MultiCurlRequestManager();
-  explicit MultiCurlRequestManager(struct event_base* event_base);
+  explicit MultiCurlRequestManager(struct event_base* event_base,
+                                   const long curlmopt_maxconnects,
+                                   const long curlmopt_max_total_connections,
+                                   const long curlmopt_max_host_connections);
 
   // Configures the request manager with the callback to invoke upon updates
   // to easy handle as well as the timer event to use to trigger transfer on

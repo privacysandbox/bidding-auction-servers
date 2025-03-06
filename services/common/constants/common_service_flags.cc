@@ -119,3 +119,10 @@ ABSL_FLAG(
 ABSL_FLAG(
     std::optional<std::string>, seller_code_fetch_config, std::nullopt,
     "The JSON string for config fields necessary for AdTech code fetching.");
+ABSL_FLAG(std::optional<int>, curlmopt_maxconnects, 0L,
+          "Limits number of connections left alive in cache.");
+ABSL_FLAG(std::optional<int>, curlmopt_max_total_connections, 0L,
+          "Limits number of connections allowed active.");
+ABSL_FLAG(std::optional<int>, curlmopt_max_host_connections, 0L,
+          "The maximum amount of simultaneously open connections libcurl may "
+          "hold to a single host.");

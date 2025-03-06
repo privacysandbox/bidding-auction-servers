@@ -254,3 +254,8 @@ variable "use_http1" {
   type        = bool
   default     = false
 }
+
+variable "coordinator_role_arns" {
+  description = "ARNs for coordinator roles."
+  type        = list(string)
+}

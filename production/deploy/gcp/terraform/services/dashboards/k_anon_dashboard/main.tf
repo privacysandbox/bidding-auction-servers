@@ -1,10 +1,10 @@
-# Copyright 2022 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,18 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# refer to docs at https://github.com/GoogleContainerTools/container-structure-test
-
-schemaVersion: 2.0.0
-
-# command tests require the docker toolchain
-commandTests:
-  - name: nitro-cli version
-    command: "nitro-cli"
-    args: ["--version"]
-    exitCode: 0
-
-  - name: nitro-cli build-enclave help
-    command: "nitro-cli"
-    args: ["build-enclave", "--help"]
-    exitCode: 0
+resource "google_monitoring_dashboard" "environment_dashboard" {
+  dashboard_json = templatefile("${path.module}/dashboard.tftpl", { environment = var.environment })
+}

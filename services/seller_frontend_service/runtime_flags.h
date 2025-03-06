@@ -86,8 +86,10 @@ inline constexpr absl::string_view TEST_MODE_NON_K_ANON_CACHE_TTL_MS =
     "TEST_MODE_NON_K_ANON_CACHE_TTL_MS";
 inline constexpr absl::string_view ENABLE_K_ANON_QUERY_CACHE =
     "ENABLE_K_ANON_QUERY_CACHE";
+inline constexpr absl::string_view ENABLE_BUYER_CACHING =
+    "ENABLE_BUYER_CACHING";
 
-inline constexpr int kNumRuntimeFlags = 37;
+inline constexpr int kNumRuntimeFlags = 38;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -125,7 +127,8 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     NUM_NON_K_ANON_SHARDS,
     TEST_MODE_K_ANON_CACHE_TTL_MS,
     TEST_MODE_NON_K_ANON_CACHE_TTL_MS,
-    ENABLE_K_ANON_QUERY_CACHE};
+    ENABLE_K_ANON_QUERY_CACHE,
+    ENABLE_BUYER_CACHING};
 
 inline std::vector<absl::string_view> GetServiceFlags() {
   std::vector<absl::string_view> flags(kFlags.begin(),

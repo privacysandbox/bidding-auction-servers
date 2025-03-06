@@ -193,12 +193,16 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
       ad_retrieval_async_client_(ad_retrieval_async_client),
       kv_async_client_(kv_async_client),
       ad_bids_retrieval_timeout_ms_(runtime_config.ad_retrieval_timeout_ms),
-      metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
-                                              kBuyerMetadataKeysMap)),
       egress_schema_cache_(egress_schema_cache),
       limited_egress_schema_cache_(limited_egress_schema_cache),
       enable_temporary_unlimited_egress_(
-          runtime_config.enable_temporary_unlimited_egress) {
+          runtime_config.enable_temporary_unlimited_egress),
+      auction_scope_(
+          raw_request_.top_level_seller().empty()
+              ? AuctionScope::AUCTION_SCOPE_SINGLE_SELLER
+              // Only server component auctions implemented for
+              // PAS Auctions.
+              : AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER) {
   DCHECK(ad_retrieval_async_client_) << "Missing: KV server Async GRPC client";
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
@@ -358,6 +362,16 @@ ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
         absl::StrCat(raw_request_.protected_app_signals().encoding_version()),
         ArgIndex(GenerateBidsUdfArgs::kProtectedAppSignalsVersion), input);
   }
+
+  if (!raw_request_.top_level_seller().empty()) {
+    PopulateArgInRomaRequest(
+        absl::StrCat("{\"topLevelSeller\":\"", raw_request_.top_level_seller(),
+                     "\"}"),
+        ArgIndex(GenerateBidsUdfArgs::kAuctionMetadata), input);
+  } else {
+    PopulateArgInRomaRequest(
+        "{}", ArgIndex(GenerateBidsUdfArgs::kAuctionMetadata), input);
+  }
   PopulateArgInRomaRequest(
       GetFeatureFlagJson(enable_adtech_code_logging_,
                          enable_buyer_debug_url_generation_ &&
@@ -476,11 +490,19 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
       [this](const std::vector<ProtectedAppSignalsAdWithBid>& bids) {
         int received_bid_count = static_cast<int>(bids.size());
         int zero_bid_count = 0;
+        int rejected_component_bid_count = 0;
         for (auto& bid : bids) {
           if (absl::Status validation_status =
-                  IsValidProtectedAppSignalsBid(bid);
+                  IsValidProtectedAppSignalsBid(bid, auction_scope_);
               !validation_status.ok()) {
-            zero_bid_count += 1;
+            if (validation_status.code() ==
+                absl::StatusCode::kInvalidArgument) {
+              zero_bid_count += 1;
+            } else if (validation_status.code() ==
+                       absl::StatusCode::kPermissionDenied) {
+              // Received allowComponentAuction=false.
+              ++rejected_component_bid_count;
+            }
             PS_VLOG(kNoisyWarn, log_context_) << validation_status.message();
             continue;
           }
@@ -524,6 +546,11 @@ void ProtectedAppSignalsGenerateBidsReactor::OnFetchAdsDataDone(
           LogIfError(
               metric_context_->LogHistogram<metric::kBiddingZeroBidPercent>(
                   (static_cast<double>(zero_bid_count)) / received_bid_count));
+        }
+        if (rejected_component_bid_count > 0) {
+          LogIfError(metric_context_
+                         ->LogUpDownCounter<metric::kBiddingBidRejectedCount>(
+                             rejected_component_bid_count));
         }
         EncryptResponseAndFinish(grpc::Status::OK);
       });
@@ -683,6 +710,16 @@ void ProtectedAppSignalsGenerateBidsReactor::Execute() {
 
   PS_VLOG(8, log_context_) << __func__;
 
+  absl::StatusOr<RequestMetadata> metadata = GrpcMetadataToRequestMetadata(
+      context_->client_metadata(), kBuyerMetadataKeysMap);
+  if (!metadata.ok()) {
+    PS_VLOG(kNoisyWarn, log_context_) << metadata.status();
+    EncryptResponseAndFinish(server_common::FromAbslStatus(metadata.status()));
+    return;
+  }
+
+  metadata_ = *std::move(metadata);
+
   if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
     if (server_common::log::PS_VLOG_IS_ON(kEncrypted)) {
       PS_VLOG(kEncrypted, log_context_)
@@ -721,7 +758,7 @@ void ProtectedAppSignalsGenerateBidsReactor::EncryptResponseAndFinish(
   // ExportEventMessage before encrypt response
   log_context_.ExportEventMessage(/*if_export_consented=*/true,
                                   log_context_.ShouldExportEvent());
-  if (!EncryptResponse()) {
+  if (status.ok() && !EncryptResponse()) {
     PS_LOG(ERROR, log_context_)
         << "Failed to encrypt the generate app signals bids response.";
     status = grpc::Status(grpc::INTERNAL, kInternalServerError);

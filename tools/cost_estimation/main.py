@@ -16,8 +16,8 @@
 
 import argparse
 import logging
-from tools.cost_estimation.utils import write_to_named_or_temp_file
-from tools.cost_estimation.cost_tool import CostTool
+from utils import write_to_named_or_temp_file
+from cost_tool import CostTool
 
 
 def main():
@@ -33,9 +33,9 @@ def main():
     parser.add_argument(
         "--cost_model_file",
         type=str,
-        default="tools/cost_estimation/cost.yaml",
+        default="cost.yaml",
         metavar="COST_MODEL_FILENAME",
-        help="Provide the cost model yaml file. Default: tools/cost_estimation/cost.yaml",
+        help="Provide the cost model yaml file. Default: cost.yaml",
     )
 
     parser.add_argument(
@@ -47,10 +47,9 @@ def main():
     )
     parser.add_argument(
         "--sku_file",
-        default="tools/cost_estimation/sku.json",
+        default="sku.json",
         metavar="SKU_FILENAME",
-        help="JSON-formatted file providing SKU pricing. "
-        "Default: tools/cost_estimation/sku.json",
+        help="JSON-formatted file providing SKU pricing. " "Default: sku.json",
         required=False,
     )
 

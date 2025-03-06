@@ -172,7 +172,7 @@ std::shared_ptr<grpc::Channel> CreateChannel(
     // to argument for grpc::CreateChannel.
     absl::string_view server_addr, bool compression = false, bool secure = true,
     absl::string_view grpc_arg_default_authority = "",
-    absl::string_view ca_cert = "/etc/roots.pem");
+    absl::string_view ca_cert = "/etc/ssl/certs/ca-certificates.crt");
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

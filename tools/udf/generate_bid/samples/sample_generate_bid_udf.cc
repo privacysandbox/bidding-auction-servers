@@ -39,7 +39,7 @@ void WriteResponseToFd(int fd,
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
-    std::cerr << "Not enough arguments!" << std::endl;
+    std::cerr << "Not enough arguments!" << '\n';
     return -1;
   }
   int fd = std::stoi(argv[1]);

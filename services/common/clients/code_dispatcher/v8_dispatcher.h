@@ -35,7 +35,8 @@ using DispatchResponse = google::scp::roma::ResponseObject;
 using DispatchDoneCallback = google::scp::roma::Callback;
 using DispatchService = google::scp::roma::sandbox::roma_service::RomaService<
     RomaRequestSharedContext>;
-using BatchDispatchDoneCallback = google::scp::roma::BatchCallback;
+using BatchDispatchDoneCallback =
+    absl::AnyInvocable<void(std::vector<absl::StatusOr<DispatchResponse>>)>;
 // The DispatchConfig controls the number of worker processes, the number of
 // threads per worker process, the IPC shared memory size (in bytes), and
 // the max amount of tasks in the work queue before requests are rejected.

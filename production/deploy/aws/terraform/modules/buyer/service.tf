@@ -81,6 +81,7 @@ module "iam_role_policies" {
   environment               = var.environment
   server_instance_role_name = module.iam_roles.instance_role_name
   autoscaling_group_arns    = [module.autoscaling_bfe.autoscaling_group_arn, module.autoscaling_bidding.autoscaling_group_arn]
+  coordinator_role_arns     = var.coordinator_role_arns
 }
 
 module "buyer_dashboard" {
@@ -91,6 +92,12 @@ module "buyer_dashboard" {
 
 module "inference_dashboard" {
   source      = "../../services/dashboards/inference_dashboard"
+  environment = var.environment
+  region      = var.region
+}
+
+module "k_anon_dashboard" {
+  source      = "../../services/dashboards/k_anon_dashboard"
   environment = var.environment
   region      = var.region
 }

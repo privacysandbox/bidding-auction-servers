@@ -67,15 +67,16 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
 
 SelectAdReactorForWeb::SelectAdReactorForWeb(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
-    SelectAdResponse* response, const ClientRegistry& clients,
+    SelectAdResponse* response, server_common::Executor* executor,
+    const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
     int per_adtech_paapi_contributions_limit, bool fail_fast,
     int max_buyers_solicited)
-    : SelectAdReactor(context, request, response, clients, config_client,
-                      report_win_map, enable_cancellation, enable_kanon,
-                      enable_buyer_private_aggregate_reporting,
+    : SelectAdReactor(context, request, response, executor, clients,
+                      config_client, report_win_map, enable_cancellation,
+                      enable_kanon, enable_buyer_private_aggregate_reporting,
                       per_adtech_paapi_contributions_limit, fail_fast,
                       max_buyers_solicited) {}
 

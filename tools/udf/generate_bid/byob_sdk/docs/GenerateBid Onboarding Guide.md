@@ -86,6 +86,22 @@ If you want to use a local file path, follow these steps to add it to the Biddin
     )
     ```
 
+1. Add `sample_generate_bid_execs_tar` to the Bidding server docker image for
+   [AWS](https://github.com/privacysandbox/bidding-auction-servers/blob/cbd42f292c79b33d5459887933c6e63ca2fe6944/production/packaging/aws/bidding_service/BUILD)
+   or
+   [GCP](https://github.com/privacysandbox/bidding-auction-servers/blob/cbd42f292c79b33d5459887933c6e63ca2fe6944/production/packaging/gcp/bidding_service/BUILD):
+
+    ```python
+    container_image(
+       name = "server_docker_image",
+       ...
+       tars = [
+          ...
+          "//tools/udf/generate_bid/samples:sample_generate_bid_execs_tar",
+       ],
+    )
+    ```
+
 1. The file should now be available to the Bidding server at the path
    `/sample_udf/bin/<path>/generate_bid_binary`.
 

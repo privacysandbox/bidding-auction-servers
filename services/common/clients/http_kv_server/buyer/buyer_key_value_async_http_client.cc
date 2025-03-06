@@ -17,6 +17,7 @@
 
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/clients/http_kv_server/util/generate_url.h"
+#include "services/common/clients/http_kv_server/util/process_response.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/request_metadata.h"
 #include "services/common/util/request_response_constants.h"
@@ -77,7 +78,7 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
     absl::Duration timeout, RequestContext context) const {
   HTTPRequest request = BuildBuyerKeyValueRequest(
       kv_server_base_address_, metadata, std::move(keys),
-      {kDataVersionResponseHeaderName});
+      {kDataVersionResponseHeaderName, kHybridV1OnlyResponseHeaderName});
 
   size_t request_size = 0;
   for (absl::string_view header : request.headers) {
@@ -108,10 +109,11 @@ absl::Status BuyerKeyValueAsyncHttpClient::Execute(
           }
         }
       }
+      bool is_hybrid_v1_return_value = IsHybridV1Return(*httpResponse);
       std::unique_ptr<GetBuyerValuesOutput> resultUPtr =
-          std::make_unique<GetBuyerValuesOutput>(
-              GetBuyerValuesOutput({std::move(httpResponse->body), request_size,
-                                    response_size, data_version_value}));
+          std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
+              {std::move(httpResponse->body), request_size, response_size,
+               data_version_value, is_hybrid_v1_return_value}));
       std::move(on_done)(std::move(resultUPtr));
     } else {
       PS_VLOG(kNoisyWarn, context.log)

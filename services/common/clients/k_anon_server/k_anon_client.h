@@ -44,7 +44,7 @@ struct KAnonClientConfig {
   std::string api_key;
   bool compression = false;
   bool secure_client = true;
-  std::string ca_root_pem = "/etc/roots.pem";
+  std::string ca_root_pem = "/etc/ssl/certs/ca-certificates.crt";
 };
 
 class KAnonGrpcClientInterface {

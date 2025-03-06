@@ -34,7 +34,8 @@ class SelectAdReactorForWeb : public SelectAdReactor {
  public:
   explicit SelectAdReactorForWeb(
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
-      SelectAdResponse* response, const ClientRegistry& clients,
+      SelectAdResponse* response, server_common::Executor* executor,
+      const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
       const ReportWinMap& report_win_map, bool enable_cancellation = false,
       bool enable_kanon = false,

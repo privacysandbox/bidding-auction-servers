@@ -150,6 +150,7 @@ cc_library(
     ],
     deps = [
         ":expand_js_to_header",
+        "//services/auction_service:auction_test_constants",
         "@com_google_absl//absl/strings",
     ],
 )

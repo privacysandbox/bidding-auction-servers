@@ -56,6 +56,13 @@ constexpr absl::string_view kBuyerBaseCodeForPrivateAggregation = R"JS_CODE(
       value: 200,
     };
     privateAggregation.contributeToHistogramOnEvent('reserved.win', contribution);
+    privateAggregation.contributeToHistogramOnEvent('reserved.loss', contribution);
+    privateAggregation.contributeToHistogramOnEvent('reserved.always', contribution);
+    privateAggregation.contributeToHistogramOnEvent('custom', contribution);
+    privateAggregation.contributeToHistogramOnEvent('reserved.win', contribution);
+    privateAggregation.contributeToHistogramOnEvent('reserved.loss', contribution);
+    privateAggregation.contributeToHistogramOnEvent('reserved.always', contribution);
+    privateAggregation.contributeToHistogramOnEvent('custom', contribution);
     return {
         render: "%s" + interest_group.adRenderIds[0],
         ad: {"arbitraryMetadataField": 1},
@@ -264,7 +271,7 @@ constexpr absl::string_view
       warnings: []
     };
 
-    async function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, multiBidLimit, featureFlags){
+    async function generateBidEntryFunction(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, multiBidLimit, auctionMetadata, featureFlags){
       if (featureFlags.enable_logging){
         console.log = function(...args) {
           ps_response.logs.push(JSON.stringify(args))
@@ -297,7 +304,7 @@ constexpr absl::string_view
       globalThis.forDebuggingOnly = forDebuggingOnly;
 
       try {
-        let response = await generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, multiBidLimit);
+        let response = await generateBid(ads, sellerAuctionSignals, buyerSignals, preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, multiBidLimit, auctionMetadata);
         let generate_bid_response = [];
         if (response instanceof Array) {
           generate_bid_response = checkMultiBidLimit(response, multiBidLimit, featureFlags.enable_logging);

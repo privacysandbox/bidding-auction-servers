@@ -45,9 +45,5 @@ fileExistenceTests:
     path: /etc/ssl/certs/ca-certificates.crt
     shouldExist: true
 
-  - name: prod-ca-certs
-    path: /etc/roots.pem
-    shouldExist: true
-
 licenseTests:
   - debian: true

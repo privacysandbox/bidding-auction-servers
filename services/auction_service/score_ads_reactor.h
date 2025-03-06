@@ -48,9 +48,6 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-inline constexpr char kDeviceComponentAuctionWithPAS[] =
-    "Protected App Signals Auction Input cannot be considered for "
-    "Device Component Auction";
 inline constexpr char kNoAdsWithValidScoringSignals[] =
     "No ads with valid scoring signals.";
 inline constexpr char kNoValidComponentAuctions[] =
@@ -312,8 +309,14 @@ class ScoreAdsReactor
   void ReportWinCallback(
       const std::vector<absl::StatusOr<DispatchResponse>>& responses);
 
-  // Adds private aggregation contributions to the response.
-  void SetPrivateAggregationContributionsInResponse(
+  // Adds private aggregation contributions along with adtech_origin from
+  // scoreAd and reportResult to the response.
+  void SetPrivateAggregationContributionsInResponseForSeller(
+      PrivateAggregateReportingResponse pagg_response);
+
+  // Adds private aggregation contributions along with ig index and
+  // adtech_origin from reportWin to the response.
+  void SetPrivateAggregationContributionsInResponseForBuyer(
       PrivateAggregateReportingResponse pagg_response);
 
   // Creates and populates dispatch requests using AdWithBidMetadata objects
@@ -417,6 +420,11 @@ class ScoreAdsReactor
       std::string,
       std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>>
       ad_data_;
+
+  // The key is the id of the DispatchRequest, and the value is the seller
+  // for the component ad. This map is used to add the winning ad's seller
+  // to the AdScore object in the response.
+  absl::flat_hash_map<std::string, std::string> component_ad_seller_;
 
   // The key is the id of the DispatchRequest and the value is the k-anon join
   // candidate belonging to the scoring dispatch request. This map is used

@@ -22,9 +22,9 @@
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "services/auction_service/auction_constants.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
 #include "services/auction_service/reporting/reporting_helper.h"
-#include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/auction_service/reporting/reporting_test_util.h"
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
@@ -67,7 +67,7 @@ struct TestData {
   absl::string_view id = kTestRender;
   std::string expected_handler_name = kReportWinEntryFunction;
   ReportWinArgIndices indexes;
-  std::string expected_buyer_signals = kTestBuyerSignals;
+  std::string expected_buyer_signals = kTestBuyerSignalsObj;
   std::string expected_version;
   std::string expected_egress_payload = kTestEgressPayload;
   std::string expected_temporary_unlimited_egress_payload =

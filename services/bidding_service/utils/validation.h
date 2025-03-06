@@ -60,7 +60,7 @@ inline std::string GetProtectedAppSignalsBidDebugInfo(
 
 // Validates protected app signals bid and returns reason if deemed invalid.
 absl::Status IsValidProtectedAppSignalsBid(
-    const ProtectedAppSignalsAdWithBid& bid);
+    const ProtectedAppSignalsAdWithBid& bid, AuctionScope auction_scope);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

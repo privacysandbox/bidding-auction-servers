@@ -34,6 +34,7 @@ build:clang --host_cxxopt=-fsized-deallocation
 build:clang --cxxopt=-fnew-alignment=8
 build:clang --host_cxxopt=-fnew-alignment=8
 build:clang --per_file_copt=api/udf/.*@-fconstexpr-steps=1271242
+build:clang --per_file_copt=external/(json_c|nitrokmscli_).*\.c@-Wno-implicit-function-declaration
 
 # Flag compiler warnings as errors.
 build:cpp_no_warn --copt=-Werror

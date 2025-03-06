@@ -71,9 +71,12 @@ std::unique_ptr<KAnonAuctionResultData> SampleKAnonAuctionResultData(
   // Add private aggregation signals.
   auto* ghost_winner_private_aggregation_signals =
       kanon_ghost_winner.mutable_ghost_winner_private_aggregation_signals();
-  ghost_winner_private_aggregation_signals->set_bucket(
-      std::move(inputs.bucket_name));
-  ghost_winner_private_aggregation_signals->set_value(inputs.bucket_value);
+  AuctionResult::KAnonGhostWinner::GhostWinnerPrivateAggregationSignals signal;
+  signal.set_bucket(
+      std::string(std::make_move_iterator(inputs.bucket_name.begin()),
+                  std::make_move_iterator(inputs.bucket_name.end())));
+  signal.set_value(inputs.bucket_value);
+  *ghost_winner_private_aggregation_signals->Add() = std::move(signal);
   // Add ghost winner for top level auction.
   auto* ghost_winner_for_top_level_auction =
       kanon_ghost_winner.mutable_ghost_winner_for_top_level_auction();

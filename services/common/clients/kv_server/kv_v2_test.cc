@@ -31,7 +31,12 @@ namespace privacy_sandbox::bidding_auction_servers {
 namespace {
 using google::protobuf::TextFormat;
 
-TEST(ConvertKvV2ResponseToV1String, ConvertKeepsOnlyGivenTags) {
+class ConvertKvV2ResponseToV1StringTest : public ::testing::Test {
+ protected:
+  KVV2AdapterStats v2_adapter_stats_;
+};
+
+TEST_F(ConvertKvV2ResponseToV1StringTest, ConvertKeepsOnlyGivenTags) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -81,7 +86,8 @@ TEST(ConvertKvV2ResponseToV1String, ConvertKeepsOnlyGivenTags) {
           R"pb(
             compression_groups { compression_group_id: 33 content: "%s" })pb",
           absl::CEscape(kCompressionGroup)));
-  auto result = ConvertKvV2ResponseToV1String({"keys"}, response);
+  auto result =
+      ConvertKvV2ResponseToV1String({"keys"}, response, v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   std::string expected_parsed_signals =
       R"json(
@@ -98,7 +104,7 @@ TEST(ConvertKvV2ResponseToV1String, ConvertKeepsOnlyGivenTags) {
   ASSERT_EQ(*actual_signals_json, *expected_signals_json);
 }
 
-TEST(ConvertKvV2ResponseToV1String, MultipleCompressionGroups) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, MultipleCompressionGroups) {
   constexpr char kCompressionGroup1[] = R"JSON(
   [
     {
@@ -203,7 +209,8 @@ TEST(ConvertKvV2ResponseToV1String, MultipleCompressionGroups) {
         )",
                           absl::CEscape(kCompressionGroup1),
                           absl::CEscape(kCompressionGroup2)));
-  auto result = ConvertKvV2ResponseToV1String({"keys"}, response);
+  auto result =
+      ConvertKvV2ResponseToV1String({"keys"}, response, v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   std::string expected_parsed_signals =
       R"json(
@@ -222,7 +229,7 @@ TEST(ConvertKvV2ResponseToV1String, MultipleCompressionGroups) {
   ASSERT_EQ(*actual_signals_json, *expected_signals_json);
 }
 
-TEST(ConvertKvV2ResponseToV1String, ConvertMultipleKeyTags) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, ConvertMultipleKeyTags) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -275,7 +282,7 @@ TEST(ConvertKvV2ResponseToV1String, ConvertMultipleKeyTags) {
         })",
                           absl::CEscape(kCompressionGroup)));
   auto result = ConvertKvV2ResponseToV1String(
-      {"renderUrls", "adComponentRenderUrls"}, response);
+      {"renderUrls", "adComponentRenderUrls"}, response, v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   std::string expected_parsed_signals =
       R"json(
@@ -294,7 +301,8 @@ TEST(ConvertKvV2ResponseToV1String, ConvertMultipleKeyTags) {
   ASSERT_EQ(*actual_signals_json, *expected_signals_json);
 }
 
-TEST(ConvertKvV2ResponseToV1String, MultipleCompressionGroupsMultipleKeyTags) {
+TEST_F(ConvertKvV2ResponseToV1StringTest,
+       MultipleCompressionGroupsMultipleKeyTags) {
   constexpr char kCompressionGroup1[] = R"JSON(
   [
     {
@@ -398,7 +406,7 @@ TEST(ConvertKvV2ResponseToV1String, MultipleCompressionGroupsMultipleKeyTags) {
                           absl::CEscape(kCompressionGroup1),
                           absl::CEscape(kCompressionGroup2)));
   auto result = ConvertKvV2ResponseToV1String(
-      {"renderUrls", "adComponentRenderUrls"}, response);
+      {"renderUrls", "adComponentRenderUrls"}, response, v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   std::string expected_parsed_signals =
       R"JSON(
@@ -420,7 +428,86 @@ TEST(ConvertKvV2ResponseToV1String, MultipleCompressionGroupsMultipleKeyTags) {
   ASSERT_EQ(*actual_signals_json, *expected_signals_json);
 }
 
-TEST(ConvertKvV2ResponseToV1String, MalformedJson) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, MultipleValueTypes) {
+  constexpr char kCompressionGroup1[] = R"JSON(
+  [
+    {
+      "id": 0,
+      "keyGroupOutputs": [
+        {
+          "tags": [
+            "keys"
+          ],
+          "keyValues": {
+            "hello": {
+              "value": "world"
+            }
+          }
+        },
+        {
+          "tags": [
+            "keys"
+          ],
+          "keyValues": {
+            "hello2": {
+              "value": "[\"world2\"]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "keyGroupOutputs": [
+        {
+          "tags": [
+            "keys"
+          ],
+          "keyValues": {
+            "hello3": {
+              "value": "{\"world3\": {\"world3_val\" : 1}}"
+            }
+          }
+        }
+      ]
+    }
+  ])JSON";
+
+  kv_server::v2::GetValuesResponse response =
+      ParseTextOrDie<kv_server::v2::GetValuesResponse>(
+          absl::StrFormat(R"(
+        compression_groups {
+          compression_group_id : 33
+          content : "%s"
+        }
+        )",
+                          absl::CEscape(kCompressionGroup1)));
+  auto result =
+      ConvertKvV2ResponseToV1String({"keys"}, response, v2_adapter_stats_);
+  ASSERT_TRUE(result.ok()) << result.status();
+  std::string expected_parsed_signals =
+      R"JSON(
+      {
+        "keys": {
+          "hello": "world",
+          "hello2": ["world2"],
+          "hello3": {
+            "world3": {
+              "world3_val":1
+            }
+          }
+        }
+      })JSON";
+  auto actual_signals_json = ParseJsonString(*result);
+  auto expected_signals_json = ParseJsonString(expected_parsed_signals);
+  ASSERT_TRUE(actual_signals_json.ok()) << actual_signals_json.status();
+  ASSERT_TRUE(expected_signals_json.ok()) << expected_signals_json.status();
+  ASSERT_EQ(*actual_signals_json, *expected_signals_json);
+  EXPECT_EQ(v2_adapter_stats_.values_with_json_string_parsing, 2);
+  EXPECT_EQ(v2_adapter_stats_.values_without_json_string_parsing, 1);
+}
+
+TEST_F(ConvertKvV2ResponseToV1StringTest, MalformedJson) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -473,11 +560,12 @@ TEST(ConvertKvV2ResponseToV1String, MalformedJson) {
           content : "%s"
         })",
                           absl::CEscape(kCompressionGroup)));
-  auto result = ConvertKvV2ResponseToV1String({"keys"}, response);
+  auto result =
+      ConvertKvV2ResponseToV1String({"keys"}, response, v2_adapter_stats_);
   ASSERT_FALSE(result.ok());
 }
 
-TEST(ConvertKvV2ResponseToV1String, IgnoresKeyValueWithNonValueObject) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, IgnoresKeyValueWithNonValueObject) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -499,21 +587,23 @@ TEST(ConvertKvV2ResponseToV1String, IgnoresKeyValueWithNonValueObject) {
           R"pb(
             compression_groups { compression_group_id: 0 content: "%s" })pb",
           absl::CEscape(kCompressionGroup)));
-  auto result = ConvertKvV2ResponseToV1String({"keys"}, response);
+  auto result =
+      ConvertKvV2ResponseToV1String({"keys"}, response, v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_EQ(*result, "");
 }
 
-TEST(ConvertKvV2ResponseToV1String, EmptyJson) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, EmptyJson) {
   kv_server::v2::GetValuesResponse response =
       ParseTextOrDie<kv_server::v2::GetValuesResponse>(
           R"pb(
             compression_groups { compression_group_id: 33 content: "" })pb");
-  auto result = ConvertKvV2ResponseToV1String({"keys"}, response);
+  auto result =
+      ConvertKvV2ResponseToV1String({"keys"}, response, v2_adapter_stats_);
   ASSERT_FALSE(result.ok());
 }
 
-TEST(ConvertKvV2ResponseToV1String, KeyTagsNotFoundReturnEmtpyString) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, KeyTagsNotFoundReturnEmtpyString) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -540,7 +630,8 @@ TEST(ConvertKvV2ResponseToV1String, KeyTagsNotFoundReturnEmtpyString) {
           content : "%s"
         })",
                           absl::CEscape(kCompressionGroup)));
-  auto result = ConvertKvV2ResponseToV1String({"keys"}, response);
+  auto result =
+      ConvertKvV2ResponseToV1String({"keys"}, response, v2_adapter_stats_);
   ASSERT_TRUE(result.ok());
   EXPECT_EQ("", *result);
 }
@@ -580,7 +671,7 @@ TEST(UseKvV2, AndroidTestModeTrueAddressNotEmptyReturnsTrue) {
                       /*is_tkv_v2_empty=*/false));
 }
 
-TEST(ConvertKvV2ResponseToV1String, ParsesIgNamesOutputsCorrectly) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, ParsesIgNamesOutputsCorrectly) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -604,7 +695,8 @@ TEST(ConvertKvV2ResponseToV1String, ParsesIgNamesOutputsCorrectly) {
           R"pb(
             compression_groups { compression_group_id: 0 content: "%s" })pb",
           absl::CEscape(kCompressionGroup)));
-  auto result = ConvertKvV2ResponseToV1String({"interestGroupNames"}, response);
+  auto result = ConvertKvV2ResponseToV1String({"interestGroupNames"}, response,
+                                              v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   std::string expected_parsed_signals =
       R"json(
@@ -625,7 +717,7 @@ TEST(ConvertKvV2ResponseToV1String, ParsesIgNamesOutputsCorrectly) {
       << SerializeJsonDoc(*expected_signals_json);
 }
 
-TEST(ConvertKvV2ResponseToV1String, IgnoresIgNamesWithNonObject) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, IgnoresIgNamesWithNonObject) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -647,12 +739,13 @@ TEST(ConvertKvV2ResponseToV1String, IgnoresIgNamesWithNonObject) {
           R"pb(
             compression_groups { compression_group_id: 0 content: "%s" })pb",
           absl::CEscape(kCompressionGroup)));
-  auto result = ConvertKvV2ResponseToV1String({"interestGroupNames"}, response);
+  auto result = ConvertKvV2ResponseToV1String({"interestGroupNames"}, response,
+                                              v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_EQ(*result, "");
 }
 
-TEST(ConvertKvV2ResponseToV1String, IgnoresIgNamesWithoutValueField) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, IgnoresIgNamesWithoutValueField) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -676,12 +769,13 @@ TEST(ConvertKvV2ResponseToV1String, IgnoresIgNamesWithoutValueField) {
           R"pb(
             compression_groups { compression_group_id: 0 content: "%s" })pb",
           absl::CEscape(kCompressionGroup)));
-  auto result = ConvertKvV2ResponseToV1String({"interestGroupNames"}, response);
+  auto result = ConvertKvV2ResponseToV1String({"interestGroupNames"}, response,
+                                              v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_EQ(*result, "");
 }
 
-TEST(ConvertKvV2ResponseToV1String, IgnoresIgNamesWithInvalidJsonValue) {
+TEST_F(ConvertKvV2ResponseToV1StringTest, IgnoresIgNamesWithInvalidJsonValue) {
   constexpr char kCompressionGroup[] = R"JSON(
   [
     {
@@ -705,7 +799,8 @@ TEST(ConvertKvV2ResponseToV1String, IgnoresIgNamesWithInvalidJsonValue) {
           R"pb(
             compression_groups { compression_group_id: 0 content: "%s" })pb",
           absl::CEscape(kCompressionGroup)));
-  auto result = ConvertKvV2ResponseToV1String({"interestGroupNames"}, response);
+  auto result = ConvertKvV2ResponseToV1String({"interestGroupNames"}, response,
+                                              v2_adapter_stats_);
   ASSERT_TRUE(result.ok()) << result.status();
   EXPECT_EQ(*result, "");
 }

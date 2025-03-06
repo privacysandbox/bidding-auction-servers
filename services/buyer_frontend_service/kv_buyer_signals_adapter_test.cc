@@ -37,7 +37,12 @@ using privacy_sandbox::bidding_auction_servers::ConvertV2BiddingSignalsToV1;
 using privacy_sandbox::bidding_auction_servers::CreateV2BiddingRequest;
 using privacy_sandbox::bidding_auction_servers::GetBidsRequest;
 
-TEST(KvBuyerSignalsAdapter, Convert) {
+class KvBuyerSignalsAdapterTest : public ::testing::Test {
+ protected:
+  KVV2AdapterStats v2_adapter_stats_;
+};
+
+TEST_F(KvBuyerSignalsAdapterTest, Convert) {
   kv_server::v2::GetValuesResponse response;
   std::string compression_group = R"JSON(
   [
@@ -112,7 +117,8 @@ TEST(KvBuyerSignalsAdapter, Convert) {
                       absl::CEscape(RemoveWhiteSpaces(compression_group))),
       &response));
   auto result = ConvertV2BiddingSignalsToV1(
-      std::make_unique<kv_server::v2::GetValuesResponse>(response));
+      std::make_unique<kv_server::v2::GetValuesResponse>(response),
+      v2_adapter_stats_);
   CHECK_OK(result) << result.status();
   std::string expected_parsed_signals =
       R"json(
@@ -140,7 +146,7 @@ TEST(KvBuyerSignalsAdapter, Convert) {
       << SerializeJsonDoc(*actual) << SerializeJsonDoc(*expected);
 }
 
-TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
+TEST_F(KvBuyerSignalsAdapterTest, MultipleCompressionGroups) {
   kv_server::v2::GetValuesResponse response;
   std::string compression_group = R"JSON(
   [
@@ -287,7 +293,8 @@ TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
                       absl::CEscape(RemoveWhiteSpaces(compression_group_2))),
       &response));
   auto result = ConvertV2BiddingSignalsToV1(
-      std::make_unique<kv_server::v2::GetValuesResponse>(response));
+      std::make_unique<kv_server::v2::GetValuesResponse>(response),
+      v2_adapter_stats_);
   CHECK_OK(result) << result.status();
   std::string expected_parsed_signals =
       R"json(
@@ -321,7 +328,7 @@ TEST(KvBuyerSignalsAdapter, MultipleCompressionGroups) {
             ParseJsonString(expected_parsed_signals));
 }
 
-TEST(KvBuyerSignalsAdapter, MalformedJson) {
+TEST_F(KvBuyerSignalsAdapterTest, MalformedJson) {
   kv_server::v2::GetValuesResponse response;
   std::string compression_group = R"JSON(
   [
@@ -376,11 +383,12 @@ TEST(KvBuyerSignalsAdapter, MalformedJson) {
                       absl::CEscape(RemoveWhiteSpaces(compression_group))),
       &response));
   auto result = ConvertV2BiddingSignalsToV1(
-      std::make_unique<kv_server::v2::GetValuesResponse>(response));
+      std::make_unique<kv_server::v2::GetValuesResponse>(response),
+      v2_adapter_stats_);
   ASSERT_FALSE(result.ok());
 }
 
-TEST(KvBuyerSignalsAdapter, EmptyJson) {
+TEST_F(KvBuyerSignalsAdapterTest, EmptyJson) {
   kv_server::v2::GetValuesResponse response;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"(
@@ -390,7 +398,8 @@ TEST(KvBuyerSignalsAdapter, EmptyJson) {
         })",
       &response));
   auto result = ConvertV2BiddingSignalsToV1(
-      std::make_unique<kv_server::v2::GetValuesResponse>(response));
+      std::make_unique<kv_server::v2::GetValuesResponse>(response),
+      v2_adapter_stats_);
   ASSERT_FALSE(result.ok());
 }
 
@@ -405,7 +414,7 @@ BuyerInputForBidding::InterestGroupForBidding MakeAnInterestGroupForBidding(
   return interest_group;
 }
 
-TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestSuccess) {
+TEST_F(KvBuyerSignalsAdapterTest, CreateV2BiddingRequestSuccess) {
   kv_server::v2::GetValuesRequest expected;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"pb(
@@ -497,7 +506,7 @@ TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestSuccess) {
   EXPECT_THAT(request, EqualsProto(expected));
 }
 
-TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestCreationNoIGsFail) {
+TEST_F(KvBuyerSignalsAdapterTest, CreateV2BiddingRequestCreationNoIGsFail) {
   privacy_sandbox::server_common::ConsentedDebugConfiguration
       consented_debug_configuration;
   consented_debug_configuration.set_is_consented(true);
@@ -519,13 +528,17 @@ TEST(KvBuyerSignalsAdapter, CreateV2BiddingRequestCreationNoIGsFail) {
   ASSERT_FALSE(maybe_result.ok());
 }
 
-TEST(KvBuyerSignalsAdapter,
-     CreateV2BiddingRequestWithContextualBuyerSignalsSuccess) {
+TEST_F(KvBuyerSignalsAdapterTest,
+       CreateV2BiddingRequestWithContextualBuyerSignalsAndByosOutputSuccess) {
   kv_server::v2::GetValuesRequest expected;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"pb(
         client_version: "Bna.PA.Buyer.20240930"
         metadata {
+          fields {
+            key: "byos_output"
+            value { string_value: "byos_output" }
+          }
           fields {
             key: "buyer_signals"
             value { string_value: "contextual_buyer_signals" }
@@ -611,9 +624,11 @@ TEST(KvBuyerSignalsAdapter,
          ->Add() = MakeAnInterestGroupForBidding(std::to_string(i), 2);
   }
   BiddingSignalsRequest bidding_signals_request(bids_request, {});
-  auto maybe_result =
-      CreateV2BiddingRequest(bidding_signals_request,
-                             /* propagate_buyer_signals_to_tkv */ true);
+  std::unique_ptr<std::string> byos_output =
+      std::make_unique<std::string>("byos_output");
+  auto maybe_result = CreateV2BiddingRequest(
+      bidding_signals_request,
+      /* propagate_buyer_signals_to_tkv */ true, std::move(byos_output));
   ASSERT_TRUE(maybe_result.ok()) << maybe_result.status();
   auto& request = *(*maybe_result);
   EXPECT_THAT(request, EqualsProto(expected));

@@ -102,10 +102,14 @@ class SelectAdReactorForAppTest : public ::testing::Test {
     config_.SetOverride("dns:///kv-v2-host", TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
     config_.SetOverride(kSignalsRequired, SCORING_SIGNALS_FETCH_MODE);
     config_.SetOverride("", HEADER_PASSED_TO_BUYER);
+
+    EXPECT_CALL(*this->executor_, Run)
+        .WillRepeatedly([](absl::AnyInvocable<void()> closure) { closure(); });
   }
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
   const HpkeKeyset default_keyset_ = HpkeKeyset{};
+  std::unique_ptr<MockExecutor> executor_ = std::make_unique<MockExecutor>();
 };
 
 using ProtectedAuctionInputTypes =
@@ -135,7 +139,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncoding) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -218,7 +223,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingWithReportingUrls) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -314,7 +320,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyEncodingForServerComponentAuction) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   ASSERT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -373,7 +380,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyChaffedResponse) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -441,7 +449,8 @@ TYPED_TEST(SelectAdReactorForAppTest, VerifyErrorForProtoDecodingFailure) {
       std::move(encrypted_request);
 
   SelectAdResponse encrypted_response =
-      RunReactorRequest<SelectAdReactorForApp>(this->config_, clients, request);
+      RunReactorRequest<SelectAdReactorForApp>(this->config_, clients, request,
+                                               this->executor_.get());
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -500,6 +509,9 @@ class SelectAdReactorPASTest : public ::testing::Test {
     EXPECT_CALL(*key_fetcher_manager_, GetPrivateKey)
         .WillRepeatedly(Return(GetPrivateKey()));
     server_common::log::SetGlobalPSVLogLevel(10);
+
+    EXPECT_CALL(*this->executor_, Run)
+        .WillRepeatedly([](absl::AnyInvocable<void()> closure) { closure(); });
   }
 
   // This could return any valid byte string.
@@ -639,8 +651,7 @@ class SelectAdReactorPASTest : public ::testing::Test {
   BuyerBidsResponseMap expected_buyer_bids_;
   std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager_ =
       std::make_unique<server_common::MockKeyFetcherManager>();
-  std::unique_ptr<server_common::Executor> executor_ =
-      std::make_unique<MockExecutor>();
+  std::unique_ptr<MockExecutor> executor_ = std::make_unique<MockExecutor>();
   std::unique_ptr<KAnonCacheManagerMock> k_anon_cache_manager_ =
       std::make_unique<KAnonCacheManagerMock>(
           executor_.get(),
@@ -697,7 +708,8 @@ TEST_F(SelectAdReactorPASTest, PASBuyerInputIsPopulatedForGetBids) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 TEST_F(SelectAdReactorPASTest, PASBuyerInputIsClearedIfFeatureNotAvailable) {
@@ -729,7 +741,8 @@ TEST_F(SelectAdReactorPASTest, PASBuyerInputIsClearedIfFeatureNotAvailable) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
@@ -819,7 +832,8 @@ TEST_F(SelectAdReactorPASTest, PASAdWithBidIsSentForScoring) {
   SetupKvAsyncClientMock(kv_async_client_, kv_response, expected_buyer_bids_);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 TEST_F(SelectAdReactorPASTest, KAnonHashesAreQueried) {
@@ -923,6 +937,7 @@ TEST_F(SelectAdReactorPASTest, KAnonHashesAreQueried) {
                                           std::move(buyer_report_win_js_urls)};
   RunReactorRequest<SelectAdReactorForApp>(
       config_, clients_, request_with_context.select_ad_request,
+      this->executor_.get(),
       /*enable_kanon=*/true, /*enable_buyer_private_aggregate_reporting=*/false,
       /*per_adtech_paapi_contributions_limit=*/100,
       /*fail_fast=*/false,
@@ -1036,6 +1051,7 @@ TEST_F(SelectAdReactorPASTest, AdConsideredNonKAnonIfAdRenderHashIsNotKAnon) {
                                           std::move(buyer_report_win_js_urls)};
   RunReactorRequest<SelectAdReactorForApp>(
       config_, clients_, request_with_context.select_ad_request,
+      this->executor_.get(),
       /*enable_kanon=*/true, /*enable_buyer_private_aggregate_reporting=*/false,
       /*per_adtech_paapi_contributions_limit=*/100,
       /*fail_fast=*/false,
@@ -1077,7 +1093,8 @@ TEST_F(SelectAdReactorPASTest,
   EXPECT_CALL(scoring_client_, ExecuteInternal).Times(0);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 void VerifySelectedAdResponseSuccess(
@@ -1139,7 +1156,8 @@ TEST_F(SelectAdReactorPASTest, PASOnlyBuyerInputIsAllowed) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
   VerifySelectedAdResponseSuccess(request_with_context.context,
                                   encrypted_response);
 }
@@ -1183,7 +1201,8 @@ TEST_F(SelectAdReactorPASTest, BothPASAndPAInputsMissingIsAnError) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          this->config_, clients_, request_with_context.select_ad_request);
+          this->config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -1246,7 +1265,8 @@ TEST_F(SelectAdReactorPASTest,
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
   VerifySelectedAdResponseSuccess(request_with_context.context,
                                   encrypted_response);
 }
@@ -1287,7 +1307,8 @@ TEST_F(SelectAdReactorPASTest,
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 
   VerifySelectedAdResponseSuccess(request_with_context.context,
                                   encrypted_response);
@@ -1338,7 +1359,8 @@ TEST_F(SelectAdReactorPASTest,
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 TEST_F(SelectAdReactorPASTest,
@@ -1374,7 +1396,8 @@ TEST_F(SelectAdReactorPASTest,
   EXPECT_CALL(scoring_client_, ExecuteInternal).Times(0);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 TEST_F(SelectAdReactorPASTest, FailsWhenPlaceholderSetForTkvV2Address) {
@@ -1436,7 +1459,8 @@ TEST_F(SelectAdReactorPASTest, FailsWhenPlaceholderSetForTkvV2Address) {
       });
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 TEST_F(SelectAdReactorPASTest, DisablesDebugReporting) {
@@ -1499,7 +1523,8 @@ TEST_F(SelectAdReactorPASTest, DisablesDebugReporting) {
   SetupKvAsyncClientMock(kv_async_client_, kv_response, expected_buyer_bids_);
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 TEST_F(SelectAdReactorPASTest,
@@ -1545,7 +1570,8 @@ TEST_F(SelectAdReactorPASTest,
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
   VerifySelectedAdResponseSuccess(request_with_context.context,
                                   encrypted_response);
 }
@@ -1600,7 +1626,8 @@ TEST_F(SelectAdReactorPASTest, EnableUnlimitedEgressPropagatedToGetBids) {
 
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForApp>(
-          config_, clients_, request_with_context.select_ad_request);
+          config_, clients_, request_with_context.select_ad_request,
+          this->executor_.get());
 }
 
 }  // namespace

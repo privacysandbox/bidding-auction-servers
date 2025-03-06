@@ -24,22 +24,22 @@
 #include "absl/time/time.h"
 #include "services/common/clients/k_anon_server/k_anon_client.h"
 #include "services/common/metric/server_definition.h"
-#include "services/seller_frontend_service/k_anon/k_anon_cache.h"
+#include "services/seller_frontend_service/cache/cache.h"
 #include "services/seller_frontend_service/k_anon/k_anon_cache_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 class KAnonCacheManager : public KAnonCacheManagerInterface {
  public:
-  using ShardedKAnonCache = std::vector<
-      std::unique_ptr<KAnonCacheInterface<std::string, std::string>>>;
+  using ShardedKAnonCache =
+      std::vector<std::unique_ptr<CacheInterface<std::string, std::string>>>;
 
   explicit KAnonCacheManager(
       server_common::Executor* executor,
       std::unique_ptr<KAnonGrpcClientInterface> k_anon_client,
       KAnonCacheManagerConfig config = {});
 
-  // Constructor used to test with MockKAnonCache.
+  // Constructor used to test with MockCache.
   explicit KAnonCacheManager(
       ShardedKAnonCache k_anon_caches, ShardedKAnonCache non_k_anon_caches,
       std::unique_ptr<KAnonGrpcClientInterface> k_anon_client,

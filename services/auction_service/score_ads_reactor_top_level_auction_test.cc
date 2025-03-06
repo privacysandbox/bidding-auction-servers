@@ -17,8 +17,8 @@
 #include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
 #include "services/auction_service/auction_constants.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
-#include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/score_ads_reactor.h"
 #include "services/auction_service/score_ads_reactor_test_util.h"
 #include "services/common/test/mocks.h"
@@ -37,7 +37,7 @@ constexpr char kTestTopLevelSeller[] = "top_level_seller";
 constexpr char kTestGenerationId[] = "test_generation_id";
 constexpr char kTestComponentWinReportingUrl[] =
     "http://componentReportingUrl.com";
-constexpr char kTestComponentEvent[] = "click";
+constexpr char kTestComponentEvent[] = "clickEvent";
 constexpr char kTestComponentInteractionReportingUrl[] =
     "http://componentInteraction.com";
 constexpr char kTestComponentSeller[] = "http://componentSeller.com";
@@ -121,6 +121,36 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest, SendsComponentAuctionsToDispatcher) {
   test_helper.ExecuteScoreAds(raw_request, dispatcher);
 }
 
+TEST_F(ScoreAdsReactorTopLevelAuctionTest, SendsPASAuctionsToDispatcher) {
+  MockV8DispatchClient dispatcher;
+  AuctionResult car_1 =
+      MakeARandomComponentAuctionResult(kTestGenerationId, kTestTopLevelSeller);
+  AuctionResult car_2 = MakeARandomPASComponentAuctionResult(
+      kTestGenerationId, kTestTopLevelSeller);
+  RawRequest raw_request = BuildTopLevelAuctionRawRequest(
+      {car_1, car_2}, kTestSellerSignals, kTestAuctionSignals,
+      kTestPublisherHostname);
+  absl::Notification finished;
+  EXPECT_EQ(raw_request.component_auction_results_size(), 2);
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillOnce(
+          [&car_1, &car_2, &finished](std::vector<DispatchRequest>& batch,
+                                      BatchDispatchDoneCallback done_callback) {
+            EXPECT_EQ(batch.size(), 2);
+            // Actual mapping of other fields from component auction
+            // to dispatch request handled by proto_utils.
+            EXPECT_EQ(batch.at(0).id, car_1.ad_render_url());
+            EXPECT_EQ(batch.at(0).input.size(), 7);
+            EXPECT_EQ(batch.at(1).id, car_2.ad_render_url());
+            EXPECT_EQ(batch.at(1).input.size(), 7);
+            finished.Notify();
+            return absl::OkStatus();
+          });
+  ScoreAdsReactorTestHelper test_helper;
+  test_helper.ExecuteScoreAds(raw_request, dispatcher);
+  finished.WaitForNotification();
+}
+
 TEST_F(ScoreAdsReactorTopLevelAuctionTest,
        DoesNotRunAuctionForMismatchedGenerationId) {
   MockV8DispatchClient dispatcher;
@@ -136,6 +166,120 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest,
   ScoreAdsReactorTestHelper test_helper;
   auto response = test_helper.ExecuteScoreAds(raw_request, dispatcher);
   EXPECT_TRUE(response.response_ciphertext().empty());
+}
+
+TEST_F(ScoreAdsReactorTopLevelAuctionTest, ReturnsPASWinnerWithReportingUrls) {
+  auto win_reporting_urls =
+      WinReportingUrlsBuilder()
+          .SetBuyerReportingUrls(
+              WinReportingUrls_ReportingUrlsBuilder()
+                  .SetReportingUrl(kTestComponentWinReportingUrl)
+                  .InsertInteractionReportingUrls(
+                      {kTestComponentEvent,
+                       kTestComponentInteractionReportingUrl}))
+
+          .SetComponentSellerReportingUrls(
+              WinReportingUrls_ReportingUrlsBuilder()
+                  .SetReportingUrl(kTestComponentWinReportingUrl)
+                  .InsertInteractionReportingUrls(
+                      {kTestComponentEvent,
+                       kTestComponentInteractionReportingUrl}));
+  AuctionResult component_auction_result =
+      AuctionResultBuilder()
+          .SetTopLevelSeller(kTestTopLevelSeller)
+          .SetAdRenderUrl(kTestAdRenderUrl)
+          .SetInterestGroupOwner(kTestIgOwner)
+          .SetScore(kTestScore)
+          .SetAdType(AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD)
+          .SetAuctionParams(AuctionResult_AuctionParamsBuilder()
+                                .SetCiphertextGenerationId(kTestGenerationId)
+                                .SetComponentSeller(kTestComponentSeller))
+          .SetWinReportingUrls(win_reporting_urls)
+          .SetBid(kTestWinnerBid);
+  RawRequest raw_request = BuildTopLevelAuctionRawRequest(
+      {component_auction_result}, kTestSellerSignals, kTestAuctionSignals,
+      kTestPublisherHostname);
+
+  MockV8DispatchClient dispatcher;
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly([](std::vector<DispatchRequest>& batch,
+                         BatchDispatchDoneCallback done_callback) {
+        std::vector<std::string> response;
+        for (const auto& request : batch) {
+          if (std::strcmp(request.handler_name.c_str(),
+                          kReportResultEntryFunction) == 0) {
+            response.emplace_back(kTestReportResultResponseJson);
+          } else {
+            response.push_back(
+                R"JSON(
+                  {
+                      "response" : {
+                          "ad": {"key1":"adMetadata"},
+                          "desirability" : 1,
+                          "bid" : 0.1,
+                          "allowComponentAuction" : true
+                      },
+                      "logs":[]
+                  }
+                )JSON");
+          }
+        }
+        return FakeExecute(batch, std::move(done_callback), std::move(response),
+                           false);
+      });
+  AuctionServiceRuntimeConfig runtime_config = {
+      .enable_seller_debug_url_generation = false,
+      .enable_adtech_code_logging = false,
+      .enable_report_result_url_generation = true,
+      .enable_report_win_url_generation = true,
+      .enable_seller_and_buyer_udf_isolation = true,
+      .enable_kanon = false};
+  ScoreAdsReactorTestHelper test_helper;
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  PS_VLOG(5) << "Score Ad raw response: " << raw_response.DebugString();
+
+  ScoreAdsResponse::ScoreAdsRawResponse expected_raw_response;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        ad_score {
+          desirability: 1
+          render: "http://test-ad-render-url.com"
+          buyer_bid: 1
+          interest_group_owner: "TestIgOwner"
+          win_reporting_urls {
+            buyer_reporting_urls {
+              reporting_url: "http://componentReportingUrl.com"
+              interaction_reporting_urls {
+                key: "clickEvent"
+                value: "http://componentInteraction.com"
+              }
+            }
+            component_seller_reporting_urls {
+              reporting_url: "http://componentReportingUrl.com"
+              interaction_reporting_urls {
+                key: "clickEvent"
+                value: "http://componentInteraction.com"
+              }
+            }
+            top_level_seller_reporting_urls {
+              reporting_url: "http://reportResultUrl.com"
+              interaction_reporting_urls {
+                key: "clickEvent"
+                value: "http://event.com"
+              }
+            }
+          }
+          ad_type: AD_TYPE_PROTECTED_APP_SIGNALS_AD
+          buyer_reporting_id: ""
+          buyer_and_seller_reporting_id: ""
+          k_anon_join_candidate {}, seller: "http://componentSeller.com"
+        }
+      )pb",
+      &expected_raw_response));
+  EXPECT_THAT(raw_response, EqualsProto(expected_raw_response));
 }
 
 TEST_F(ScoreAdsReactorTopLevelAuctionTest,
@@ -293,7 +437,7 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest,
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .top_level_seller_reporting_urls()
                 .reporting_url(),
-            kTestTopLevelReportResultUrl);
+            kTestTopLevelReportResultUrlInResponse);
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
@@ -371,7 +515,7 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest,
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .top_level_seller_reporting_urls()
                 .reporting_url(),
-            kTestTopLevelReportResultUrl);
+            kTestTopLevelReportResultUrlInResponse);
   EXPECT_EQ(scored_ad.win_reporting_urls()
                 .top_level_seller_reporting_urls()
                 .interaction_reporting_urls()
@@ -623,21 +767,21 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest, ScoresKAnonWinnerAndGhostWinners) {
             buyer_reporting_urls {
               reporting_url: "http://componentReportingUrl.com"
               interaction_reporting_urls {
-                key: "click"
+                key: "clickEvent"
                 value: "http://componentInteraction.com"
               }
             }
             component_seller_reporting_urls {
               reporting_url: "http://componentReportingUrl.com"
               interaction_reporting_urls {
-                key: "click"
+                key: "clickEvent"
                 value: "http://componentInteraction.com"
               }
             }
             top_level_seller_reporting_urls {
               reporting_url: "http://reportResultUrl.com"
               interaction_reporting_urls {
-                key: "click"
+                key: "clickEvent"
                 value: "http://event.com"
               }
             }
@@ -649,7 +793,8 @@ TEST_F(ScoreAdsReactorTopLevelAuctionTest, ScoresKAnonWinnerAndGhostWinners) {
             ad_render_url_hash: "TestWinnerAdRenderUrlHash"
             ad_component_render_urls_hash: "TestWinnerAdComponentRenderUrlsHash"
             reporting_id_hash: "TestWinnerReportingIdHash"
-          }
+          },
+          seller: "http://componentSeller.com"
         }
         ghost_winning_ad_scores {
           desirability: 1

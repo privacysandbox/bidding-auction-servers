@@ -53,27 +53,60 @@ locals {
     ENABLE_BIDDING_SERVICE_BENCHMARK = "" # Example: "false"
     BIDDING_SERVER_ADDR              = local.use_service_mesh ? "dns:///bidding-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}:50051" : "dns:///bidding-${local.environment}.${local.buyer_root_domain}:443"
     GRPC_ARG_DEFAULT_AUTHORITY       = local.use_service_mesh ? "bidding-${local.buyer_operator}-${local.environment}-appmesh-virtual-service.${local.buyer_root_domain}" : "PLACEHOLDER" # "PLACEHOLDER" is a special value that will be ignored by B&A servers. Leave it unchanged if running with Load Balancers.
+
     # Refers to BYOS Buyer Key-Value Server only.
-    BUYER_KV_SERVER_ADDR                                  = ""            # Example: "https://kvserver.com/trusted-signals"
-    BUYER_TKV_V2_SERVER_ADDR                              = "PLACEHOLDER" # Example: "dns:///kvserver:443"
-    ENABLE_TKV_V2_BROWSER                                 = ""            # Example: "false"
-    TKV_EGRESS_TLS                                        = ""            # Example: "false"
-    TEE_AD_RETRIEVAL_KV_SERVER_ADDR                       = "${local.tee_ad_retrieval_kv_server_address}"
+    BUYER_KV_SERVER_ADDR = "" # Example: "https://kvserver.com/trusted-signals", Address of the BYOS KV service (Only supported for Web traffic)
+
+    # [BEGIN] Trusted KV real time signal fetching params (Protected Audience Only)
+    ENABLE_TKV_V2_BROWSER    = ""            # Example: "false", Whether or not to use a trusted KV for browser clients. (Android clients traffic always need a trusted KV.)
+    TKV_EGRESS_TLS           = ""            # Example: "false", Whether or not to use TLS when talking to TKV. (Useful when TKV is not in the same VPC/mesh)
+    BUYER_TKV_V2_SERVER_ADDR = "PLACEHOLDER" # Example: "dns:///kvserver:443", Address where the TKV is listening.
+    # [END] Trusted KV real time signal fetching params (Protected Audience Only)
+
+    # [BEGIN] Protected App Signals (PAS) related services.
+    TEE_AD_RETRIEVAL_KV_SERVER_ADDR                       = "${local.tee_ad_retrieval_kv_server_address}" # Address of the TEE ad retrieval service (Used in non-contextual PAS flow)
     TEE_AD_RETRIEVAL_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY = local.use_service_mesh ? "${local.tee_ad_retrieval_kv_server_domain}" : "PLACEHOLDER"
-    TEE_KV_SERVER_ADDR                                    = "${local.tee_kv_server_address}"
+    TEE_KV_SERVER_ADDR                                    = "${local.tee_kv_server_address}" # Address of the TEE KV server address (Used in contextual PAS flow)
     TEE_KV_SERVER_GRPC_ARG_DEFAULT_AUTHORITY              = local.use_service_mesh ? "${local.tee_kv_server_domain}" : "PLACEHOLDER"
     AD_RETRIEVAL_TIMEOUT_MS                               = "60000"
-    GENERATE_BID_TIMEOUT_MS                               = "" # Example: "60000"
-    BIDDING_SIGNALS_LOAD_TIMEOUT_MS                       = "" # Example: "60000"
-    ENABLE_BUYER_FRONTEND_BENCHMARKING                    = "" # Example: "false"
-    CREATE_NEW_EVENT_ENGINE                               = "" # Example: "false"
-    ENABLE_BIDDING_COMPRESSION                            = "" # Example: "true"
-    TELEMETRY_CONFIG                                      = "" # Example: "mode: EXPERIMENT"
-    ENABLE_OTEL_BASED_LOGGING                             = "" # Example: "true"
-    CONSENTED_DEBUG_TOKEN                                 = "" # Example: "123456". Consented debugging requests increase server load in production. A high QPS of these requests can lead to unhealthy servers.
-    DEBUG_SAMPLE_RATE_MICRO                               = "0"
-    TEST_MODE                                             = "" # Example: "false"
-    BUYER_CODE_FETCH_CONFIG                               = "" # Example:
+    # [END] Protected App Signals (PAS) related services.
+
+    GENERATE_BID_TIMEOUT_MS            = "" # Example: "60000"
+    BIDDING_SIGNALS_LOAD_TIMEOUT_MS    = "" # Example: "60000"
+    ENABLE_BUYER_FRONTEND_BENCHMARKING = "" # Example: "false"
+    CREATE_NEW_EVENT_ENGINE            = "" # Example: "false"
+    ENABLE_BIDDING_COMPRESSION         = "" # Example: "true"
+    TELEMETRY_CONFIG                   = "" # Example: "mode: EXPERIMENT"
+    ENABLE_OTEL_BASED_LOGGING          = "" # Example: "true"
+    CONSENTED_DEBUG_TOKEN              = "" # Example: "123456". Consented debugging requests increase server load in production. A high QPS of these requests can lead to unhealthy servers.
+    DEBUG_SAMPLE_RATE_MICRO            = "0"
+    TEST_MODE                          = "" # Example: "false"
+    BUYER_CODE_FETCH_CONFIG            = "" # See README for flag descriptions
+    # Example for V8:
+    # "{
+    #    "fetchMode": 0,
+    #    "biddingJsPath": "",
+    #    "biddingJsUrl": "https://example.com/generateBid.js",
+    #    "protectedAppSignalsBiddingJsUrl": "https://example.com/generateBid.js",
+    #    "biddingWasmHelperUrl": "",
+    #    "protectedAppSignalsBiddingWasmHelperUrl": "",
+    #    "urlFetchPeriodMs": 13000000,
+    #    "urlFetchTimeoutMs": 30000,
+    #    "enableBuyerDebugUrlGeneration": true,
+    #    "prepareDataForAdsRetrievalJsUrl": "",
+    #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
+    #    "enablePrivateAggregateReporting": false,
+    #  }"
+    # Example for BYOB:
+    # "{
+    #    "fetchMode": 0,
+    #    "biddingExecutablePath": "",
+    #    "biddingExecutableUrl": "https://example.com/generateBid",
+    #    "urlFetchPeriodMs": 13000000,
+    #    "urlFetchTimeoutMs": 30000,
+    #    "enableBuyerDebugUrlGeneration": true,
+    #    "enablePrivateAggregateReporting": false,
+    #  }"
 
     # [BEGIN] Protected App Signals (PAS) related params
     # Refer to: https://github.com/privacysandbox/protected-auction-services-docs/blob/main/bidding_auction_services_protected_app_signals.md
@@ -90,21 +123,7 @@ locals {
 
     ENABLE_PROTECTED_AUDIENCE = "" # Example: "true"
     PS_VERBOSITY              = "" # Example: "10"
-    # "{
-    #    "fetchMode": 0,
-    #    "biddingJsPath": "",
-    #    "biddingJsUrl": "https://example.com/generateBid.js",
-    #    "protectedAppSignalsBiddingJsUrl": "placeholder",
-    #    "biddingWasmHelperUrl": "",
-    #    "protectedAppSignalsBiddingWasmHelperUrl": "",
-    #    "urlFetchPeriodMs": 13000000,
-    #    "urlFetchTimeoutMs": 30000,
-    #    "enableBuyerDebugUrlGeneration": true,
-    #    "prepareDataForAdsRetrievalJsUrl": "",
-    #    "prepareDataForAdsRetrievalWasmHelperUrl": "",
-    #    "enablePrivateAggregateReporting": false,
-    #  }"
-    ROMA_TIMEOUT_MS = "" # Example: "10000"
+    ROMA_TIMEOUT_MS           = "" # Example: "10000"
     # This flag should only be set if console.logs from the AdTech code(Ex:generateBid()) execution need to be exported as VLOG.
     # Note: turning on this flag will lead to higher memory consumption for AdTech code execution
     # and additional latency for parsing the logs.
@@ -156,6 +175,14 @@ locals {
     # FETCHED_BUT_OPTIONAL: Call to KV server is made and must not fail. All interest groups are sent to generateBid() irrespective of whether they have bidding signals or not.
     # Any other value/REQUIRED (default): Call to KV server is made and must not fail. Only those interest groups are sent to generateBid() that have at least one bidding signals key for which non-empty bidding signals are fetched.
     BIDDING_SIGNALS_FETCH_MODE = "REQUIRED"
+
+    // The following options can be adjusted to affect the behavior of libcurl, which is used in the BYOS buyer KV signals fetch. Limits in these parameters have been shown to improve BFE performance and stability when under high throughput load. You may adjust these to be more restrictive if you are experiencing BFE becoming unresponsive, or less restrictive if you find BFE throuhgput insufficient.
+    // Constrains the size of the libcurl connection cache. Recommended value of 512 for stability. See https://curl.se/libcurl/c/CURLMOPT_MAXCONNECTS.html.
+    CURLMOPT_MAXCONNECTS = 512
+    // Sets the maximum number of simultaneously open connections. Recommended value of 24 for stability. See https://curl.se/libcurl/c/CURLMOPT_MAX_TOTAL_CONNECTIONS.html.
+    CURLMOPT_MAX_TOTAL_CONNECTIONS = 24
+    // Sets the maximum number of connections to a single host. 0 is default, means unlimited. https://curl.se/libcurl/c/CURLMOPT_MAX_HOST_CONNECTIONS.html.
+    CURLMOPT_MAX_HOST_CONNECTIONS = 0
   }
 }
 
@@ -200,12 +227,13 @@ module "buyer-us-east-1" {
 
   # --- Params below are not generally expected to change between regions. ---
 
-  source              = "../../../modules/buyer"
-  environment         = local.environment
-  enclave_debug_mode  = false # Example: false, set to true for extended logs
-  root_domain         = local.buyer_root_domain
-  root_domain_zone_id = "" # Example: "Z1011487GET92S4MN4CM"
-  operator            = local.buyer_operator
+  source                = "../../../modules/buyer"
+  environment           = local.environment
+  enclave_debug_mode    = false # Example: false, set to true for extended logs
+  root_domain           = local.buyer_root_domain
+  root_domain_zone_id   = "" # Example: "Z1011487GET92S4MN4CM"
+  operator              = local.buyer_operator
+  coordinator_role_arns = [var.runtime_flags.PRIMARY_COORDINATOR_ACCOUNT_IDENTITY, var.runtime_flags.SECONDARY_COORDINATOR_ACCOUNT_IDENTITY]
 
   # Certificate authority
   country_for_cert_auth      = "" # Example: "US"

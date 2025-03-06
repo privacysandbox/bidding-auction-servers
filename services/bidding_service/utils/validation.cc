@@ -99,11 +99,20 @@ absl::Status IsValidProtectedAudienceBid(const AdWithBid& bid,
 }
 
 absl::Status IsValidProtectedAppSignalsBid(
-    const ProtectedAppSignalsAdWithBid& bid) {
+    const ProtectedAppSignalsAdWithBid& bid, AuctionScope auction_scope) {
   // Zero bid
   if (bid.bid() == 0.0f) {
     return absl::InvalidArgumentError(
         absl::StrCat("Zero bid will be ignored for ",
+                     GetProtectedAppSignalsBidDebugInfo(bid)));
+  }
+
+  // Is a component auction but bid does not allow component auctions
+  if (auction_scope ==
+          AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER &&
+      !bid.allow_component_auction()) {
+    return absl::PermissionDeniedError(
+        absl::StrCat("Component bid is not allowed for ",
                      GetProtectedAppSignalsBidDebugInfo(bid)));
   }
   return absl::OkStatus();

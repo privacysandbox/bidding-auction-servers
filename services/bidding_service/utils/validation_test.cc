@@ -187,15 +187,30 @@ TEST(IsValidProtectedAppSignalsBid, ReturnsInvalidForZeroBid) {
   pas_ad_with_bid.set_bid(0);
   ASSERT_EQ(pas_ad_with_bid.bid(), 0);
 
-  EXPECT_EQ(IsValidProtectedAppSignalsBid(pas_ad_with_bid).code(),
+  EXPECT_EQ(IsValidProtectedAppSignalsBid(
+                pas_ad_with_bid, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER)
+                .code(),
             absl::StatusCode::kInvalidArgument);
+}
+
+TEST(IsValidProtectedAppSignalsBid, ReturnsInvalidForRejectedComponentBid) {
+  ProtectedAppSignalsAdWithBid pas_ad_with_bid;
+  pas_ad_with_bid.set_bid(1.0);
+
+  EXPECT_EQ(IsValidProtectedAppSignalsBid(
+                pas_ad_with_bid,
+                AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER)
+                .code(),
+            absl::StatusCode::kPermissionDenied);
 }
 
 TEST(IsValidProtectedAppSignalsBid, ReturnsValidForProperBid) {
   ProtectedAppSignalsAdWithBid pas_ad_with_bid;
   pas_ad_with_bid.set_bid(1.0);
 
-  EXPECT_TRUE(IsValidProtectedAppSignalsBid(pas_ad_with_bid).ok());
+  EXPECT_TRUE(IsValidProtectedAppSignalsBid(
+                  pas_ad_with_bid, AuctionScope::AUCTION_SCOPE_SINGLE_SELLER)
+                  .ok());
 }
 
 }  // namespace

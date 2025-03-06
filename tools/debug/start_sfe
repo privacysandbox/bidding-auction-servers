@@ -30,15 +30,23 @@ BUYER_SERVER_ADDRS_JSON="${BUYER_SERVER_ADDRS_JSON:-$(cat << EOF
 EOF
 )}"
 
+SERVICE_NAME=seller_frontend
+BIN=${SERVICE_NAME}
+if [[ -z $1 ]]; then
+  # When we load from .tar file, we don't mount the binary
+  # and it is embededd as "server"
+  BIN="server"
+fi
+
 SERVER_START_CMD=$(cat << END
-/server/bin/server \
+/server/bin/${BIN} \
 --init_config_client="false" \
 --port=${SFE_PORT} \
 --https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
 --auction_server_host="${AUCTION_SERVER_ADDR}" \
 --key_value_signals_host="${KEY_VALUE_SIGNALS_ADDR}" \
 --trusted_key_value_v2_signals_host="${TRUSTED_KEY_VALUE_V2_SIGNALS_ADDR}" \
---scoring_signals_fetch_mode="REQUIRED" \
+--scoring_signals_fetch_mode="${SCORING_SIGNALS_FETCH_MODE}" \
 --seller_origin_domain="${SELLER_ORIGIN_DOMAIN}" \
 "${SELLER_CODE_FETCH_CONFIG}" \
 --seller_cloud_platforms_map='{"component-seller1.com":"GCP", "component-seller2.com":"AWS"}' \
@@ -51,6 +59,11 @@ SERVER_START_CMD=$(cat << END
 --enable_chaffing="false" \
 --enable_kanon=${ENABLE_KANON} \
 --k_anon_api_key="PLACEHOLDER" \
+--num_k_anon_shards="10" \
+--num_non_k_anon_shards="10" \
+--test_mode_k_anon_cache_ttl_ms="1" \
+--test_mode_non_k_anon_cache_ttl_ms="1" \
+--enable_k_anon_query_cache="true" \
 --telemetry_config="${TELEMETRY_CONFIG}" \
 --enable_otel_based_logging="true" \
 --consented_debug_token="test_token" \
@@ -63,16 +76,5 @@ SERVER_START_CMD=$(cat << END
 END
 )
 
-if [[ $1 == "--gdb" ]]; then
-  export PROJECT_ROOT=$(git rev-parse --show-toplevel)
-  export EXTRA_DOCKER_RUN_ARGS=(
-    "--volume=${PROJECT_ROOT}/bazel-bin/services/seller_frontend_service/server:/server/bin/server"
-    "--name=sfe"
-  )
-  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
-  --docker-network host --image build-debian \
-  --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
-else
-  docker_image_uri="$(docker load -i dist/debian/seller_frontend_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
-  docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
-fi
+PROF_PORT="${PROF_PORT:-1234}"
+run_server "$1" "${SERVICE_NAME}" "${SERVER_START_CMD}" "${PROF_PORT}"

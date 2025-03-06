@@ -31,7 +31,7 @@
 #include "include/gtest/gtest.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
-#include "services/seller_frontend_service/k_anon/k_anon_cache.h"
+#include "services/seller_frontend_service/cache/cache.h"
 #include "services/seller_frontend_service/k_anon/k_anon_cache_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -90,10 +90,9 @@ class KAnonCacheManagerTest : public ::testing::Test {
 };
 
 TEST_F(KAnonCacheManagerTest, CallsKAnonClient) {
-  auto k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+  auto k_anon_cache = std::make_unique<MockCache<std::string, std::string>>();
   auto non_k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+      std::make_unique<MockCache<std::string, std::string>>();
 
   absl::flat_hash_set<absl::string_view> unresolved_hash_set = {
       kTestHash1, kTestHash2, kTestHash3, kTestHash4};
@@ -178,10 +177,9 @@ TEST_F(KAnonCacheManagerTest, CallsKAnonClient) {
 }
 
 TEST_F(KAnonCacheManagerTest, ReturnsHashInKAnonCache) {
-  auto k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+  auto k_anon_cache = std::make_unique<MockCache<std::string, std::string>>();
   auto non_k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+      std::make_unique<MockCache<std::string, std::string>>();
   absl::flat_hash_set<absl::string_view> unresolved_hash_set = {
       kTestHash1, kTestHash2, kTestHash3};
 
@@ -229,10 +227,9 @@ TEST_F(KAnonCacheManagerTest, ReturnsHashInKAnonCache) {
 }
 
 TEST_F(KAnonCacheManagerTest, ReturnsEmptySetIfNoKAnonHashFound) {
-  auto k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+  auto k_anon_cache = std::make_unique<MockCache<std::string, std::string>>();
   auto non_k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+      std::make_unique<MockCache<std::string, std::string>>();
   absl::flat_hash_set<absl::string_view> unresolved_hash_set = {kTestHash1};
 
   EXPECT_CALL(*k_anon_cache, Query)
@@ -278,10 +275,9 @@ TEST_F(KAnonCacheManagerTest, ReturnsEmptySetIfNoKAnonHashFound) {
 }
 
 TEST_F(KAnonCacheManagerTest, ReturnsErrorAndCacheHashIfClientErrors) {
-  auto k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+  auto k_anon_cache = std::make_unique<MockCache<std::string, std::string>>();
   auto non_k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+      std::make_unique<MockCache<std::string, std::string>>();
   absl::flat_hash_set<absl::string_view> unresolved_hash_set = {kTestHash1,
                                                                 kTestHash2};
   absl::string_view error_message = "error from k-anon client";
@@ -327,19 +323,19 @@ TEST_F(KAnonCacheManagerTest, CallsOnACorrectShardedCache) {
   int num_k_anon_shard = 3;
   int num_non_k_anon_shard = 2;
 
-  std::vector<std::unique_ptr<MockKAnonCache<std::string, std::string>>>
+  std::vector<std::unique_ptr<MockCache<std::string, std::string>>>
       mock_k_anon_caches;
-  std::vector<std::unique_ptr<MockKAnonCache<std::string, std::string>>>
+  std::vector<std::unique_ptr<MockCache<std::string, std::string>>>
       mock_non_k_anon_caches;
   mock_k_anon_caches.reserve(num_k_anon_shard);
   mock_non_k_anon_caches.reserve(num_non_k_anon_shard);
   for (int i = 0; i < num_k_anon_shard; i++) {
     mock_k_anon_caches.emplace_back(
-        std::make_unique<MockKAnonCache<std::string, std::string>>());
+        std::make_unique<MockCache<std::string, std::string>>());
   }
   for (int i = 0; i < num_non_k_anon_shard; i++) {
     mock_non_k_anon_caches.emplace_back(
-        std::make_unique<MockKAnonCache<std::string, std::string>>());
+        std::make_unique<MockCache<std::string, std::string>>());
   }
 
   // Expected sharding split for k-anon:
@@ -433,6 +429,8 @@ TEST_F(KAnonCacheManagerTest, CallsOnACorrectShardedCache) {
                 case 2:
                   EXPECT_TRUE(hashes.contains(kTestHash1));
                   break;
+                default:
+                  return absl::InvalidArgumentError("Unexpected cache index.");
               }
               return absl::OkStatus();
             });
@@ -461,6 +459,8 @@ TEST_F(KAnonCacheManagerTest, CallsOnACorrectShardedCache) {
                   EXPECT_TRUE(hashes.contains(kTestHash2));
                   EXPECT_TRUE(hashes.contains(kTestHash4));
                   break;
+                default:
+                  return absl::InvalidArgumentError("Unexpected cache index.");
               }
               return absl::OkStatus();
             });
@@ -498,10 +498,9 @@ TEST_F(KAnonCacheManagerTest, CallsOnACorrectShardedCache) {
 }
 
 TEST_F(KAnonCacheManagerTest, DoesNotCallCacheWhenDisabled) {
-  auto k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+  auto k_anon_cache = std::make_unique<MockCache<std::string, std::string>>();
   auto non_k_anon_cache =
-      std::make_unique<MockKAnonCache<std::string, std::string>>();
+      std::make_unique<MockCache<std::string, std::string>>();
 
   absl::flat_hash_set<absl::string_view> unresolved_hash_set = {kTestHash1,
                                                                 kTestHash2};

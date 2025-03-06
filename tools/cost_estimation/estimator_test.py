@@ -16,8 +16,8 @@
 
 import unittest
 from unittest.mock import MagicMock
-from tools.cost_estimation.estimator import EstimatorTables, CostEstimator
-from tools.cost_estimation.sql_expr import SqlExecutor
+from estimator import EstimatorTables, CostEstimator
+from sql_expr import SqlExecutor
 
 
 class EstimatorTablesTest(unittest.TestCase):

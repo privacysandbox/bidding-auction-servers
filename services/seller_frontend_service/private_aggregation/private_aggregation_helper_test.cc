@@ -266,7 +266,7 @@ TEST(CborSerializePAggContribution, SuccessfullySerializesEventContributions) {
   PrivateAggregateReportingResponse expected_response;
   expected_response.set_adtech_origin(kTestIgOwner);
   PrivateAggregateContribution contribution1 =
-      GetTestContributionWithIntegers(EVENT_TYPE_CUSTOM, "click");
+      GetTestContributionWithIntegers(EVENT_TYPE_CUSTOM, "clickEvent");
   PrivateAggregateContribution contribution0 =
       GetTestContributionWithIntegers(EVENT_TYPE_WIN, "");
   *expected_response.add_contributions() = contribution1;
@@ -323,7 +323,7 @@ TEST(CborSerializePAggContribution, SuccessfullySerailizesIgContributions) {
   PrivateAggregateReportingResponse expected_response;
   expected_response.set_adtech_origin(kTestIgOwner);
   PrivateAggregateContribution contribution1 =
-      GetTestContributionWithIntegers(EVENT_TYPE_CUSTOM, "click");
+      GetTestContributionWithIntegers(EVENT_TYPE_CUSTOM, "clickEvent");
   PrivateAggregateContribution contribution0 =
       GetTestContributionWithIntegers(EVENT_TYPE_WIN, "");
   contribution1.set_ig_idx(1);
@@ -381,7 +381,7 @@ TEST(CborSerializePAggContribution, SuccessfullySerailizesPAggResponse) {
   PrivateAggregateReportingResponse seller_pagg_response;
   PrivateAggregateReportingResponse buyer_pagg_response;
   PrivateAggregateContribution contribution1 =
-      GetTestContributionWithIntegers(EVENT_TYPE_CUSTOM, "click");
+      GetTestContributionWithIntegers(EVENT_TYPE_CUSTOM, "clickEvent");
   PrivateAggregateContribution contribution0 =
       GetTestContributionWithIntegers(EVENT_TYPE_WIN, "");
   contribution1.set_ig_idx(1);

@@ -62,9 +62,6 @@ cc_test(
     name = "multi_curl_http_fetcher_async_test",
     size = "medium",
     srcs = ["multi_curl_http_fetcher_async_test.cc"],
-    data = [
-        "//services/common:roots_pem",
-    ],
     tags = [
         "flaky",
         "requires-network",

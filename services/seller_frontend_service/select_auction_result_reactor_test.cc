@@ -53,7 +53,7 @@ class SelectAuctionResultReactorTest : public ::testing::Test {
     SetupRequest();
     config_ = CreateConfig();
     config_.SetOverride("", CONSENTED_DEBUG_TOKEN);
-    config_.SetOverride(kFalse, ENABLE_PROTECTED_APP_SIGNALS);
+    config_.SetOverride(kTrue, ENABLE_PROTECTED_APP_SIGNALS);
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
     config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
@@ -86,12 +86,19 @@ class SelectAuctionResultReactorTest : public ::testing::Test {
         std::move(context));
   }
 
-  void SetupComponentAuctionResults(int num = 10) {
+  void SetupComponentAuctionResults(
+      int num = 10, AdType ad_type = AdType::AD_TYPE_PROTECTED_AUDIENCE_AD) {
     // The key that will be returned by mock key fetcher.
     auto key_id = std::to_string(HpkeKeyset{}.key_id);
     for (int i = 0; i < num; ++i) {
-      AuctionResult ar = MakeARandomComponentAuctionResult(
-          protected_auction_input_.generation_id(), kSellerOriginDomain);
+      AuctionResult ar;
+      if (ad_type == AdType::AD_TYPE_PROTECTED_AUDIENCE_AD) {
+        ar = MakeARandomComponentAuctionResult(
+            protected_auction_input_.generation_id(), kSellerOriginDomain);
+      } else {
+        ar = MakeARandomPASComponentAuctionResult(
+            protected_auction_input_.generation_id(), kSellerOriginDomain);
+      }
       auto* car = this->request_.mutable_component_auction_results()->Add();
       car->set_key_id(key_id);
       car->set_auction_result_ciphertext(
@@ -129,6 +136,62 @@ TYPED_TEST_SUITE(SelectAuctionResultReactorTest, ProtectedAuctionInputTypes);
 TYPED_TEST(SelectAuctionResultReactorTest, CallsScoringWithComponentAuctions) {
   absl::Notification scoring_done;
   this->SetupComponentAuctionResults(2);
+  EXPECT_CALL(this->scoring_client_, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [this, &scoring_done](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest>
+                  score_ads_request,
+              grpc::ClientContext* context,
+              absl::AnyInvocable<void(
+                  absl::StatusOr<
+                      std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>,
+                  ResponseMetadata)&&>
+                  on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            EXPECT_EQ(score_ads_request->auction_signals(),
+                      this->request_.auction_config().auction_signals());
+            EXPECT_EQ(score_ads_request->seller_signals(),
+                      this->request_.auction_config().seller_signals());
+            EXPECT_EQ(score_ads_request->seller(),
+                      this->request_.auction_config().seller());
+            EXPECT_EQ(score_ads_request->seller_currency(),
+                      this->request_.auction_config().seller_currency());
+            EXPECT_EQ(score_ads_request->component_auction_results_size(),
+                      this->request_.component_auction_results_size());
+            for (int i = 0;
+                 i < score_ads_request->component_auction_results_size(); i++) {
+              // bidding groups are not sent to Auction server.
+              this->component_auction_results_[i].clear_bidding_groups();
+              this->component_auction_results_[i].clear_update_groups();
+              EXPECT_THAT(score_ads_request->component_auction_results(i),
+                          EqualsProto(this->component_auction_results_[i]));
+            }
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(),
+                /* response_metadata= */ {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ClientRegistry clients = {&scoring_signals_provider,
+                            this->scoring_client_,
+                            BuyerFrontEndAsyncClientFactoryMock(),
+                            &(this->kv_async_client_),
+                            this->key_fetcher_manager_,
+                            &this->crypto_client_,
+                            std::make_unique<MockAsyncReporter>(
+                                std::make_unique<MockHttpFetcherAsync>())};
+  auto response = RunRequest(this->config_, clients, this->request_);
+  scoring_done.WaitForNotification();
+}
+
+TYPED_TEST(SelectAuctionResultReactorTest,
+           CallsScoringWithPASComponentAuctions) {
+  absl::Notification scoring_done;
+  this->SetupComponentAuctionResults(2,
+                                     AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD);
   EXPECT_CALL(this->scoring_client_, ExecuteInternal)
       .Times(1)
       .WillOnce(
@@ -279,7 +342,8 @@ TYPED_TEST(SelectAuctionResultReactorTest,
           {.ig_index = kSampleIgIndex,
            .ig_owner = kSampleIgOwner,
            .ig_name = kSampleIgName,
-           .bucket_name = kSampleBucket,
+           .bucket_name =
+               std::vector<uint8_t>(kSampleBucket.begin(), kSampleBucket.end()),
            .bucket_value = kSampleValue,
            .ad_render_url = kSampleAdRenderUrl,
            .ad_component_render_url = kSampleAdComponentRenderUrl,

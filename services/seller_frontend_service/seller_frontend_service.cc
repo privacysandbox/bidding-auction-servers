@@ -39,7 +39,8 @@ namespace {
 // Factory method to get a reactor based on the request type.
 std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
-    SelectAdResponse* response, const ClientRegistry& clients,
+    SelectAdResponse* response, server_common::Executor* executor,
+    const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
@@ -47,17 +48,18 @@ std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
   switch (request->client_type()) {
     case CLIENT_TYPE_ANDROID:
       return std::make_unique<SelectAdReactorForApp>(
-          context, request, response, clients, config_client, report_win_map,
-          enable_cancellation, enable_kanon);
+          context, request, response, executor, clients, config_client,
+          report_win_map, enable_cancellation, enable_kanon);
     case CLIENT_TYPE_BROWSER:
       return std::make_unique<SelectAdReactorForWeb>(
-          context, request, response, clients, config_client, report_win_map,
-          enable_cancellation, enable_kanon,
+          context, request, response, executor, clients, config_client,
+          report_win_map, enable_cancellation, enable_kanon,
           enable_buyer_private_aggregate_reporting,
           per_adtech_paapi_contributions_limit);
     default:
       return std::make_unique<SelectAdReactorInvalid>(
-          context, request, response, clients, config_client, report_win_map);
+          context, request, response, executor, clients, config_client,
+          report_win_map);
   }
 }
 
@@ -83,7 +85,8 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
   LogCommonMetric(request, response);
   if (request->ByteSizeLong() == 0) {
     auto reactor = std::make_unique<SelectAdReactorInvalid>(
-        context, request, response, clients_, config_client_, report_win_map_);
+        context, request, response, executor_.get(), clients_, config_client_,
+        report_win_map_);
     reactor->Execute();
     return reactor.release();
   }
@@ -97,11 +100,11 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
     reactor->Execute();
     return reactor.release();
   }
-  std::unique_ptr<SelectAdReactor> reactor =
-      GetSelectAdReactor(context, request, response, clients_, config_client_,
-                         report_win_map_, enable_cancellation_, enable_kanon_,
-                         enable_buyer_private_aggregate_reporting_,
-                         per_adtech_paapi_contributions_limit_);
+  std::unique_ptr<SelectAdReactor> reactor = GetSelectAdReactor(
+      context, request, response, executor_.get(), clients_, config_client_,
+      report_win_map_, enable_cancellation_, enable_kanon_,
+      enable_buyer_private_aggregate_reporting_,
+      per_adtech_paapi_contributions_limit_);
   reactor->Execute();
   return reactor.release();
 }

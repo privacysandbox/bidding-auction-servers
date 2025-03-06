@@ -307,8 +307,11 @@ T Decode(absl::string_view cbor_payload, ErrorAccumulator& error_accumulator,
       cbor_load(reinterpret_cast<const unsigned char*>(cbor_payload.data()),
                 cbor_payload.size(), &result));
   if (result.error.code != CBOR_ERR_NONE) {
-    error_accumulator.ReportError(ErrorVisibility::CLIENT_VISIBLE,
-                                  kInvalidCborError, ErrorCode::CLIENT_SIDE);
+    error_accumulator.ReportError(
+        ErrorVisibility::CLIENT_VISIBLE,
+        absl::StrCat(kInvalidCborError, ". Error code: ", result.error.code,
+                     ", position: ", result.error.position),
+        ErrorCode::CLIENT_SIDE);
     return protected_auction_input;
   }
 

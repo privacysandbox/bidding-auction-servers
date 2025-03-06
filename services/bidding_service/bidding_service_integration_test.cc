@@ -1139,6 +1139,7 @@ struct GenerateBidHelperConfig {
   bool component_auction = false;
   bool enable_private_aggregate_reporting = false;
   int multi_bid_limit = kTestMultiBidLimit;
+  int per_adtech_paapi_contributions_limit = 100;
 };
 
 void GenerateBidCodeWrapperTestHelper(
@@ -1176,7 +1177,9 @@ void GenerateBidCodeWrapperTestHelper(
       .enable_buyer_debug_url_generation =
           test_config.enable_buyer_debug_url_generation,
       .enable_private_aggregate_reporting =
-          test_config.enable_private_aggregate_reporting};
+          test_config.enable_private_aggregate_reporting,
+      .per_adtech_paapi_contributions_limit =
+          test_config.per_adtech_paapi_contributions_limit};
   BiddingService service(GetProtectedAudienceV8ReactorFactory(client),
                          std::move(key_fetcher_manager),
                          std::move(crypto_client), std::move(runtime_config),
@@ -1269,7 +1272,8 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   GenerateBidHelperConfig test_config = {
       .enable_debug_reporting = enable_debug_reporting,
       .enable_buyer_debug_url_generation = enable_buyer_debug_url_generation,
-      .enable_private_aggregate_reporting = true};
+      .enable_private_aggregate_reporting = true,
+      .per_adtech_paapi_contributions_limit = 1};
   GenerateBidCodeWrapperTestHelper(
       &response,
       absl::StrFormat(kBuyerBaseCodeForPrivateAggregation,
@@ -1281,18 +1285,42 @@ TEST_F(GenerateBidsReactorIntegrationTest,
   for (const auto& ad_with_bid : raw_response.bids()) {
     EXPECT_GT(ad_with_bid.bid(), 0);
     auto& contributions = ad_with_bid.private_aggregation_contributions();
-    EXPECT_EQ(contributions.size(), 1);
+    EXPECT_EQ(contributions.size(), 4);
     EXPECT_EQ(contributions.at(0).event().event_type(),
               EventType::EVENT_TYPE_WIN);
-    ASSERT_EQ(
-        contributions.at(0).bucket().bucket_128_bit().bucket_128_bits_size(), 2)
-        << "bucket_128_bit has not been set correctly in the contribution";
-    EXPECT_EQ(
-        contributions.at(0).bucket().bucket_128_bit().bucket_128_bits().at(0),
-        100)
-        << "bucket_128_bit has not been set in the contribution";
-    EXPECT_EQ(contributions.at(0).value().int_value(), 200)
-        << "int_value has not been set correctly in the contribution";
+    int win_count = 0;
+    int loss_count = 0;
+    int always_count = 0;
+    int custom_count = 0;
+    for (auto& contribution : contributions) {
+      switch (contribution.event().event_type()) {
+        case EventType::EVENT_TYPE_WIN:
+          win_count++;
+          break;
+        case EventType::EVENT_TYPE_LOSS:
+          loss_count++;
+          break;
+        case EventType::EVENT_TYPE_ALWAYS:
+          always_count++;
+          break;
+        case EventType::EVENT_TYPE_CUSTOM:
+          custom_count++;
+        default:
+          break;
+      }
+      ASSERT_EQ(contribution.bucket().bucket_128_bit().bucket_128_bits_size(),
+                2)
+          << "bucket_128_bit has not been set correctly in the contribution";
+      EXPECT_EQ(contribution.bucket().bucket_128_bit().bucket_128_bits().at(0),
+                100)
+          << "bucket_128_bit has not been set in the contribution";
+      EXPECT_EQ(contribution.value().int_value(), 200)
+          << "int_value has not been set correctly in the contribution";
+    }
+    EXPECT_EQ(win_count, 1);
+    EXPECT_EQ(loss_count, 1);
+    EXPECT_EQ(always_count, 1);
+    EXPECT_EQ(custom_count, 1);
     EXPECT_EQ(ad_with_bid.data_version(), kDataVersion);
   }
 }

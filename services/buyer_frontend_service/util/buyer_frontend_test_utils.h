@@ -30,6 +30,7 @@ struct BiddingProviderMockOptions {
   bool repeated_get_allowed = false;
   std::optional<absl::Status> server_error_to_return;
   bool match_any_params_any_times = false;
+  bool is_hybrid_v1_return = false;
 };
 
 void SetupBiddingProviderMock(
@@ -43,6 +44,11 @@ SetupBiddingProviderMock(
 void SetupBiddingProviderMockV2(
     KVAsyncClientMock* kv_async_client,
     const kv_server::v2::GetValuesResponse& response);
+
+void SetupBiddingProviderMockHybrid(
+    KVAsyncClientMock* kv_async_client,
+    const kv_server::v2::GetValuesResponse& response,
+    const std::string& byos_output);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

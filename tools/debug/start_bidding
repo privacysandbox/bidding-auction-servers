@@ -37,6 +37,7 @@ GENERATE_BID_MODEL_PATH="${GENERATE_BID_MODEL_PATH:-services/inference_sidecar/c
 
 declare -i ENABLE_INFERENCE=0
 declare -i USE_GDB=0
+declare -i CPU_PROF=0
 declare GENERATE_BID_FILEPATH=""
 declare -i FETCH_MODE=0
 
@@ -48,6 +49,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --gdb)
       USE_GDB=1
+      shift
+      ;;
+    --cpu-prof)
+      CPU_PROF=1
       shift
       ;;
     --use-with-generateBid-file)
@@ -68,7 +73,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-export PROJECT_ROOT=$(git rev-parse --show-toplevel)
+PROJECT_ROOT=$(git rev-parse --show-toplevel)
+export PROJECT_ROOT="${PROJECT_ROOT}"
 function get_libcddl_path() {
   declare -a candidates=(
     "bazel-out/k8-opt/bin/external/cddl_lib/libcddl.so"
@@ -81,7 +87,7 @@ function get_libcddl_path() {
   for f in "${candidates[@]}"
   do
     if [[ -f ${PROJECT_ROOT}/$f ]]; then
-      echo ${PROJECT_ROOT}/$f
+      echo "${PROJECT_ROOT}/$f"
       break
     fi
   done
@@ -108,7 +114,7 @@ END
 
 # Update buyer code fetch config if using JS file
 if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
-  BUYER_CODE_FETCH_CONFIG=$(echo ${BUYER_CODE_FETCH_CONFIG} | ${PROJECT_ROOT}/builders/tools/jq '.fetchMode = 2')
+  BUYER_CODE_FETCH_CONFIG=$(echo "${BUYER_CODE_FETCH_CONFIG}" | "${PROJECT_ROOT}/builders/tools/jq" '.fetchMode = 2')
 fi
 
 # Update buyer code fetch config if enabling inference
@@ -172,11 +178,11 @@ ${INFERENCE_ARGS} && exit
 END
 )
 
-if [[ ${USE_GDB} -eq 1 ]]; then
+function local_debian_setup {
   cddl_path=$(get_libcddl_path)
   echo "Using libcddl path: ${cddl_path}"
 
-  export EXTRA_DOCKER_RUN_ARGS=(
+  declare -a extra_docker_run_args=(
     "--volume=${cddl_path}:/usr/lib/libcddl.so"
     "--volume=${PROJECT_ROOT}/bazel-bin/services/bidding_service/server:/server/bin/server"
     "--volume=${PROJECT_ROOT}/services/bidding_service/egress_cddl_spec:/egress_cddl_spec"
@@ -184,16 +190,32 @@ if [[ ${USE_GDB} -eq 1 ]]; then
     "--volume=${PROJECT_ROOT}/services/inference_sidecar/modules/tensorflow_v2_14_0/artifacts/inference_sidecar_tensorflow_v2_14_0:/server/bin/inference_sidecar_tensorflow_v2_14_0"
     "--volume=${PROJECT_ROOT}/${GENERATE_BID_MODEL_PATH}:/generate_bid_model"
     "--name=bidding"
+    "--label=bidding"
   )
   if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
-    EXTRA_DOCKER_RUN_ARGS+=("--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js")
+    extra_docker_run_args+=("--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js")
   fi
 
-  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
+  PROF_PORT="${PROF_PORT:-1237}"
+  extra_docker_run_args+=(
+    "-p ${PROF_PORT}:${PROF_PORT}"
+  )
+  export EXTRA_DOCKER_RUN_ARGS="${extra_docker_run_args[*]}"
+}
+
+if [[ ${USE_GDB} -eq 1 ]]; then
+  local_debian_setup
+  "${PROJECT_ROOT}/builders/tools/cbuild" --seccomp-unconfined \
   --docker-network host --image build-debian \
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
+elif [[ ${CPU_PROF} -eq 1 ]]; then
+  local_debian_setup
+  "${PROJECT_ROOT}/builders/tools/cbuild" --seccomp-unconfined \
+  --docker-network host --image build-debian --cmd-profiler \
+  --cpu-profiler-filename bidding.prof --cpu-profiler-signal 12 \
+  --cmd "${SERVER_START_CMD}"
 else
-  docker_image_uri="$(docker load -i dist/debian/bidding_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
+  docker_image_uri="${DOCKER_IMAGE_URI:-$(docker load -i dist/debian/bidding_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")}"
   if [[ -n "${GENERATE_BID_FILEPATH}" ]]; then
     DOCKER_RUN_ARGS+=(
       "--volume=${PROJECT_ROOT}/${GENERATE_BID_FILEPATH}:/generateBid.js"

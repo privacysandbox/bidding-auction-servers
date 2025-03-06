@@ -236,3 +236,8 @@ variable "tee_kv_servers_port" {
   description = "Port on which the TEE KV server accepts connections."
   type        = number
 }
+
+variable "coordinator_role_arns" {
+  description = "ARNs for coordinator roles."
+  type        = list(string)
+}

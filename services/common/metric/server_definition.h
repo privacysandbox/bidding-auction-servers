@@ -24,6 +24,7 @@
 #include "services/common/metric/error_code.h"
 #include "services/common/util/read_system.h"
 #include "services/common/util/reporting_util.h"
+#include "services/seller_frontend_service/k_anon/constants.h"
 #include "src/metric/context_map.h"
 #include "src/metric/definition.h"
 #include "src/metric/key_fetch.h"
@@ -138,6 +139,14 @@ inline constexpr server_common::metrics::Definition<
     kSfeInitiatedRequestKAnonDuration(
         "sfe.initiated_request.to_k_anon.duration_ms",
         "Total duration request takes to get response back from k-Anon server",
+        server_common::metrics::kTimeHistogram, 1'000, 10);
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kHistogram>
+    kKAnonOverallQueryDuration(
+        "sfe.k_anon_query.duration_ms",
+        "End to end time taken for querying k-anon "
+        "hashes (includes request creation time, response parsing time)",
         server_common::metrics::kTimeHistogram, 1'000, 10);
 inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
@@ -822,7 +831,7 @@ inline constexpr server_common::metrics::Definition<
     int, server_common::metrics::Privacy::kImpacting,
     server_common::metrics::Instrument::kPartitionedCounter>
     kSfeInitiatedRequestKanonErrorCountByStatus(
-        /*name*/ "sfe.initiated_request.to_kanon.errors_count",
+        /*name*/ "sfe.initiated_request.to_k_anon.errors_count",
         /*description*/
         "Initiated requests to K-Anon Service that resulted in failure "
         "partitioned by "
@@ -830,6 +839,25 @@ inline constexpr server_common::metrics::Definition<
         /*partition_type*/ "status_code",
         /*max_partitions_contributed*/ 1,
         /*public_partitions*/ server_common::metrics::kEmptyPublicPartition,
+        /*upper_bound*/ 1,
+        /*lower_bound*/ 0);
+
+inline constexpr absl::string_view kKAnonHashTypes[] = {
+    kKAnonAdBidHash,
+    kKAnonAdComponentAdHash,
+    kKAnonReportingIdHash,
+};
+
+inline constexpr server_common::metrics::Definition<
+    int, server_common::metrics::Privacy::kImpacting,
+    server_common::metrics::Instrument::kPartitionedCounter>
+    kSfeKAnonHashCount(
+        /*name*/ "sfe.k_anon.hash_count",
+        /*description*/
+        "Total number of k-anon hash counts partitioned by the hash type",
+        /*partition_type*/ "k_anon_hash_type",
+        /*max_partitions_contributed*/ 3,
+        /*public_partitions*/ kKAnonHashTypes,
         /*upper_bound*/ 1,
         /*lower_bound*/ 0);
 
@@ -951,6 +979,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &server_common::metrics::kServerTotalTimeMs,
         &server_common::metrics::kRequestByte,
         &server_common::metrics::kResponseByte,
+        &kSfeKAnonHashCount,
         &kInitiatedRequestKVErrorCountByStatus,
         &kInitiatedRequestAuctionErrorCountByStatus,
         &kInitiatedRequestBfeErrorCountByStatus,
@@ -980,6 +1009,7 @@ inline constexpr const server_common::metrics::DefinitionName*
         &kKAnonTotalCacheHitPercentage,
         &kKAnonCacheHitPercentage,
         &kNonKAnonCacheHitPercentage,
+        &kKAnonOverallQueryDuration,
 };
 
 template <>

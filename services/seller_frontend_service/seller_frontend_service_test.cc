@@ -136,6 +136,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     config_.SetOverride("0", TEST_MODE_K_ANON_CACHE_TTL_MS);
     config_.SetOverride("0", TEST_MODE_NON_K_ANON_CACHE_TTL_MS);
     config_.SetOverride(kTrue, ENABLE_K_ANON_QUERY_CACHE);
+    config_.SetOverride(kTrue, CREATE_NEW_EVENT_ENGINE);
   }
 
   ClientRegistry CreateValidClientRegistry() {
@@ -177,6 +178,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyCiphertext) {
                          key_fetcher_manager,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -299,6 +301,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -346,7 +349,7 @@ TYPED_TEST(SellerFrontEndServiceTest, FailsWhenBothAuctionConfigsSet) {
                          /* crypto_client= */ nullptr,
                          std::make_unique<MockAsyncReporter>(
                              std::make_unique<MockHttpFetcherAsync>())};
-
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -395,6 +398,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidArgumentOnKeyNotFound) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -432,6 +436,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnInvalidClientType) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -469,6 +474,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyRequest) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -506,6 +512,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsInvalidInputOnEmptyBuyerList) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -556,6 +563,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /*crypto_client = */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -598,6 +606,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /*crypto_client_ptr = */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -661,6 +670,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /*crypto_client_ptr = */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -720,6 +730,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsOnMissingBuyerInputs) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -782,6 +793,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnMissingBuyerClient) {
                          /* crypto_client = */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -877,6 +889,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SendsChaffOnEmptyGetBidsResponse) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1034,6 +1047,7 @@ TYPED_TEST(SellerFrontEndServiceTest, RawRequestFinishWithSuccess) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1148,6 +1162,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ErrorsWhenCannotContactSellerKVServer) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1231,6 +1246,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1300,6 +1316,7 @@ TYPED_TEST(SellerFrontEndServiceTest, AnyBuyerNotErroringMeansOverallSuccess) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1413,6 +1430,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1530,6 +1548,7 @@ TYPED_TEST(SellerFrontEndServiceTest, SkipsBuyerCallsAfterLimit) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1625,6 +1644,7 @@ TYPED_TEST(SellerFrontEndServiceTest, InternalErrorsFromScoringCauseAChaff) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1719,6 +1739,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1773,6 +1794,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsErrorForAndroidComponentAuction) {
                          /* crypto_client= */ nullptr,
                          std::move(async_reporter)};
 
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(&this->config_,
                                                 std::move(clients));
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1803,6 +1825,7 @@ TYPED_TEST(
   grpc::ClientContext context;
 
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1824,6 +1847,7 @@ TYPED_TEST(
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
   this->config_.SetOverride(kSampleCloudPlatformMap,
                             SELLER_CLOUD_PLATFORMS_MAP);
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1845,6 +1869,7 @@ TYPED_TEST(
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
   this->config_.SetOverride(kSampleCloudPlatformMap,
                             SELLER_CLOUD_PLATFORMS_MAP);
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1867,6 +1892,7 @@ TYPED_TEST(
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
   this->config_.SetOverride(kSampleCloudPlatformMap,
                             SELLER_CLOUD_PLATFORMS_MAP);
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
   auto start_sfe_result = StartLocalService(&seller_frontend_service);
@@ -1895,6 +1921,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   this->config_.SetOverride(kSampleSellerDomain, SELLER_ORIGIN_DOMAIN);
   this->config_.SetOverride(kSampleCloudPlatformMap,
                             SELLER_CLOUD_PLATFORMS_MAP);
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(
       &this->config_, this->CreateValidClientRegistry());
 
@@ -1931,6 +1958,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   server_common::MockKeyFetcherManager key_fetcher_manager;
   EXPECT_CALL(key_fetcher_manager, GetPrivateKey)
       .WillRepeatedly(Return(GetPrivateKey()));
+  server_common::GrpcInit gprc_init;
   SellerFrontEndService seller_frontend_service(
       &this->config_,
       {&(this->valid_clients_.scoring_signals_provider),

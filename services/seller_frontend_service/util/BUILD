@@ -375,3 +375,15 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "chaffing_utils",
+    hdrs = ["chaffing_utils.h"],
+    visibility = [
+        "//services:__subpackages__",
+        "//tools/secure_invoke:__subpackages__",
+    ],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
