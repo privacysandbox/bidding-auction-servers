@@ -59,7 +59,7 @@ function upload_image_to_repo() {
   # authenticated to the repo.
   docker load -i "${WORKSPACE}/${server_image}"
 
-  local -a image_tags=("${env_tag}" "${git_tag}")
+  local -a image_tags=("${env_tag}" "${git_tag}" "latest")
   if [[ "${KOKORO_ENV_NAME}" == "staging" ]] && [[ "${KOKORO_ENV_JOB_TYPE}" == "continuous" ]]; then
     local -r version="$(cat "${WORKSPACE}/version.txt")"
     local -r release_tag="${repo_image_uri}:staging-release-${build_flavor}-${version}"
