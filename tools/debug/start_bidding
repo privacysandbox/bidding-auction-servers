@@ -23,6 +23,7 @@ Usage:
   --inference_sidecar_binary_path <path> Path to the inference sidecar binary (default: "/server/bin/inference_sidecar_pytorch_v2_1_1")
   --generate_bid_model_path <path>       Use the provided model for inference. Path MUST be relative to project root (default: "services/inference_sidecar/common/testdata/models/pytorch_generate_bid_model.pt")
   --build_image_uri <uri>                If you build on a different machine and store your local testing images in a private registry, specify the uri of the image
+  --build_image_uri <uri>                If you build on a different machine and store your local testing images in a private registry, specify the uri of the image
   -h, --help                             Print usage information
 USAGE
     exit 0

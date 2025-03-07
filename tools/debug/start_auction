@@ -90,3 +90,20 @@ else
 fi
 PROF_PORT="${PROF_PORT:-1236}"
 run_server "$1" "${SERVICE_NAME}" "${SERVER_START_CMD}" ${PROF_PORT}
+if [[ $1 == "--gdb" ]]; then
+  export PROJECT_ROOT=$(git rev-parse --show-toplevel)
+  export EXTRA_DOCKER_RUN_ARGS=(
+    "--volume=${PROJECT_ROOT}/bazel-bin/services/auction_service/server:/server/bin/server"
+    "--name=auction"
+  )
+  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
+  --docker-network host --image build-debian \
+  --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
+else
+  if [[ -n "${BUILD_IMAGE_URI}" ]]; then
+    docker_image_uri="${BUILD_IMAGE_URI}"
+  else
+    docker_image_uri="$(docker load -i dist/debian/auction_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
+  fi
+  docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
+fi
