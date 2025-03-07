@@ -13,7 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+print_usage() {
+    cat << USAGE
+Usage:
+  <options>
+  --build_image_uri <uri>                If you build on a different machine and store your local testing images in a private registry, specify the uri of the image
+  -h, --help                             Print usage information
+USAGE
+    exit 0
+}
+
 source $(dirname "$0")/common
+
+declare BUILD_IMAGE_URI=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --build_image_uri)
+      BUILD_IMAGE_URI="$2"
+      shift 2
+      ;;
+    -h | --help) print_usage ;;
+    *) print_usage ;;
+  esac
+done
 
 SERVER_START_CMD=$(cat << END
 /server/bin/server \
@@ -50,6 +73,10 @@ if [[ $1 == "--gdb" ]]; then
   --docker-network host --image build-debian \
   --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
 else
-  docker_image_uri="$(docker load -i dist/debian/auction_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
+  if [[ -n "${BUILD_IMAGE_URI}" ]]; then
+    docker_image_uri="${BUILD_IMAGE_URI}"
+  else
+    docker_image_uri="$(docker load -i dist/debian/auction_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
+  fi
   docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi
