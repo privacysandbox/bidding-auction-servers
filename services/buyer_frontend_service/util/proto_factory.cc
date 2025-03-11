@@ -308,6 +308,9 @@ CreateGenerateProtectedAppSignalsBidsRawRequest(
 
   generate_bids_raw_request->set_publisher_name(raw_request.publisher_name());
 
+  generate_bids_raw_request->set_top_level_seller(
+      raw_request.top_level_seller());
+
   if (!raw_request.log_context().adtech_debug_id().empty()) {
     generate_bids_raw_request->mutable_log_context()->set_adtech_debug_id(
         raw_request.log_context().adtech_debug_id());

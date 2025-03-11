@@ -31,12 +31,14 @@
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/health_check_service_interface.h"
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
+#include "services/common/aliases.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/signal_handler.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "services/seller_frontend_service/k_anon/k_anon_cache_manager.h"
 #include "services/seller_frontend_service/k_anon/k_anon_cache_manager_interface.h"
@@ -140,15 +142,18 @@ ABSL_FLAG(std::optional<int>, num_k_anon_shards, 1,
 ABSL_FLAG(std::optional<int>, num_non_k_anon_shards, 1,
           "Number of shards for cache storing non k-anon hashes. Required "
           "when k-anon is enabled.");
-ABSL_FLAG(std::optional<int64_t>, test_mode_k_anon_cache_ttl_seconds, 86400,
+ABSL_FLAG(std::optional<int64_t>, test_mode_k_anon_cache_ttl_ms, 86400,
           "Configurable k-anon cache TTL in TEST_MODE. Set to be 24 hours "
           "otherwise.");
-ABSL_FLAG(std::optional<int64_t>, test_mode_non_k_anon_cache_ttl_seconds, 10800,
+ABSL_FLAG(std::optional<int64_t>, test_mode_non_k_anon_cache_ttl_ms, 10800,
           "Configurable non k-anon cache TTL in TEST_MODE. Set to be 3 hours "
           "otherwise.");
 ABSL_FLAG(std::optional<bool>, enable_k_anon_query_cache, true,
           "Flag to make k-anon cache query optional. If set to false, k-anon "
           "caches will not be queried.");
+ABSL_FLAG(
+    std::optional<bool>, enable_buyer_caching, std::nullopt,
+    "Enable caching for which buyers are invoked for a particular request");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -300,12 +305,13 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         K_ANON_CLIENT_TIME_OUT_MS);
   config_client.SetFlag(FLAGS_num_k_anon_shards, NUM_K_ANON_SHARDS);
   config_client.SetFlag(FLAGS_num_non_k_anon_shards, NUM_NON_K_ANON_SHARDS);
-  config_client.SetFlag(FLAGS_test_mode_k_anon_cache_ttl_seconds,
+  config_client.SetFlag(FLAGS_test_mode_k_anon_cache_ttl_ms,
                         TEST_MODE_K_ANON_CACHE_TTL_MS);
-  config_client.SetFlag(FLAGS_test_mode_non_k_anon_cache_ttl_seconds,
+  config_client.SetFlag(FLAGS_test_mode_non_k_anon_cache_ttl_ms,
                         TEST_MODE_NON_K_ANON_CACHE_TTL_MS);
   config_client.SetFlag(FLAGS_enable_k_anon_query_cache,
                         ENABLE_K_ANON_QUERY_CACHE);
+  config_client.SetFlag(FLAGS_enable_buyer_caching, ENABLE_BUYER_CACHING);
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
@@ -401,7 +407,11 @@ absl::Status RunServer() {
   server_common::GrpcInit gprc_init;
 
   std::unique_ptr<KAnonCacheManagerInterface> k_anon_cache_manager = nullptr;
-  std::unique_ptr<server_common::Executor> executor = nullptr;
+  std::unique_ptr<server_common::Executor> executor =
+      std::make_unique<server_common::EventEngineExecutor>(
+          config_client.GetBooleanParameter(CREATE_NEW_EVENT_ENGINE)
+              ? grpc_event_engine::experimental::CreateEventEngine()
+              : grpc_event_engine::experimental::GetDefaultEventEngine());
   if (absl::GetFlag(FLAGS_enable_kanon)) {
     PS_LOG(INFO) << "K-Anon is enabled on the service; instantiating the "
                     "k-anon cache manager";
@@ -414,11 +424,26 @@ absl::Status RunServer() {
         .compression = true,
         .secure_client = true,
     });
-    executor = std::make_unique<server_common::EventEngineExecutor>(
-        grpc_event_engine::experimental::CreateEventEngine());
     k_anon_cache_manager = std::make_unique<KAnonCacheManager>(
         executor.get(), std::move(k_anon_client),
         GetKAnonCacheManagerConfig(config_client));
+  }
+
+  std::unique_ptr<Cache<std::string, InvokedBuyers>> invoked_buyers_cache;
+  if (absl::GetFlag(FLAGS_enable_buyer_caching)) {
+    static auto cache_stringify_func = [](const std::string& generation_id,
+                                          const InvokedBuyers& invoked_buyers) {
+      return absl::StrCat(
+          "[generation_id: ", generation_id, ", invoked_buyers: [non_chaff: [",
+          absl::StrJoin(invoked_buyers.non_chaff_buyer_names, ","),
+          "], chaff: [", absl::StrJoin(invoked_buyers.chaff_buyer_names, ","),
+          "]]]");
+    };
+    const int kCurrMaxQps = 1000;
+    const int kInvokedBuyerCacheTtlSeconds = 60;
+    invoked_buyers_cache = std::make_unique<Cache<std::string, InvokedBuyers>>(
+        kInvokedBuyerCacheTtlSeconds * kCurrMaxQps, absl::Minutes(1),
+        executor.get(), cache_stringify_func);
   }
 
   PS_ASSIGN_OR_RETURN(
@@ -430,7 +455,7 @@ absl::Status RunServer() {
       CreateKeyFetcherManager(config_client, std::move(public_key_fetcher)),
       CreateCryptoClient(),
       GetReportWinMapFromSellerCodeFetchConfig(code_fetch_proto),
-      std::move(k_anon_cache_manager));
+      std::move(k_anon_cache_manager), std::move(invoked_buyers_cache));
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
   ServerBuilder builder;
@@ -491,11 +516,12 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
+  privacy_sandbox::bidding_auction_servers::RegisterCommonSignalHandlers();
   absl::InitializeSymbolizer(argv[0]);
   privacysandbox::server_common::SetRLimits({
       .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
   });
-  absl::FailureSignalHandlerOptions options;
+  absl::FailureSignalHandlerOptions options = {.call_previous_handler = true};
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();

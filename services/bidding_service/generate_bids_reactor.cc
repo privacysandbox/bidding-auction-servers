@@ -284,6 +284,33 @@ absl::StatusOr<DispatchRequest> BuildGenerateBidRequest(
   }
   return generate_bid_request;
 }
+
+// Removes contributions with no event type and contributions beyond
+// per_adtech_paapi_contributions_limit for each event type.
+void ProcessPAggContributions(AdWithBid& bid,
+                              int per_adtech_paapi_contributions_limit) {
+  absl::flat_hash_map<EventType, int> event_type_counts;
+  std::vector<int> indices_to_remove;
+
+  for (int i = 0; i < bid.private_aggregation_contributions_size(); ++i) {
+    const auto& contribution = bid.private_aggregation_contributions(i);
+    EventType event_type = contribution.event().event_type();
+    if (event_type == EVENT_TYPE_UNSPECIFIED ||
+        event_type_counts[event_type] >= per_adtech_paapi_contributions_limit) {
+      indices_to_remove.push_back(i);
+    } else {
+      event_type_counts[event_type]++;
+    }
+  }
+
+  // Remove elements in reverse order to avoid index invalidation
+  for (auto it = indices_to_remove.rbegin(); it != indices_to_remove.rend();
+       ++it) {
+    bid.mutable_private_aggregation_contributions()->erase(
+        bid.mutable_private_aggregation_contributions()->begin() + *it);
+  }
+}
+
 }  // namespace
 
 GenerateBidsReactor::GenerateBidsReactor(
@@ -304,7 +331,11 @@ GenerateBidsReactor::GenerateBidsReactor(
       auction_scope_(
           raw_request_.top_level_seller().empty()
               ? AuctionScope::AUCTION_SCOPE_SINGLE_SELLER
-              : AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
+              // Device and server component auctions have the same flow for
+              // PA Auctions.
+              : AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER),
+      per_adtech_paapi_contributions_limit_(
+          runtime_config.per_adtech_paapi_contributions_limit) {
   CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::BiddingContextMap()->Remove(request_));
@@ -557,6 +588,7 @@ void GenerateBidsReactor::GenerateBidsCallback(
           debug_urls_size.win_url_chars + debug_urls_size.loss_url_chars;
       bid.set_data_version(raw_request_.data_version());
       bid.set_interest_group_name(interest_group_name);
+      ProcessPAggContributions(bid, per_adtech_paapi_contributions_limit_);
       *raw_response_.add_bids() = std::move(bid);
     }
 

@@ -83,6 +83,8 @@ void HttpBiddingSignalsAsyncProvider::Get(
             // Chrome enforces a 32-bit limit on DV Header. This value is
             // already a uint32_t.
             (*res)->data_version = (*buyer_kv_output)->data_version;
+            (*res)->is_hybrid_v1_return =
+                (*buyer_kv_output)->is_hybrid_v1_return;
           }
           get_byte_size.request = (*buyer_kv_output)->request_size;
           get_byte_size.response = (*buyer_kv_output)->response_size;

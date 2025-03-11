@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,70 +32,6 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/strings",
-    ],
-)
-
-cc_library(
-    name = "k_anon_cache",
-    hdrs = [
-        "k_anon_cache.h",
-    ],
-    deps = [
-        ":doubly_linked_list",
-        ":k_anon_utils",
-        "//services/common/util:event",
-        "//services/common/util:event_base",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
-        "@com_google_googletest//:gtest",
-        "@google_privacysandbox_servers_common//src/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
-    ],
-)
-
-cc_library(
-    name = "doubly_linked_list",
-    hdrs = [
-        "doubly_linked_list.h",
-    ],
-    deps = [
-        "//services/common/util:event",
-        "@com_google_absl//absl/strings:string_view",
-    ],
-)
-
-cc_test(
-    name = "doubly_linked_list_test",
-    size = "small",
-    srcs = [
-        "doubly_linked_list_test.cc",
-    ],
-    deps = [
-        ":doubly_linked_list",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "k_anon_cache_test",
-    size = "small",
-    srcs = [
-        "k_anon_cache_test.cc",
-    ],
-    deps = [
-        ":k_anon_cache",
-        "//services/common/test/utils:test_init",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log:check",
-        "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/concurrent:executor",
     ],
 )
 
@@ -131,10 +67,10 @@ cc_library(
         "k_anon_cache_manager.h",
     ],
     deps = [
-        ":k_anon_cache",
         ":k_anon_cache_manager_interface",
         ":k_anon_utils",
         "//services/common/clients/k_anon_server:k_anon_client",
+        "//services/seller_frontend_service/cache",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -152,32 +88,15 @@ cc_test(
         "k_anon_cache_manager_test.cc",
     ],
     deps = [
-        ":k_anon_cache",
         ":k_anon_cache_manager",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
+        "//services/seller_frontend_service/cache",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",
-    ],
-)
-
-cc_binary(
-    name = "k_anon_cache_benchmarks",
-    testonly = True,
-    srcs = [
-        "k_anon_cache_benchmarks.cc",
-    ],
-    deps = [
-        ":k_anon_cache",
-        "//services/common/test/utils:test_init",
-        "//services/common/util:hash_util",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/strings",
-        "@google_benchmark//:benchmark",
-        "@google_benchmark//:benchmark_main",
     ],
 )
 
@@ -196,5 +115,15 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/core/test/utils",
+    ],
+)
+
+cc_library(
+    name = "constants",
+    hdrs = [
+        "constants.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/strings",
     ],
 )

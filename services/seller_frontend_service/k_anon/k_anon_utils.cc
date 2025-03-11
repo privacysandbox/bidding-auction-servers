@@ -79,22 +79,22 @@ void PopulateGhostWinnerPrivateAggregationSignals(
   google::protobuf::RepeatedPtrField<PrivateAggregateReportingResponse>
       pagg_responses = score.top_level_contributions();
   for (const auto& response : pagg_responses) {
-    for (const auto& contribution : response.contributions()) {
-      // Only 1 buyer contribution with event_type loss is set as
-      // GhostWinnerPrivateAggregationSignals.
-      if (contribution.event().event_type() == EventType::EVENT_TYPE_LOSS) {
-        GhostWinnerPrivateAggregationSignals signals;
-        signals.set_bucket(ConvertIntArrayToByteString(contribution.bucket()));
-        signals.set_value(contribution.value().int_value());
-        *ghost_winner.mutable_ghost_winner_private_aggregation_signals() =
-            std::move(signals);
-        if (contribution.has_ig_idx()) {
-          ghost_winner.set_interest_group_index(contribution.ig_idx());
+    if (response.adtech_origin() == score.interest_group_owner()) {
+      for (const auto& contribution : response.contributions()) {
+        if (contribution.event().event_type() == EventType::EVENT_TYPE_LOSS) {
+          GhostWinnerPrivateAggregationSignals signals;
+          signals.set_bucket(
+              ConvertIntArrayToByteString(contribution.bucket()));
+          signals.set_value(contribution.value().int_value());
+          *ghost_winner.mutable_ghost_winner_private_aggregation_signals()
+               ->Add() = std::move(signals);
+          if (contribution.has_ig_idx()) {
+            ghost_winner.set_interest_group_index(contribution.ig_idx());
+          }
         }
-        break;
       }
-    }
-    if (ghost_winner.has_ghost_winner_private_aggregation_signals()) {
+    } else if (ghost_winner.ghost_winner_private_aggregation_signals().size() >
+               0) {
       break;
     }
   }
@@ -158,9 +158,6 @@ KAnonAuctionResultData GetKAnonAuctionResultData(
       ghost_winner.set_owner(score.interest_group_owner());
       ghost_winner.set_ig_name(score.interest_group_name());
       if (!score.top_level_contributions().empty()) {
-        // TODO (b/392906713): Populate more than one
-        // PrivateAggregationContributions once API change to make
-        // GhostWinnerPrivateAggregationSignals a repeated field lands.
         PopulateGhostWinnerPrivateAggregationSignals(score, ghost_winner);
       }
 

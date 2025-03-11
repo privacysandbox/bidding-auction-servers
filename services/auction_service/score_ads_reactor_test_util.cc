@@ -77,7 +77,10 @@ ProtectedAppSignalsAdWithBidMetadata GetProtectedAppSignalsAdWithBidMetadata(
       MakeAnAd(render_url, "arbitraryMetadataKey", 2));
   ad.set_render(render_url);
   ad.set_bid(bid);
+  ad.set_bid_currency(kUsdIsoCode);
   ad.set_owner(kTestProtectedAppSignalsAdOwner);
+  ad.set_egress_payload(kTestEgressPayload);
+  ad.set_temporary_unlimited_egress_payload(kTestTemporaryEgressPayload);
   return ad;
 }
 
@@ -88,6 +91,218 @@ void SetupTelemetryCheck(const ScoreAdsRequest& request) {
       std::make_unique<server_common::telemetry::BuildDependentConfig>(
           config_proto))
       ->Get(&request);
+}
+
+ScoreAdsRequest::ScoreAdsRawRequest BuildRawRequest(
+    std::vector<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>
+        ads_with_bids_to_add,
+    const ScoreAdsRawRequestOptions& options) {
+  ScoreAdsRequest::ScoreAdsRawRequest output;
+  for (int i = 0; i < ads_with_bids_to_add.size(); i++) {
+    output.mutable_per_buyer_signals()->try_emplace(
+        ads_with_bids_to_add[i].interest_group_owner(), kTestBuyerSignalsObj);
+    *output.add_ad_bids() = std::move(ads_with_bids_to_add[i]);
+  }
+  output.set_seller_signals(options.seller_signals);
+  output.set_auction_signals(options.auction_signals);
+  output.set_scoring_signals(options.scoring_signals);
+  output.set_publisher_hostname(options.publisher_hostname);
+  output.set_enable_debug_reporting(options.enable_debug_reporting);
+  output.set_seller_currency(options.seller_currency);
+  output.set_top_level_seller(options.top_level_seller);
+  output.set_seller(kTestSeller);
+  output.mutable_consented_debug_config()->set_is_consented(
+      options.enable_adtech_code_logging);
+  output.mutable_consented_debug_config()->set_token(kTestConsentToken);
+  output.set_seller_data_version(options.seller_data_version);
+  return output;
+}
+
+ScoreAdsRequest::ScoreAdsRawRequest BuildProtectedAppSignalsRawRequest(
+    std::vector<ScoreAdsRequest::ScoreAdsRawRequest::
+                    ProtectedAppSignalsAdWithBidMetadata>
+        ads_with_bids_to_add,
+    const ScoreAdsRawRequestOptions& options) {
+  ScoreAdsRequest::ScoreAdsRawRequest output;
+  for (int i = 0; i < ads_with_bids_to_add.size(); i++) {
+    output.mutable_per_buyer_signals()->try_emplace(
+        ads_with_bids_to_add[i].owner(), kTestBuyerSignalsObj);
+    *output.add_protected_app_signals_ad_bids() =
+        std::move(ads_with_bids_to_add[i]);
+  }
+  output.set_seller_signals(options.seller_signals);
+  output.set_auction_signals(options.auction_signals);
+  output.set_scoring_signals(options.scoring_signals);
+  output.set_publisher_hostname(options.publisher_hostname);
+  output.set_enable_debug_reporting(options.enable_debug_reporting);
+  output.set_seller_currency(options.seller_currency);
+  output.set_top_level_seller(options.top_level_seller);
+  output.set_seller(kTestSeller);
+  output.mutable_consented_debug_config()->set_is_consented(
+      options.enable_adtech_code_logging);
+  output.mutable_consented_debug_config()->set_token(kTestConsentToken);
+  return output;
+}
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
+BuildTestAdWithBidMetadata(const AdWithBidMetadataParams& params) {
+  ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata ad_with_bid_metadata;
+  if (params.make_metadata) {
+    ad_with_bid_metadata.mutable_ad()->mutable_struct_value()->MergeFrom(
+        MakeAnAd(params.render_url, params.metadata_key,
+                 params.metadata_value));
+  }
+
+  // This must have an entry in kTestScoringSignals.
+  ad_with_bid_metadata.set_render(params.render_url);
+  ad_with_bid_metadata.set_bid(params.bid);
+  ad_with_bid_metadata.set_bid_currency(params.bid_currency);
+  ad_with_bid_metadata.set_interest_group_name(params.interest_group_name);
+  ad_with_bid_metadata.set_interest_group_owner(params.interest_group_owner);
+  ad_with_bid_metadata.set_interest_group_origin(params.interest_group_origin);
+  for (int i = 0; i < params.number_of_component_ads; i++) {
+    ad_with_bid_metadata.add_ad_components(
+        absl::StrCat(params.ad_component_render_url_base, i));
+  }
+  if (params.buyer_reporting_id && !params.buyer_reporting_id->empty()) {
+    ad_with_bid_metadata.set_buyer_reporting_id(*params.buyer_reporting_id);
+  }
+  if (params.buyer_and_seller_reporting_id &&
+      !params.buyer_and_seller_reporting_id->empty()) {
+    ad_with_bid_metadata.set_buyer_and_seller_reporting_id(
+        *params.buyer_and_seller_reporting_id);
+  }
+  if (params.selected_buyer_and_seller_reporting_id &&
+      !params.selected_buyer_and_seller_reporting_id->empty()) {
+    ad_with_bid_metadata.set_selected_buyer_and_seller_reporting_id(
+        *params.selected_buyer_and_seller_reporting_id);
+  }
+  ad_with_bid_metadata.set_ad_cost(params.ad_cost);
+  ad_with_bid_metadata.set_data_version(params.data_version);
+  ad_with_bid_metadata.set_k_anon_status(params.k_anon_status);
+  PS_VLOG(5) << "Generated ad bid with metadata: " << ad_with_bid_metadata;
+  return ad_with_bid_metadata;
+}
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
+GetTestAdWithBidBarbecueWithComponents() {
+  std::string render_url = "barStandardAds.com/render_ad?id=barbecue2";
+  ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata ad_with_bid =
+      BuildTestAdWithBidMetadata(
+          {// This must have an entry in kTestScoringSignals.
+           .render_url = render_url,
+           .bid = 17.76,
+           .interest_group_name = kBarbecureIgName,
+           .interest_group_owner = kInterestGroupOwnerOfBarBidder,
+           .number_of_component_ads = 1,
+           .ad_component_render_url_base =
+               "barStandardAds.com/ad_components/id=",
+           .make_metadata = false});
+  auto* bar_ad_map =
+      ad_with_bid.mutable_ad()->mutable_struct_value()->mutable_fields();
+  bar_ad_map->try_emplace(kAdMetadataPropertyNameRenderUrl,
+                          MakeAStringValue(render_url));
+  bar_ad_map->try_emplace(kAdMetadataPropertyNameMetadata,
+                          MakeAListValue({
+                              MakeAStringValue("brisket"),
+                              MakeAStringValue("pulled_pork"),
+                              MakeAStringValue("smoked_chicken"),
+                          }));
+  return ad_with_bid;
+}
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata GetTestAdWithBidBar(
+    absl::string_view buyer_reporting_id) {
+  ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata bar =
+      BuildTestAdWithBidMetadata(
+          {// This must have an entry in kTestScoringSignals.
+           .render_url = kBarRenderUrl,
+           .bid = 2,
+           .interest_group_name = "ig_bar",
+           .interest_group_owner = kInterestGroupOwnerOfBarBidder,
+           .buyer_reporting_id = buyer_reporting_id,
+           .ad_component_render_url_base = "adComponent.com/bar_components/id=",
+           .bid_currency = kUsdIsoCode,
+           .make_metadata = false});
+
+  auto* bar_ad_map = bar.mutable_ad()->mutable_struct_value()->mutable_fields();
+  bar_ad_map->try_emplace(kAdMetadataPropertyNameRenderUrl,
+                          MakeAStringValue(kBarRenderUrl));
+  bar_ad_map->try_emplace(kAdMetadataPropertyNameMetadata,
+                          MakeAListValue({
+                              MakeAStringValue("140583167746"),
+                              MakeAStringValue("627640802621"),
+                              MakeANullValue(),
+                              MakeAStringValue("18281019067"),
+                          }));
+  return bar;
+}
+
+void PopulateTestAdWithBidMetdata(
+    const PostAuctionSignals& post_auction_signals,
+    const BuyerReportingDispatchRequestData& buyer_dispatch_data,
+    ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata&
+        ad_with_bid_metadata) {
+  int number_of_component_ads = 3;
+  ad_with_bid_metadata.mutable_ad()->mutable_struct_value()->MergeFrom(MakeAnAd(
+      post_auction_signals.winning_ad_render_url, "arbitraryMetadataKey", 2));
+
+  // This must have an entry in kTestScoringSignals.
+  ad_with_bid_metadata.set_render(post_auction_signals.winning_ad_render_url);
+  ad_with_bid_metadata.set_bid(post_auction_signals.winning_bid);
+  ad_with_bid_metadata.set_interest_group_name(
+      buyer_dispatch_data.interest_group_name);
+  ad_with_bid_metadata.set_interest_group_owner(
+      post_auction_signals.winning_ig_owner);
+  ad_with_bid_metadata.set_interest_group_origin(kInterestGroupOrigin);
+  for (int i = 0; i < number_of_component_ads; i++) {
+    ad_with_bid_metadata.add_ad_components(
+        absl::StrCat("adComponent.com/foo_components/id=", i));
+  }
+  if (buyer_dispatch_data.buyer_reporting_id) {
+    ad_with_bid_metadata.set_buyer_reporting_id(
+        *buyer_dispatch_data.buyer_reporting_id);
+  }
+  if (buyer_dispatch_data.buyer_and_seller_reporting_id) {
+    ad_with_bid_metadata.set_buyer_and_seller_reporting_id(
+        *buyer_dispatch_data.buyer_and_seller_reporting_id);
+  }
+  if (buyer_dispatch_data.selected_buyer_and_seller_reporting_id) {
+    ad_with_bid_metadata.set_selected_buyer_and_seller_reporting_id(
+        *buyer_dispatch_data.selected_buyer_and_seller_reporting_id);
+  }
+  ad_with_bid_metadata.set_interest_group_name(
+      buyer_dispatch_data.interest_group_name);
+  ad_with_bid_metadata.set_ad_cost(kTestAdCost);
+  ad_with_bid_metadata.set_bid(post_auction_signals.winning_bid);
+  ad_with_bid_metadata.set_bid_currency(kEurosIsoCode);
+  ad_with_bid_metadata.set_data_version(buyer_dispatch_data.data_version);
+}
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
+GetTestAdWithBidBarbecue() {
+  const std::string render_url = "barStandardAds.com/render_ad?id=barbecue";
+  ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata ad_with_bid =
+      BuildTestAdWithBidMetadata(
+          {// This must have an entry in kTestScoringSignals.
+           .render_url = render_url,
+           .bid = 17.76,
+           .interest_group_name = kBarbecureIgName,
+           .interest_group_owner = kInterestGroupOwnerOfBarBidder,
+           .number_of_component_ads = 0,
+           .make_metadata = false});
+
+  auto* bar_ad_map =
+      ad_with_bid.mutable_ad()->mutable_struct_value()->mutable_fields();
+  bar_ad_map->try_emplace(kAdMetadataPropertyNameRenderUrl,
+                          MakeAStringValue(render_url));
+  bar_ad_map->try_emplace(kAdMetadataPropertyNameMetadata,
+                          MakeAListValue({
+                              MakeAStringValue("brisket"),
+                              MakeAStringValue("pulled_pork"),
+                              MakeAStringValue("smoked_chicken"),
+                          }));
+  return ad_with_bid;
 }
 
 ScoreAdsReactorTestHelper::ScoreAdsReactorTestHelper() {

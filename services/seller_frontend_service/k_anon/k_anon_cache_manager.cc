@@ -89,13 +89,13 @@ KAnonCacheManager::KAnonCacheManager(
   non_k_anon_caches.reserve(non_k_anon_shards);
   for (int i = 0; i < k_anon_shards; i++) {
     k_anon_caches.emplace_back(
-        std::make_unique<KAnonCache<std::string, std::string>>(
+        std::make_unique<Cache<std::string, std::string>>(
             /* capacity= */ k_anon_cache_capacity, config.k_anon_ttl, executor,
             GetEntryStringifyFunc()));
   }
   for (int i = 0; i < non_k_anon_shards; i++) {
     non_k_anon_caches.emplace_back(
-        std::make_unique<KAnonCache<std::string, std::string>>(
+        std::make_unique<Cache<std::string, std::string>>(
             /* capacity= */ non_k_anon_cache_capacity, config.non_k_anon_ttl,
             executor, GetEntryStringifyFunc()));
   }
@@ -289,7 +289,7 @@ absl::Status KAnonCacheManager::AreKAnonymous(
         sfe_metric_context->LogHistogram<metric::kKAnonTotalCacheHitPercentage>(
             (static_cast<double>(num_resolved_k_anon_hashes +
                                  num_resolved_non_k_anon_hashes)) /
-            num_total_hashes_to_resolve));
+            num_total_hashes_to_resolve * 100.0));
   }
 
   absl::flat_hash_set<absl::string_view> unresolved_hashes;
@@ -319,7 +319,7 @@ absl::Status KAnonCacheManager::AreKAnonymous(
                 sfe_metric_context
                     ->LogHistogram<metric::kKAnonCacheHitPercentage>(
                         (static_cast<double>(num_resolved_k_anon_hashes)) /
-                        num_k_anon_hashes));
+                        num_k_anon_hashes * 100.0));
           }
           int num_non_k_anon_hashes =
               num_total_hashes_to_resolve - num_k_anon_hashes;
@@ -328,7 +328,7 @@ absl::Status KAnonCacheManager::AreKAnonymous(
                 sfe_metric_context
                     ->LogHistogram<metric::kNonKAnonCacheHitPercentage>(
                         (static_cast<double>(num_resolved_non_k_anon_hashes)) /
-                        num_k_anon_hashes));
+                        num_non_k_anon_hashes * 100.0));
           }
         }
         callback(std::move(k_anon_hashes));

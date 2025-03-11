@@ -30,3 +30,16 @@ cc_library(
         "@curl",
     ],
 )
+
+cc_library(
+    name = "http_kv_server_process_response_utils",
+    srcs = [
+        "process_response.cc",
+    ],
+    hdrs = [
+        "process_response.h",
+    ],
+    deps = [
+        "//services/common/clients/http:http_fetcher_async",
+    ],
+)

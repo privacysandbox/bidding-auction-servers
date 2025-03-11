@@ -19,7 +19,7 @@ import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
 from google.api import metric_pb2
-from tools.cost_estimation.metrics_loader import (
+from metrics_loader import (
     CsvFileMetricsLoader,
     GcpDownloader,
     GcpAggregator,

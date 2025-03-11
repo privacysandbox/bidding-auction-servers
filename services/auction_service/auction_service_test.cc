@@ -29,6 +29,7 @@
 #include "gtest/gtest.h"
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/auction_service_integration_test_util.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
 #include "services/auction_service/score_ads_reactor.h"
@@ -49,21 +50,6 @@ using AdWithBidMetadata =
 using ::testing::AnyNumber;
 using ::testing::HasSubstr;
 using ::testing::InSequence;
-
-constexpr char kKeyId[] = "key_id";
-constexpr char kSecret[] = "secret";
-constexpr char kTestUrl[] = "https://test-ads-url.com";
-constexpr char kInterestGroupOwner[] = "test_ig_owner";
-constexpr char kTestBuyerSignals[] = "{\"test_key\":\"test_value\"}";
-constexpr char kTestRenderUrl[] = "http://test-render-url";
-constexpr char kTestSellerSignals[] =
-    R"json({"seller_signal": "test_seller_signals"})json";
-constexpr char kTestAuctionSignals[] =
-    R"json({"auction_signal": "test_auction_signals"})json";
-constexpr char kTestPublisherHostname[] = "test_publisher_hostname";
-constexpr char kRomaTestError[] = "roma_test_error";
-constexpr char kReportingDispatchHandlerFunctionName[] =
-    "reportingEntryFunction";
 
 class AuctionServiceTest : public ::testing::Test {
  protected:
@@ -156,7 +142,7 @@ TEST_F(AuctionServiceTest, InstantiatesScoreAdsReactor) {
 ScoreAdsRequest::ScoreAdsRawRequest BuildScoreAdsRawRequest() {
   ScoreAdsRequest::ScoreAdsRawRequest raw_request;
   raw_request.mutable_per_buyer_signals()->try_emplace(kInterestGroupOwner,
-                                                       kTestBuyerSignals);
+                                                       kTestBuyerSignalsObj);
 
   AdWithBidMetadata ad_with_bid_metadata;
   ad_with_bid_metadata.mutable_ad()->mutable_struct_value()->MergeFrom(

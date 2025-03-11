@@ -139,14 +139,16 @@ TEST(KAnonUtilsTest, CreatesKAnonAuctionResultDataForSingleSellerAuctions) {
   ASSERT_EQ(k_anon_auction_result_data.kanon_ghost_winners->size(), 1);
   EXPECT_THAT(k_anon_auction_result_data.kanon_ghost_winners->at(0),
               EqualsProto(expected_k_anon_ghost_winner));
-  ASSERT_TRUE(k_anon_auction_result_data.kanon_ghost_winners->at(0)
-                  .has_ghost_winner_private_aggregation_signals());
+  ASSERT_GT(k_anon_auction_result_data.kanon_ghost_winners->at(0)
+                .mutable_ghost_winner_private_aggregation_signals()
+                ->size(),
+            0);
   EXPECT_EQ(k_anon_auction_result_data.kanon_ghost_winners->at(0)
-                .ghost_winner_private_aggregation_signals()
+                .ghost_winner_private_aggregation_signals()[0]
                 .bucket(),
             ConvertIntArrayToByteString(response.contributions()[0].bucket()));
   EXPECT_EQ(k_anon_auction_result_data.kanon_ghost_winners->at(0)
-                .ghost_winner_private_aggregation_signals()
+                .ghost_winner_private_aggregation_signals()[0]
                 .value(),
             test_contribution[0].value().int_value());
 }

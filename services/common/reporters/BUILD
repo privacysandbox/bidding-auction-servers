@@ -34,9 +34,6 @@ cc_test(
     name = "async_reporter_test",
     size = "small",
     srcs = ["async_reporter_test.cc"],
-    data = [
-        "//services/common:roots_pem",
-    ],
     tags = [
         "requires-network",
     ],

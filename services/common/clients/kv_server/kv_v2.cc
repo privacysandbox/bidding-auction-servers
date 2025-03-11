@@ -34,8 +34,37 @@ inline constexpr char kKeyGroupOutputs[] = "keyGroupOutputs";
 inline constexpr char kKeyValues[] = "keyValues";
 inline constexpr char kValue[] = "value";
 
+// Try parse value as json string into rapidjson value and add to
+// the resulted signals; If the value is not a valid json object
+// or array, simply move it to the resulted signals as is.
+void MaybeParseJsonStringAndAddValueToIgSignals(
+    rapidjson::Document& ig_signals, rapidjson::Value& name,
+    rapidjson::Value& value, KVV2AdapterStats& v2_adapter_stats) {
+  if (value.IsString()) {
+    absl::string_view value_str = value.GetString();
+    const bool maybe_json =
+        value_str.length() != 0 && (value_str[0] == '{' || value_str[0] == '[');
+    if (maybe_json) {
+      if (auto doc = ParseJsonString(value_str); doc.ok()) {
+        ig_signals.AddMember(name.Move(),
+                             rapidjson::Value(*doc, ig_signals.GetAllocator()),
+                             ig_signals.GetAllocator());
+        v2_adapter_stats.values_with_json_string_parsing++;
+        return;
+      }
+    }
+  }
+  PS_VLOG(8) << __func__
+             << "String value is not parsed into json value for key "
+             << name.GetString()
+             << " because value is not a valid json string.";
+  ig_signals.AddMember(name.Move(), value.Move(), ig_signals.GetAllocator());
+  v2_adapter_stats.values_without_json_string_parsing++;
+}
+
 absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
-    std::string_view key_tag, std::vector<rapidjson::Document>& docs) {
+    std::string_view key_tag, std::vector<rapidjson::Document>& docs,
+    KVV2AdapterStats& v2_adapter_stats) {
   rapidjson::Document ig_signals(rapidjson::kObjectType);
   int compression_group_index = 0;
   for (auto& json : docs) {
@@ -100,9 +129,9 @@ absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
                 }
                 continue;
               }
-              ig_signals.AddMember(key_value_pair.name.Move(),
-                                   value->value.Move(),
-                                   ig_signals.GetAllocator());
+              MaybeParseJsonStringAndAddValueToIgSignals(
+                  ig_signals, key_value_pair.name, value->value,
+                  v2_adapter_stats);
 
             } else {
               PS_VLOG(8) << __func__
@@ -128,7 +157,8 @@ absl::StatusOr<rapidjson::Document> GetIgSignalsForKeyTag(
 }  // namespace
 absl::StatusOr<std::string> ConvertKvV2ResponseToV1String(
     const std::vector<std::string_view>& key_tags,
-    kv_server::v2::GetValuesResponse& v2_response_to_convert) {
+    kv_server::v2::GetValuesResponse& v2_response_to_convert,
+    KVV2AdapterStats& v2_adapter_stats) {
   // ParseJsonString doesn't copy, it creates a Document that points to the
   // underlying string. We no longer need the v2_response_to_convert object, so
   // we are ok to directly move the strings from it to the `ig_signals`.
@@ -146,7 +176,8 @@ absl::StatusOr<std::string> ConvertKvV2ResponseToV1String(
   rapidjson::Document top_level_doc(rapidjson::kObjectType);
   absl::flat_hash_map<std::string_view, rapidjson::Document> ig_signals_map;
   for (auto&& key_tag : key_tags) {
-    PS_ASSIGN_OR_RETURN(auto ig_signals, GetIgSignalsForKeyTag(key_tag, docs));
+    PS_ASSIGN_OR_RETURN(auto ig_signals,
+                        GetIgSignalsForKeyTag(key_tag, docs, v2_adapter_stats));
     ig_signals_map[key_tag] = std::move(ig_signals);
   }
   for (auto& [key_tag, ig_signals] : ig_signals_map) {

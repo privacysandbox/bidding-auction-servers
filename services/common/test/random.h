@@ -319,6 +319,11 @@ AuctionResult MakeARandomComponentAuctionResultWithReportingUrls(
 AuctionResult MakeARandomComponentAuctionResult(
     std::string generation_id, std::string top_level_seller,
     std::vector<std::string> buyer_list = {});
+
+// Populates fields for a auction result object for a component seller auction
+// without reporting urls
+AuctionResult MakeARandomPASComponentAuctionResult(
+    std::string generation_id, std::string top_level_seller);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_TEST_RANDOM_H_

@@ -16,7 +16,7 @@
 import unittest
 import sqlite3
 
-from tools.cost_estimation.sql_expr import SqlExecutor, ExpressionEvaluator
+from sql_expr import SqlExecutor, ExpressionEvaluator
 
 
 class SqlExecutorTest(unittest.TestCase):

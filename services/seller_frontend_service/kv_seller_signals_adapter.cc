@@ -125,13 +125,13 @@ absl::StatusOr<std::unique_ptr<GetValuesRequest>> CreateV2ScoringRequest(
 }
 
 absl::StatusOr<std::unique_ptr<ScoringSignals>>
-ConvertV2ResponseToV1ScoringSignals(
-    std::unique_ptr<GetValuesResponse> response) {
+ConvertV2ResponseToV1ScoringSignals(std::unique_ptr<GetValuesResponse> response,
+                                    KVV2AdapterStats& v2_adapter_stats) {
   // TODO(b/374748369): Add data version support.
   PS_ASSIGN_OR_RETURN(
       auto scoring_signals,
       ConvertKvV2ResponseToV1String({kKvRenderUrls, kKvAdComponentRenderUrls},
-                                    *response));
+                                    *response, v2_adapter_stats));
   return std::make_unique<ScoringSignals>(ScoringSignals{
       std::make_unique<std::string>(std::move(scoring_signals))});
 }

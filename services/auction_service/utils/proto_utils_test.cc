@@ -155,6 +155,24 @@ TEST(MapAuctionResultToAdWithBidMetadataTest, PopulatesExpectedValues) {
   EXPECT_TRUE(output->k_anon_status());
 }
 
+TEST(MapAuctionResultToProtectedAppSignalsAdWithBidMetadataTest,
+     PopulatesExpectedValues) {
+  AuctionResult auction_result = MakeARandomPASComponentAuctionResult(
+      MakeARandomString(), kTestTopLevelSeller);
+
+  // copy since this will be invalidated after this function.
+  AuctionResult input;
+  input.CopyFrom(auction_result);
+  auto output = MapAuctionResultToProtectedAppSignalsAdWithBidMetadata(
+      input, /*k_anon_status=*/true);
+
+  EXPECT_EQ(auction_result.bid(), output->bid());
+  EXPECT_EQ(auction_result.ad_render_url(), output->render());
+  EXPECT_EQ(auction_result.interest_group_owner(), output->owner());
+  EXPECT_EQ(auction_result.bid_currency(), output->bid_currency());
+  EXPECT_TRUE(output->k_anon_status());
+}
+
 constexpr absl::string_view kTestAdMetadataJson = R"JSON(
   {
     "metadata": {

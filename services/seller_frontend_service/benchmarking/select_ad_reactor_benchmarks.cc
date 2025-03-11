@@ -23,6 +23,7 @@
 #include "services/common/test/utils/test_init.h"
 #include "services/seller_frontend_service/select_ad_reactor_web.h"
 #include "services/seller_frontend_service/util/select_ad_reactor_test_utils.h"
+#include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -374,6 +375,8 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
 
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::OFF);
+  auto executor = std::make_unique<server_common::EventEngineExecutor>(
+      grpc_event_engine::experimental::CreateEventEngine());
 
   for (auto _ : state) {
     // This code gets timed.
@@ -383,8 +386,9 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
         std::make_unique<server_common::telemetry::BuildDependentConfig>(
             config_proto))
         ->Get(&request);
-    SelectAdReactorForWeb reactor(&context, &request, &response, clients,
-                                  config_client, /*report_win_map=*/{});
+    SelectAdReactorForWeb reactor(&context, &request, &response, executor.get(),
+                                  clients, config_client,
+                                  /*report_win_map=*/{});
     reactor.Execute();
   }
 }
@@ -432,6 +436,8 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
 
   server_common::telemetry::TelemetryConfig config_proto;
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::OFF);
+  auto executor = std::make_unique<server_common::EventEngineExecutor>(
+      grpc_event_engine::experimental::CreateEventEngine());
 
   for (auto _ : state) {
     // This code gets timed.
@@ -441,8 +447,9 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
         std::make_unique<server_common::telemetry::BuildDependentConfig>(
             config_proto))
         ->Get(&request);
-    SelectAdReactorForWeb reactor(&context, &request, &response, clients,
-                                  config_client, /*report_win_map=*/{});
+    SelectAdReactorForWeb reactor(&context, &request, &response, executor.get(),
+                                  clients, config_client,
+                                  /*report_win_map=*/{});
     reactor.Execute();
   }
 }

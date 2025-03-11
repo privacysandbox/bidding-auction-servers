@@ -23,9 +23,9 @@
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "services/auction_service/auction_constants.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/private_aggregation/private_aggregation_manager_test_util.h"
 #include "services/auction_service/reporting/reporting_helper.h"
-#include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/auction_service/reporting/reporting_test_util.h"
 #include "services/common/private_aggregation/private_aggregation_test_util.h"
@@ -145,12 +145,12 @@ void VerifyPABuyerReportingSignalsJson(
 
 BuyerReportingDispatchRequestData GetTestBuyerReportingDispatchRequestData(
     RequestLogContext& log_context) {
-  return {.buyer_signals = kTestBuyerSignals,
+  return {.buyer_signals = kTestBuyerSignalsObj,
           .join_count = kTestJoinCount,
           .recency = kTestRecency,
           .modeling_signals = kTestModelingSignals,
-          .seller = kTestSeller,
-          .interest_group_name = kTestInterestGroupName,
+          .seller = kTestSeller.data(),
+          .interest_group_name = kTestInterestGroupName.data(),
           .ad_cost = kTestAdCost,
           .data_version = kTestDataVersion,
           .made_highest_scoring_other_bid = true,

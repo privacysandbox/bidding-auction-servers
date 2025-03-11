@@ -131,16 +131,28 @@ container_layer(
     ],
 )
 
-pkg_tar(
+pkg_files(
     name = "root_certs",
     srcs = ["@com_github_grpc_grpc//:root_certificates"],
+    renames = {
+        "@com_github_grpc_grpc//:etc/roots.pem": "etc/ssl/certs/ca-certificates.crt",
+    },
+)
+
+root_certs_files = [
+    ":root_certs",
+]
+
+pkg_tar(
+    name = "root_certs_tar",
+    srcs = root_certs_files,
 )
 
 container_layer(
     name = "root_certs_layer",
-    directory = "/etc/",
+    directory = "/",
     tars = [
-        ":root_certs",
+        ":root_certs_tar",
     ],
 )
 
@@ -190,7 +202,6 @@ container_image(
     tars = [
         ":var_run_runsc_tar_{user}".format(user = user.user),
         "@google_privacysandbox_servers_common//src/roma/byob/container:gvisor_tar_{user}".format(user = user.user),
-        "//tools/udf/generate_bid/samples:sample_generate_bid_execs_tar",
     ],
 )
 

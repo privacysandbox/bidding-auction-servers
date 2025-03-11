@@ -42,6 +42,7 @@
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/feature_flags.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/signal_handler.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
@@ -101,6 +102,9 @@ ABSL_FLAG(std::optional<int64_t>, bfe_tcmalloc_max_total_thread_cache_bytes,
           "logical CPUs)");
 ABSL_FLAG(std::optional<bool>, propagate_buyer_signals_to_tkv, std::nullopt,
           "Propagate buyer signals to the key value server. Only works for v2");
+ABSL_FLAG(
+    std::optional<bool>, enable_hybrid, std::nullopt,
+    "Enable hybrid. Only works for Chrome. Does not work for Android or PAS");
 ABSL_FLAG(
     std::optional<std::string>, bidding_signals_fetch_mode, std::nullopt,
     "Specifies whether KV lookup for bidding signals is made or not, and if "
@@ -189,8 +193,14 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         PROPAGATE_BUYER_SIGNALS_TO_TKV);
   config_client.SetFlag(FLAGS_consent_all_requests, CONSENT_ALL_REQUESTS);
   config_client.SetFlag(FLAGS_enable_priority_vector, ENABLE_PRIORITY_VECTOR);
+  config_client.SetFlag(FLAGS_enable_hybrid, ENABLE_HYBRID);
   config_client.SetFlag(FLAGS_bidding_signals_fetch_mode,
                         BIDDING_SIGNALS_FETCH_MODE);
+  config_client.SetFlag(FLAGS_curlmopt_maxconnects, CURLMOPT_MAXCONNECTS);
+  config_client.SetFlag(FLAGS_curlmopt_max_total_connections,
+                        CURLMOPT_MAX_TOTAL_CONNECTIONS);
+  config_client.SetFlag(FLAGS_curlmopt_max_host_connections,
+                        CURLMOPT_MAX_HOST_CONNECTIONS);
 
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
@@ -314,7 +324,16 @@ absl::Status RunServer() {
   } else if (!use_tkv_v2_browser) {
     buyer_kv_async_http_client = std::make_unique<BuyerKeyValueAsyncHttpClient>(
         buyer_kv_server_addr,
-        std::make_unique<MultiCurlHttpFetcherAsync>(executor.get()), true);
+        std::make_unique<MultiCurlHttpFetcherAsync>(
+            executor.get(),
+            MultiCurlHttpFetcherAsyncOptions{
+                .curlmopt_maxconnects =
+                    config_client.GetIntParameter(CURLMOPT_MAXCONNECTS),
+                .curlmopt_max_total_connections = config_client.GetIntParameter(
+                    CURLMOPT_MAX_TOTAL_CONNECTIONS),
+                .curlmopt_max_host_connections = config_client.GetIntParameter(
+                    CURLMOPT_MAX_HOST_CONNECTIONS)}),
+        true);
     bidding_signals_async_providers =
         std::make_unique<HttpBiddingSignalsAsyncProvider>(
             std::move(buyer_kv_async_http_client));
@@ -368,10 +387,9 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(CONSENT_ALL_REQUESTS),
           config_client.GetBooleanParameter(ENABLE_PRIORITY_VECTOR),
           config_client.GetBooleanParameter(TEST_MODE),
-          buyer_tkv_v2_server_addr.empty(),
-          bidding_signals_fetch_mode,
+          buyer_tkv_v2_server_addr.empty(), bidding_signals_fetch_mode,
           config_client.GetBooleanParameter(PROPAGATE_BUYER_SIGNALS_TO_TKV),
-      },
+          config_client.GetBooleanParameter(ENABLE_HYBRID)},
       *executor, enable_buyer_frontend_benchmarking);
 
   grpc::EnableDefaultHealthCheckService(true);
@@ -433,11 +451,12 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
+  privacy_sandbox::bidding_auction_servers::RegisterCommonSignalHandlers();
   absl::InitializeSymbolizer(argv[0]);
   privacysandbox::server_common::SetRLimits({
       .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
   });
-  absl::FailureSignalHandlerOptions options;
+  absl::FailureSignalHandlerOptions options = {.call_previous_handler = true};
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();

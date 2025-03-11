@@ -21,40 +21,11 @@
 
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/auction_service.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-constexpr absl::string_view kTestSeller = "http://seller.com";
-constexpr absl::string_view kTestComponentSeller = "http://componentseller.com";
-constexpr absl::string_view kTestInterestGroupName = "testInterestGroupName";
-constexpr double kTestAdCost = 2.0;
-constexpr long kTestRecency = 3;
-constexpr int kTestModelingSignals = 4;
-constexpr int kTestJoinCount = 5;
-constexpr int kTestIgIdx = 1;
-constexpr absl::string_view kTestBuyerSignals = R"([1,"test",[2]])";
-constexpr absl::string_view kTestAuctionSignals = R"([[3,"test",[4]]])";
-constexpr uint32_t kTestDataVersion = 1689;
-constexpr uint32_t kTestSellerDataVersion = 1989;
-constexpr inline char kExpectedComponentReportResultUrl[] =
-    "http://"
-    "test.com&bid=1&bidCurrency=EUR&dataVersion=1989&highestScoringOtherBid=0&"
-    "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
-    "com&interestGroupOwner=barStandardAds.com&topLevelSeller=topLevelSeller&"
-    "modifiedBid=2";
-constexpr inline char kTestGenerationId[] = "generationId";
-constexpr inline char kExpectedComponentReportWinUrl[] =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
-    "buyerAndSellerReportingId=undefined&selectedBuyerAndSellerReportingId="
-    "undefined&adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid="
-    "false&signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,"
-    "test,2&auctionSignals=3,test,4&desirability=undefined&topLevelSeller="
-    "topLevelSeller&modifiedBid=undefined&dataVersion=1689";
-constexpr inline char kTestInteractionEvent[] = "clickEvent";
-constexpr inline char kTestInteractionReportingUrl[] = "http://click.com";
-constexpr char kTestIgOwner[] = "barStandardAds.com";
 TestComponentAuctionResultData GenerateTestComponentAuctionResultData();
 
 struct LocalAuctionStartResult {
@@ -96,8 +67,8 @@ struct TestBuyerReportingSignals {
   long recency = kTestRecency;
   int modeling_signals = kTestModelingSignals;
   int join_count = kTestJoinCount;
-  absl::string_view buyer_signals = kTestBuyerSignals;
-  absl::string_view auction_signals = kTestAuctionSignals;
+  absl::string_view buyer_signals = kTestBuyerSignalsArr;
+  absl::string_view auction_signals = kTestAuctionSignalsArr;
   uint32_t data_version = kTestDataVersion;
 };
 

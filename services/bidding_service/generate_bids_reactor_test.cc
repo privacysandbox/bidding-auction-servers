@@ -254,9 +254,9 @@ class GenerateBidsReactorTest : public testing::Test {
     std::unique_ptr<BiddingBenchmarkingLogger> benchmarkingLogger =
         std::make_unique<BiddingNoOpLogger>();
     if (!runtime_config) {
-      runtime_config = {
-          .enable_buyer_debug_url_generation = false,
-      };
+      runtime_config = {.enable_buyer_debug_url_generation = false,
+                        .enable_private_aggregate_reporting = true,
+                        .per_adtech_paapi_contributions_limit = 100};
     }
 
     request_.set_request_ciphertext(raw_request.SerializeAsString());

@@ -113,7 +113,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   explicit SelectAdReactor(
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
-      SelectAdResponse* response, const ClientRegistry& clients,
+      SelectAdResponse* response, server_common::Executor* executor,
+      const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
       const ReportWinMap& report_win_map, bool enable_cancellation = false,
       bool enable_kanon = false,
@@ -268,6 +269,11 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   // invoked for sending chaff requests. See GetChaffingConfig() for the logic.
   int GetEffectiveNumberOfBuyers(const ChaffingConfig& chaffing_config);
 
+  // Gets list of non chaff buyer candidates.
+  std::vector<absl::string_view> GetNonChaffBuyerNames(
+      const absl::flat_hash_set<absl::string_view>& auction_config_buyer_set,
+      const ChaffingConfig& chaffing_config);
+
   // Dispatches the GetBids calls for both 'real' and 'fake' (AKA chaff) buyers.
   void FetchBids();
 
@@ -403,6 +409,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   std::variant<ProtectedAudienceInput, ProtectedAuctionInput>
       protected_auction_input_;
   SelectAdResponse* response_;
+  server_common::Executor* executor_;
   AuctionResult::Error error_;
   const ClientRegistry& clients_;
   const TrustedServersConfigClient& config_client_;
@@ -551,6 +558,36 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Should the debug data be exported based on reply from auction
   bool should_export_debug_ = false;
+
+  // Convenient class to time and report latency metric for the given metric
+  // type to given metric context.
+  class KAnonLatencyReporter {
+   public:
+    // Does not take ownership of context and caller needs to ensure that
+    // context outlives this object.
+    explicit KAnonLatencyReporter(metric::SfeContext* context)
+        : context_(context), start_time_(absl::Now()) {
+      DCHECK_NE(context_, nullptr);
+    }
+
+    KAnonLatencyReporter(KAnonLatencyReporter&& reporter) = default;
+    KAnonLatencyReporter& operator=(KAnonLatencyReporter&& reporter) = default;
+
+    ~KAnonLatencyReporter() {
+      int execution_time_ms =
+          (absl::Now() - start_time_) / absl::Milliseconds(1);
+      LogIfError(context_->AccumulateMetric<metric::kKAnonOverallQueryDuration>(
+          execution_time_ms));
+    }
+
+   private:
+    metric::SfeContext* context_;
+    absl::Time start_time_;
+  };
+
+  // Keeps track of which buyers (chaff and non-chaff) were invoked the first
+  // time the request was served.
+  std::optional<InvokedBuyers> invoked_buyers_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

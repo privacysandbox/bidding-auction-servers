@@ -22,6 +22,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "public/query/v2/get_values_v2.pb.h"
+#include "services/common/clients/kv_server/kv_v2.h"
 #include "services/seller_frontend_service/providers/scoring_signals_async_provider.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -65,8 +66,8 @@ absl::StatusOr<std::unique_ptr<GetValuesRequest>> CreateV2ScoringRequest(
 // reworked to potentially not have this conversion or have an optimized version
 // of it.
 absl::StatusOr<std::unique_ptr<ScoringSignals>>
-ConvertV2ResponseToV1ScoringSignals(
-    std::unique_ptr<GetValuesResponse> response);
+ConvertV2ResponseToV1ScoringSignals(std::unique_ptr<GetValuesResponse> response,
+                                    KVV2AdapterStats& v2_adapter_stats);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_SELLER_FRONTEND_SERVICE_KV_SELLER_SIGNALS_ADAPTER_H_

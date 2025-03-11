@@ -30,6 +30,10 @@ constexpr char kPathFailed[] = "Failed to load file from path: ";
 absl::StatusOr<std::string> GetFileContent(absl::string_view path,
                                            bool log_on_error = false);
 
+// Writes the provided contents to the file path.
+absl::Status WriteToFile(absl::string_view path, absl::string_view contents,
+                         bool log_on_error = false);
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_UTIL_FILE_UTIL_H_

@@ -15,8 +15,8 @@
 """Classes for estimating costs."""
 
 import logging
-from tools.cost_estimation.sql_expr import SqlExecutor, ExpressionEvaluator
-from tools.cost_estimation.utils import read_from_yaml_or_die
+from sql_expr import SqlExecutor, ExpressionEvaluator
+from utils import read_from_yaml_or_die
 
 logger = logging.getLogger(__name__)
 

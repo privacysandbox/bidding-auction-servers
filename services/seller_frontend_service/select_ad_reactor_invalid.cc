@@ -20,11 +20,12 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 SelectAdReactorInvalid::SelectAdReactorInvalid(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
-    SelectAdResponse* response, const ClientRegistry& clients,
+    SelectAdResponse* response, server_common::Executor* executor,
+    const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map)
-    : SelectAdReactor(context, request, response, clients, config_client,
-                      report_win_map),
+    : SelectAdReactor(context, request, response, executor, clients,
+                      config_client, report_win_map),
       client_type_(request->client_type()) {}
 
 void SelectAdReactorInvalid::Execute() {

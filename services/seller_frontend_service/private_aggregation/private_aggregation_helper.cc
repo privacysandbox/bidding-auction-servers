@@ -744,7 +744,6 @@ absl::StatusOr<PrivateAggregateReportingResponses> CborDecodePAggResponse(
   PrivateAggregateReportingResponses pagg_responses;
   for (int i = 0; i < cbor_array_size(serialized_adtech_contributions_ptr);
        i++) {
-    std::string adtech_origin;
     absl::Span<struct cbor_pair> contribution_map(
         cbor_map_handle(adtech_contributions[i]),
         cbor_map_size(adtech_contributions[i]));
@@ -835,15 +834,12 @@ void HandlePrivateAggregationContributionsForGhostWinner(
       std::vector<PrivateAggregateContribution>
           processed_filtered_contributions =
               GetProcessedAndFilteredContributions(ad_with_bid, base_values);
-      // TODO (b/392906713): Populate more than one
-      // PrivateAggregationContributions once API change to make
-      // GhostWinnerPrivateAggregationSignals a repeated field lands.
-      if (processed_filtered_contributions.size() > 0) {
-        processed_filtered_contributions[0].set_ig_idx(ig_idx);
-        *reporting_response.add_contributions() =
-            std::move(processed_filtered_contributions[0]);
-        *ghost_winning_score.add_top_level_contributions() =
-            std::move(reporting_response);
+      if (!processed_filtered_contributions.empty()) {
+        for (auto& contribution : processed_filtered_contributions) {
+          contribution.set_ig_idx(ig_idx);
+          *reporting_response.add_contributions() = std::move(contribution);
+        }
+        *ghost_winning_score.add_top_level_contributions() = reporting_response;
         break;
       }
     }

@@ -66,6 +66,9 @@ ABSL_DECLARE_FLAG(std::optional<bool>, tkv_egress_tls);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_priority_vector);
 ABSL_DECLARE_FLAG(std::optional<bool>, consent_all_requests);
 ABSL_DECLARE_FLAG(std::optional<std::string>, seller_code_fetch_config);
+ABSL_DECLARE_FLAG(std::optional<int>, curlmopt_maxconnects);
+ABSL_DECLARE_FLAG(std::optional<int>, curlmopt_max_total_connections);
+ABSL_DECLARE_FLAG(std::optional<int>, curlmopt_max_host_connections);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -118,6 +121,11 @@ inline constexpr char ENABLE_PRIORITY_VECTOR[] = "ENABLE_PRIORITY_VECTOR";
 inline constexpr char CONSENT_ALL_REQUESTS[] = "CONSENT_ALL_REQUESTS";
 inline constexpr absl::string_view SELLER_CODE_FETCH_CONFIG =
     "SELLER_CODE_FETCH_CONFIG";
+inline constexpr char CURLMOPT_MAXCONNECTS[] = "CURLMOPT_MAXCONNECTS";
+inline constexpr char CURLMOPT_MAX_TOTAL_CONNECTIONS[] =
+    "CURLMOPT_MAX_TOTAL_CONNECTIONS";
+inline constexpr char CURLMOPT_MAX_HOST_CONNECTIONS[] =
+    "CURLMOPT_MAX_HOST_CONNECTIONS";
 
 inline constexpr absl::string_view kCommonServiceFlags[] = {
     PUBLIC_KEY_ENDPOINT,
@@ -151,6 +159,9 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     TKV_EGRESS_TLS,
     ENABLE_PRIORITY_VECTOR,
     CONSENT_ALL_REQUESTS,
+    CURLMOPT_MAXCONNECTS,
+    CURLMOPT_MAX_TOTAL_CONNECTIONS,
+    CURLMOPT_MAX_HOST_CONNECTIONS,
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

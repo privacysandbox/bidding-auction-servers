@@ -28,6 +28,10 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+struct KVV2AdapterStats {
+  int values_with_json_string_parsing = 0;
+  int values_without_json_string_parsing = 0;
+};
 // Convert a TKV V2 response to a serialized json string of JSON-equivalent of
 // TKV V1 protocol:
 // https://github.com/privacysandbox/protected-auction-key-value-service/blob/release-1.0/public/query/get_values.proto
@@ -58,7 +62,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 // Returns empty string when the given tags were not found.
 absl::StatusOr<std::string> ConvertKvV2ResponseToV1String(
     const std::vector<std::string_view>& key_tags,
-    kv_server::v2::GetValuesResponse& v2_response_to_convert);
+    kv_server::v2::GetValuesResponse& v2_response_to_convert,
+    KVV2AdapterStats& v2_adapter_stats);
 
 // Determine whether KV V2 should be used.
 // CLIENT_TYPE_ANDROID requests MUST go to TKV V2 for TEST_MODE=false.

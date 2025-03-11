@@ -43,6 +43,7 @@
 #include "services/common/util/priority_vector/priority_vector_utils.h"
 #include "services/common/util/reporting_util.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/seller_frontend_service/k_anon/constants.h"
 #include "services/seller_frontend_service/k_anon/k_anon_utils.h"
 #include "services/seller_frontend_service/kv_seller_signals_adapter.h"
 #include "services/seller_frontend_service/private_aggregation/private_aggregation_helper.h"
@@ -88,7 +89,8 @@ inline void RecordInterestGroupUpdates(
 
 SelectAdReactor::SelectAdReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
-    SelectAdResponse* response, const ClientRegistry& clients,
+    SelectAdResponse* response, server_common::Executor* executor,
+    const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
@@ -97,13 +99,11 @@ SelectAdReactor::SelectAdReactor(
     : request_context_(context),
       request_(request),
       response_(response),
+      executor_(executor),
       clients_(clients),
       config_client_(config_client),
       report_win_map_(report_win_map),
       auction_scope_(GetAuctionScope(*request_)),
-      // TODO(b/278039901): Add integration test for metadata forwarding.
-      buyer_metadata_(GrpcMetadataToRequestMetadata(context->client_metadata(),
-                                                    kBuyerMetadataKeysMap)),
       log_context_({}, server_common::ConsentedDebugConfiguration(),
                    [this]() { return response_->mutable_debug_info(); }),
       error_accumulator_(&log_context_),
@@ -481,6 +481,15 @@ ChaffingConfig SelectAdReactor::GetChaffingConfig(
     return {.num_real_requests = num_real_requests};
   }
 
+  // The server has served this request before; use cached values.
+  if (clients_.invoked_buyers_cache && invoked_buyers_) {
+    return {
+        .chaff_request_candidates = invoked_buyers_->chaff_buyer_names,
+        .num_chaff_requests = (int)invoked_buyers_->chaff_buyer_names.size(),
+        .num_real_requests =
+            (int)invoked_buyers_->non_chaff_buyer_names.size()};
+  }
+
   // Use the RNG seeded w/ the generation ID to deterministically determine
   // how many chaff requests to send for a given ciphertext.
   if (!chaff_request_candidates.empty()) {
@@ -498,13 +507,15 @@ ChaffingConfig SelectAdReactor::GetChaffingConfig(
         num_chaff_requests_lower_bound, (int)chaff_request_candidates.size());
     std::uniform_int_distribution<int> num_chaff_buyers_dist(
         num_chaff_requests_lower_bound, chaff_request_candidates.size());
-    if (generator_) {
+    if (generator_.has_value()) {
       num_chaff_requests = num_chaff_buyers_dist(*generator_);
     }
   }
 
-  std::shuffle(chaff_request_candidates.begin(), chaff_request_candidates.end(),
-               *generator_);
+  if (generator_.has_value()) {
+    std::shuffle(chaff_request_candidates.begin(),
+                 chaff_request_candidates.end(), *generator_);
+  }
 
   return {.chaff_request_candidates = std::move(chaff_request_candidates),
           .num_chaff_requests = num_chaff_requests,
@@ -521,21 +532,10 @@ int SelectAdReactor::GetEffectiveNumberOfBuyers(
   return chaffing_config.num_real_requests;
 }
 
-void SelectAdReactor::FetchBids() {
-  absl::flat_hash_set<absl::string_view> auction_config_buyer_set(
-      auction_config_.buyer_list().begin(), auction_config_.buyer_list().end());
-
-  ChaffingConfig chaffing_config = GetChaffingConfig(auction_config_buyer_set);
-  int effective_number_of_buyers = GetEffectiveNumberOfBuyers(chaffing_config);
-  async_task_tracker_.SetNumTasksToTrack(effective_number_of_buyers);
-  if (effective_number_of_buyers == 0) {
-    OnAllBidsDone(true);
-    return;
-  }
-
-  std::vector<std::pair<absl::string_view,
-                        std::unique_ptr<GetBidsRequest::GetBidsRawRequest>>>
-      get_bids_requests;
+std::vector<absl::string_view> SelectAdReactor::GetNonChaffBuyerNames(
+    const absl::flat_hash_set<absl::string_view>& auction_config_buyer_set,
+    const ChaffingConfig& chaffing_config) {
+  std::vector<absl::string_view> non_chaff_buyer_names;
 
   // Loop through the server's map of configured buyers. This takes care of the
   // case of duplicated buyers in the auction_config.buyer_list.
@@ -565,12 +565,51 @@ void SelectAdReactor::FetchBids() {
       continue;
     }
 
-    auto get_bids_request = CreateGetBidsRequest(buyer_ig_owner.data(),
-                                                 buyer_input_iterator->second);
-    get_bids_requests.push_back({buyer_ig_owner, std::move(get_bids_request)});
+    non_chaff_buyer_names.emplace_back(buyer_ig_owner);
   }
 
-  if (chaffing_enabled_ && !chaffing_config.chaff_request_candidates.empty()) {
+  return non_chaff_buyer_names;
+}
+
+void SelectAdReactor::FetchBids() {
+  absl::flat_hash_set<absl::string_view> auction_config_buyer_set(
+      auction_config_.buyer_list().begin(), auction_config_.buyer_list().end());
+  ChaffingConfig chaffing_config = GetChaffingConfig(auction_config_buyer_set);
+  int effective_number_of_buyers = GetEffectiveNumberOfBuyers(chaffing_config);
+  async_task_tracker_.SetNumTasksToTrack(effective_number_of_buyers);
+  if (effective_number_of_buyers == 0) {
+    OnAllBidsDone(true);
+    return;
+  }
+
+  std::vector<absl::string_view> non_chaff_buyer_candidates;
+  absl::Span<absl::string_view> chaff_buyer_candidates;
+  if (clients_.invoked_buyers_cache && invoked_buyers_) {
+    non_chaff_buyer_candidates = invoked_buyers_->non_chaff_buyer_names;
+    chaff_buyer_candidates = absl::MakeSpan(invoked_buyers_->chaff_buyer_names);
+  } else {
+    non_chaff_buyer_candidates =
+        GetNonChaffBuyerNames(auction_config_buyer_set, chaffing_config);
+    chaff_buyer_candidates =
+        absl::MakeSpan(chaffing_config.chaff_request_candidates);
+  }
+
+  std::vector<std::pair<absl::string_view,
+                        std::unique_ptr<GetBidsRequest::GetBidsRawRequest>>>
+      buyer_get_bids_requests;
+  for (absl::string_view buyer_ig_owner : non_chaff_buyer_candidates) {
+    const auto& buyer_input_iterator = buyer_inputs_->find(buyer_ig_owner);
+    if (buyer_input_iterator == buyer_inputs_->end()) {
+      continue;
+    }
+
+    auto get_bids_request = CreateGetBidsRequest(buyer_ig_owner.data(),
+                                                 buyer_input_iterator->second);
+    buyer_get_bids_requests.push_back(
+        {buyer_ig_owner, std::move(get_bids_request)});
+  }
+
+  if (chaffing_enabled_ && !chaff_buyer_candidates.empty()) {
     // Loop through chaff candidates and send 'num_chaff_requests' requests.
     for (auto it = chaffing_config.chaff_request_candidates.begin();
          it != chaffing_config.chaff_request_candidates.end(); ++it) {
@@ -589,18 +628,21 @@ void SelectAdReactor::FetchBids() {
                 protected_auction_input.generation_id());
           },
           protected_auction_input_);
-      get_bids_requests.push_back({it->data(), std::move(get_bids_request)});
+      buyer_get_bids_requests.push_back(
+          {it->data(), std::move(get_bids_request)});
     }
 
     if (generator_) {
-      std::shuffle(get_bids_requests.begin(), get_bids_requests.end(),
-                   *generator_);
+      std::shuffle(buyer_get_bids_requests.begin(),
+                   buyer_get_bids_requests.end(), *generator_);
     }
   }
 
   int num_buyers_solicited = 0;
 
-  for (auto& [buyer_name, request] : get_bids_requests) {
+  std::vector<absl::string_view> chaff_buyers;
+  std::vector<absl::string_view> non_chaff_buyers;
+  for (auto& [buyer_name, request] : buyer_get_bids_requests) {
     // Only send the first 'max_buyers_solicited_' requests, whether they're
     // chaff or real.
     if (num_buyers_solicited >= max_buyers_solicited_) {
@@ -612,9 +654,35 @@ void SelectAdReactor::FetchBids() {
       continue;
     }
 
+    if (request->is_chaff()) {
+      chaff_buyers.emplace_back(buyer_name);
+    } else {
+      non_chaff_buyers.emplace_back(buyer_name);
+    }
+
     PS_VLOG(kNoisyInfo, log_context_) << "Invoking buyer: " << buyer_name;
     FetchBid(buyer_name.data(), std::move(request));
     num_buyers_solicited++;
+  }
+
+  if (chaffing_enabled_ && clients_.invoked_buyers_cache && !invoked_buyers_) {
+    std::visit(
+        [this, moved_chaff_buyers = std::move(chaff_buyers),
+         moved_non_chaff_buyers =
+             std::move(non_chaff_buyers)](auto& protected_input) mutable {
+          InvokedBuyers invoked_buyers = {
+              .chaff_buyer_names = std::move(moved_chaff_buyers),
+              .non_chaff_buyer_names = std::move(moved_non_chaff_buyers)};
+          absl::Status insert_result = clients_.invoked_buyers_cache->Insert(
+              {{protected_input.generation_id(), std::move(invoked_buyers)}});
+          if (!insert_result.ok()) {
+            PS_VLOG(kPlain, log_context_)
+                << "Failed to insert into chaff cache for request with "
+                   "generation ID "
+                << protected_input.generation_id();
+          }
+        },
+        protected_auction_input_);
   }
 }
 
@@ -624,6 +692,18 @@ void SelectAdReactor::Execute() {
         grpc::Status(grpc::StatusCode::CANCELLED, kRequestCancelled));
     return;
   }
+
+  // TODO(b/278039901): Add integration test for metadata forwarding.
+  absl::StatusOr<RequestMetadata> buyer_metadata =
+      GrpcMetadataToRequestMetadata(request_context_->client_metadata(),
+                                    kBuyerMetadataKeysMap);
+  if (!buyer_metadata.ok()) {
+    PS_VLOG(kNoisyWarn) << buyer_metadata.status();
+    FinishWithStatus(server_common::FromAbslStatus(buyer_metadata.status()));
+    return;
+  }
+
+  buyer_metadata_ = *std::move(buyer_metadata);
 
   grpc::Status extracted_auction_config = ExtractAuctionConfig();
   if (!extracted_auction_config.ok()) {
@@ -655,6 +735,17 @@ void SelectAdReactor::Execute() {
                 {kSellerDebugId, auction_config_.seller_debug_id()},
             },
             protected_input.consented_debug_config(), is_sampled_for_debug_);
+
+        if (!chaffing_enabled_ || !clients_.invoked_buyers_cache) {
+          return;
+        }
+
+        absl::flat_hash_map<std::string, InvokedBuyers> invoked_buyers =
+            clients_.invoked_buyers_cache->Query(
+                {protected_input.generation_id()});
+        if (!invoked_buyers.empty()) {
+          invoked_buyers_ = std::move(invoked_buyers.begin()->second);
+        }
       },
       protected_auction_input_);
 
@@ -901,13 +992,19 @@ void SelectAdReactor::FetchBid(
       !header_flag.empty()) {
     std::vector<std::string> headers =
         absl::StrSplit(header_flag, ',', absl::SkipWhitespace());
-    for (const std::string& h : headers) {
+    for (const std::string& header : headers) {
       if (auto itr = request_context_->client_metadata().find(
-              absl::AsciiStrToLower(h));
+              absl::AsciiStrToLower(header));
           itr != request_context_->client_metadata().end()) {
+        std::string client_metadata_val =
+            std::string(itr->second.begin(), itr->second.end());
+        if (!IsValidHeader(header, client_metadata_val)) {
+          PS_VLOG(kNoisyWarn, log_context_) << absl::StrFormat(
+              kIllegalHeaderError, header, client_metadata_val);
+          continue;
+        }
         buyer_metadata_copy.insert(
-            {absl::AsciiStrToLower(h),
-             std::string(itr->second.begin(), itr->second.end())});
+            {absl::AsciiStrToLower(header), std::move(client_metadata_val)});
       }
     }
   }
@@ -1069,14 +1166,22 @@ void SelectAdReactor::OnAllBidsDone(bool any_successful_bids) {
                                   kAllBidsRejectedBuyerCurrencyMismatch));
   } else if (perform_scoring_signals_fetch_) {
     if (enable_enforce_kanon_) {
-      bid_k_anon_hash_sets_ = GetKAnonHashesForBids();
-      QueryKAnonHashes();
+      executor_->Run([this]() {
+        // PopulateKAnonStatusForBids is called from within the following
+        // method when k-anon is enabled.
+        QueryKAnonHashes();
+      });
+    } else {
+      // If k-anon is not enforced, we still unconditionally find the
+      // k-anon status for each bid before sending it for scoring and hence
+      // have to make sure we call this method.
+      PopulateKAnonStatusForBids();
     }
     FetchScoringSignals();
   } else if (enable_enforce_kanon_) {
-    bid_k_anon_hash_sets_ = GetKAnonHashesForBids();
     QueryKAnonHashes();
   } else {
+    PopulateKAnonStatusForBids();
     ScoreAds();
   }
 }
@@ -1300,8 +1405,15 @@ void SelectAdReactor::CancellableFetchScoringSignalsV2(
               }
               return;
             }
+            KVV2AdapterStats v2_adapter_stats;
             auto signals = ConvertV2ResponseToV1ScoringSignals(
-                *std::move(kv_look_up_result));
+                *std::move(kv_look_up_result), v2_adapter_stats);
+            PS_VLOG(kStats, log_context_)
+                << "Number of values with additional json string parsing "
+                   "applied:"
+                << v2_adapter_stats.values_with_json_string_parsing
+                << " and without additional json string parsing applied:"
+                << v2_adapter_stats.values_without_json_string_parsing;
 
             SetKvEventMessage("KVAsyncGrpcClient",
                               *((*signals)->scoring_signals),
@@ -1342,9 +1454,11 @@ void SelectAdReactor::CancellableFetchScoringSignals() {
 
 void SelectAdReactor::OnFetchScoringSignalsDone(
     absl::StatusOr<std::unique_ptr<ScoringSignals>> result) {
-  if (enable_enforce_kanon_) {
-    PopulateKAnonStatusForBids();
+  if (!perform_scoring_signals_fetch_) {
+    ScoreAds();
+    return;
   }
+
   if (!result.ok()) {
     LogIfError(
         metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
@@ -1802,6 +1916,8 @@ void SelectAdReactor::ReportError(
 }
 
 void SelectAdReactor::QueryKAnonHashes() {
+  auto timer = std::make_unique<KAnonLatencyReporter>(metric_context_.get());
+  bid_k_anon_hash_sets_ = GetKAnonHashesForBids();
   PS_VLOG(5, log_context_) << "Querying k-anon service for hashes";
   if (bid_k_anon_hash_sets_.empty()) {
     PS_VLOG(5, log_context_) << "No hashes to query from k-anon service";
@@ -1816,9 +1932,17 @@ void SelectAdReactor::QueryKAnonHashes() {
       query_sets.insert(hash);
     }
   }
+  if (query_sets.empty()) {
+    PS_VLOG(5, log_context_)
+        << "No unresolved k-anon hashes, will not query k-anon service";
+    fetch_scoring_signals_query_kanon_tracker_.TaskCompleted(
+        TaskStatus::SKIPPED);
+    return;
+  }
   absl::Status status = clients_.k_anon_cache_manager->AreKAnonymous(
       GetKAnonSetType(), std::move(query_sets),
-      [this](absl::StatusOr<absl::flat_hash_set<std::string>> response) {
+      [this, timer = std::move(timer)](
+          absl::StatusOr<absl::flat_hash_set<std::string>> response) {
         if (!response.ok()) {
           PS_LOG(ERROR, log_context_)
               << "k-anon cache manager returned an error: "
@@ -1831,6 +1955,7 @@ void SelectAdReactor::QueryKAnonHashes() {
         PS_VLOG(5, log_context_)
             << "k-anon cache manager returned a successful response";
         queried_k_anon_hashes_ = *std::move(response);
+        PopulateKAnonStatusForBids();
         fetch_scoring_signals_query_kanon_tracker_.TaskCompleted(
             TaskStatus::SUCCESS);
       },
@@ -1839,6 +1964,7 @@ void SelectAdReactor::QueryKAnonHashes() {
     LogInitiatedRequestErrorMetrics(metric::kKAnon, status);
     PS_LOG(ERROR, log_context_)
         << "Failed to query k-anon cache manager: " << status;
+    PopulateKAnonStatusForBids();
     fetch_scoring_signals_query_kanon_tracker_.TaskCompleted(TaskStatus::ERROR);
   }
 }
@@ -1906,6 +2032,8 @@ SelectAdReactor::BidKAnonHashSets SelectAdReactor::GetKAnonHashesForBids() {
       k_anon_hashes_for_bid.insert(
           k_anon_hash_util.HashedKAnonKeyForAdRenderURL(
               buyer_ig_owner, reportin_win_it->second, bid.render()));
+      LogIfError(metric_context_->AccumulateMetric<metric::kSfeKAnonHashCount>(
+          1, kKAnonAdBidHash));
 
       // Reporting ID hashes.
       KAnonKeyReportingIDParam reporting_ids;
@@ -1924,6 +2052,8 @@ SelectAdReactor::BidKAnonHashSets SelectAdReactor::GetKAnonHashesForBids() {
           k_anon_hash_util.HashedKAnonKeyForReportingID(
               buyer_ig_owner, bid.interest_group_name(),
               reportin_win_it->second, bid.render(), reporting_ids));
+      LogIfError(metric_context_->AccumulateMetric<metric::kSfeKAnonHashCount>(
+          1, kKAnonReportingIdHash));
 
       // Calculate hashes for ad component render URLs.
       for (const auto& ad_component_render : bid.ad_components()) {
@@ -1931,7 +2061,11 @@ SelectAdReactor::BidKAnonHashSets SelectAdReactor::GetKAnonHashesForBids() {
             k_anon_hash_util.HashedKAnonKeyForAdComponentRenderURL(
                 ad_component_render));
       }
-
+      if (!bid.ad_components().empty()) {
+        LogIfError(
+            metric_context_->AccumulateMetric<metric::kSfeKAnonHashCount>(
+                bid.ad_components().size(), kKAnonAdComponentAdHash));
+      }
       bid_k_anon_hashes[&bid] = std::move(k_anon_hashes_for_bid);
     }
   }

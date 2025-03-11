@@ -22,6 +22,7 @@
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/auction_service_integration_test_util.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/code_wrapper/buyer_reporting_test_constants.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
@@ -41,86 +42,6 @@ using ::google::scp::core::test::EqualsProto;
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
-constexpr absl::string_view kExpectedReportResultUrl =
-    "http://"
-    "test.com&bid=1&bidCurrency=EUR&dataVersion=1989&highestScoringOtherBid=0&"
-    "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
-    "com&interestGroupOwner=barStandardAds.com&buyerAndSellerReportingId="
-    "undefined&selectedBuyerAndSellerReportingId=undefined";
-constexpr absl::string_view
-    kExpectedReportResultUrlWithBuyerAndSellerReportingId =
-        "http://"
-        "test.com&bid=1&bidCurrency=EUR&dataVersion=1989&"
-        "highestScoringOtherBid=0&"
-        "highestScoringOtherBidCurrency=???&topWindowHostname="
-        "fenceStreetJournal."
-        "com&interestGroupOwner=barStandardAds.com&buyerAndSellerReportingId="
-        "buyerAndSellerReportingId&selectedBuyerAndSellerReportingId=undefined";
-constexpr absl::string_view kExpectedReportResultUrlWithSelectedReportingId =
-    "http://"
-    "test.com&bid=1&bidCurrency=EUR&dataVersion=1989&highestScoringOtherBid=0&"
-    "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
-    "com&interestGroupOwner=barStandardAds.com&buyerAndSellerReportingId="
-    "buyerAndSellerReportingId&selectedBuyerAndSellerReportingId="
-    "selectedBuyerAndSellerReportingId";
-constexpr absl::string_view kExpectedReportWinUrl =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
-    "buyerAndSellerReportingId=undefined&selectedBuyerAndSellerReportingId="
-    "undefined&adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid="
-    "false&signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,"
-    "test,2&auctionSignals=3,test,4&desirability=undefined&topLevelSeller="
-    "undefined&modifiedBid=undefined&dataVersion=1689";
-constexpr absl::string_view kExpectedReportWinUrlWithNullSignalsForWinner =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
-    "buyerAndSellerReportingId=undefined&selectedBuyerAndSellerReportingId="
-    "undefined&adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid="
-    "false&signalsForWinner=null&perBuyerSignals=1,test,2&auctionSignals=3,"
-    "test,4&desirability=undefined&topLevelSeller=undefined&modifiedBid="
-    "undefined&dataVersion=1689";
-constexpr absl::string_view kExpectedReportWinUrlWithBuyerAndSellerReportingId =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=undefined&buyerReportingId=undefined&"
-    "buyerAndSellerReportingId=buyerAndSellerReportingId&"
-    "selectedBuyerAndSellerReportingId=undefined&adCost=2&"
-    "highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
-    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability=undefined&topLevelSeller=undefined&"
-    "modifiedBid=undefined&dataVersion=1689";
-constexpr absl::string_view kExpectedReportWinUrlWithSelectedReportingId =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=undefined&buyerReportingId=buyerReportingId&"
-    "buyerAndSellerReportingId=buyerAndSellerReportingId&"
-    "selectedBuyerAndSellerReportingId=selectedBuyerAndSellerReportingId&"
-    "adCost=2&highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
-    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=1,test,2&"
-    "auctionSignals=3,test,4&desirability=undefined&topLevelSeller=undefined&"
-    "modifiedBid=undefined&dataVersion=1689";
-constexpr absl::string_view kExpectedReportWinWithEmptyPerBuyerConfig =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=undefined&buyerReportingId=undefined&"
-    "buyerAndSellerReportingId=buyerAndSellerReportingId&"
-    "selectedBuyerAndSellerReportingId=undefined&adCost=2&"
-    "highestScoringOtherBid=0&madeHighestScoringOtherBid=false&"
-    "signalsForWinner={\"testSignal\":\"testValue\"}&perBuyerSignals=undefined&"
-    "auctionSignals=3,test,4&desirability=undefined&topLevelSeller=undefined&"
-    "modifiedBid=undefined&dataVersion=1689";
-constexpr absl::string_view kExpectedReportWinWithKAnonStatus =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=testInterestGroupName&buyerReportingId="
-    "undefined&buyerAndSellerReportingId=undefined&adCost=2&"
-    "highestScoringOtherBid=0&madeHighestScoringOtherBid=false&kAnonStatus="
-    "passedAndEnforced&signalsForWinner={\"testSignal\":\"testValue\"}&"
-    "perBuyerSignals=1,test,2&auctionSignals=3,test,4&desirability=undefined&"
-    "topLevelSeller=undefined&modifiedBid=undefined&dataVersion=1689";
-constexpr absl::string_view kTestTopLevelReportResultUrl =
-    "http://"
-    "test.com&bid=1&bidCurrency=undefined&highestScoringOtherBid=undefined&"
-    "highestScoringOtherBidCurrency=undefined&topWindowHostname="
-    "fenceStreetJournal.com&interestGroupOwner=barStandardAds.com";
-constexpr absl::string_view kTestInteractionReportingUrl = "http://click.com";
-constexpr absl::string_view kTestSellerCodeVersion = "test_bucket";
 
 PrivateAggregateContribution GetTestContribution(
     EventType event_type, absl::string_view event_name = "") {
@@ -396,11 +317,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
   ASSERT_EQ(score_ad.top_level_contributions_size(), 2);
   EXPECT_THAT(score_ad.top_level_contributions(0),
               EqualsProto(expected_reports));
-  // The ig_idx should be set for buyer.
-  for (auto& contribution : *expected_reports.mutable_contributions()) {
-    contribution.set_ig_idx(1);
-  }
-  expected_reports.set_adtech_origin(kTestIgOwner);
+  expected_reports.set_adtech_origin(kTestSeller);
   EXPECT_THAT(score_ad.top_level_contributions(1),
               EqualsProto(expected_reports));
 }

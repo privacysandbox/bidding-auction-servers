@@ -1,0 +1,14 @@
+common --noenable_bzlmod
+common --enable_workspace
+
+build --announce_rc
+build --verbose_failures
+build --compilation_mode=opt
+build --output_filter='^//((?!(deps):).)*$'`
+build --color=yes
+
+test --test_verbose_timeout_warnings
+test --test_output=errors
+
+build:run_all_tests --cache_test_results=no
+test:run_all_tests --test_verbose_timeout_warnings

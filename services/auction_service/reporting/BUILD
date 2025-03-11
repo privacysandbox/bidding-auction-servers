@@ -63,7 +63,6 @@ cc_library(
         "reporting_test_util.cc",
     ],
     hdrs = [
-        "reporting_helper_test_constants.h",
         "reporting_test_util.cc",
         "reporting_test_util.h",
     ],
@@ -71,6 +70,7 @@ cc_library(
     deps = [
         ":reporting_helper",
         ":reporting_response",
+        "//services/auction_service:auction_test_constants",
         "//services/auction_service/reporting/seller:seller_reporting_manager",
         "//services/common/constants:common_constants",
         "@com_google_googletest//:gtest",
@@ -97,12 +97,12 @@ cc_test(
     size = "small",
     srcs = [
         "reporting_helper_test.cc",
-        "reporting_helper_test_constants.h",
     ],
     visibility = ["//visibility:public"],
     deps = [
         ":reporting_helper",
         ":reporting_response",
+        "//services/auction_service:auction_test_constants",
         "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/code_dispatch:code_dispatch_reactor",
         "//services/common/constants:common_constants",

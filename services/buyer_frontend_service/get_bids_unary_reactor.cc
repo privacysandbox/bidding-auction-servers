@@ -14,6 +14,9 @@
 
 #include "services/buyer_frontend_service/get_bids_unary_reactor.h"
 
+#include <cstddef>
+#include <optional>
+
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_format.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
@@ -146,11 +149,6 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       get_bids_response_(&get_bids_response),
       get_bids_raw_response_(
           std::make_unique<GetBidsResponse::GetBidsRawResponse>()),
-      // TODO(b/278039901): Add integration test for metadata forwarding.
-      kv_metadata_(GrpcMetadataToRequestMetadata(context.client_metadata(),
-                                                 kBuyerKVMetadata)),
-      bidding_metadata_(GrpcMetadataToRequestMetadata(context.client_metadata(),
-                                                      kBiddingMetadata)),
       bidding_signals_async_provider_(bidding_signals_async_provider),
       kv_async_client_(kv_async_client),
       bidding_async_client_(&bidding_async_client),
@@ -391,6 +389,27 @@ void GetBidsUnaryReactor::CancellableExecute() {
                        absl::PairFormatter(absl::StreamFormatter(), " : ",
                                            absl::StreamFormatter()));
 
+  // TODO(b/278039901): Add integration test for metadata forwarding.
+  absl::StatusOr<RequestMetadata> kv_metadata = GrpcMetadataToRequestMetadata(
+      context_->client_metadata(), kBuyerKVMetadata);
+  if (!kv_metadata.ok()) {
+    PS_VLOG(kNoisyWarn, log_context_) << kv_metadata.status();
+    FinishWithStatus(server_common::FromAbslStatus(kv_metadata.status()));
+    return;
+  }
+
+  absl::StatusOr<RequestMetadata> bidding_metadata =
+      GrpcMetadataToRequestMetadata(context_->client_metadata(),
+                                    kBiddingMetadata);
+  if (!bidding_metadata.ok()) {
+    PS_VLOG(kNoisyWarn, log_context_) << bidding_metadata.status();
+    FinishWithStatus(server_common::FromAbslStatus(bidding_metadata.status()));
+    return;
+  }
+
+  kv_metadata_ = *std::move(kv_metadata);
+  bidding_metadata_ = *std::move(bidding_metadata);
+
   if (!decrypt_status_.ok()) {
     PS_LOG(ERROR, log_context_) << "Decrypting the request failed:"
                                 << server_common::ToAbslStatus(decrypt_status_);
@@ -595,7 +614,7 @@ void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
 }
 
 void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV1(
-    const BiddingSignalsRequest& bidding_signals_request) {
+    const BiddingSignalsRequest& bidding_signals_request, bool is_hybrid) {
   if (bidding_signals_fetch_mode_ == BiddingSignalsFetchMode::NOT_FETCHED) {
     FinishWithStatus(grpc::Status(grpc::StatusCode::INTERNAL,
                                   kCheckBiddingSignalsFetchFlagV1ErrorMsg));
@@ -614,7 +633,7 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV1(
       bidding_signals_request,
       CancellationWrapper(
           context_, enable_cancellation_,
-          [this, kv_request](
+          [this, kv_request, is_hybrid, bidding_signals_request](
               absl::StatusOr<std::unique_ptr<BiddingSignals>> response,
               GetByteSize get_byte_size) mutable {
             {
@@ -643,6 +662,13 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV1(
                   });
               return;
             }
+            if (is_hybrid && !(*response)->is_hybrid_v1_return) {
+              MayGetProtectedAudienceBidsV2(
+                  bidding_signals_request,
+                  std::move((*response)->trusted_signals));
+              return;
+            }
+
             // Sends protected audience bid request to bidding service.
             PrepareAndGenerateProtectedAudienceBid(*std::move(response));
           },
@@ -672,7 +698,8 @@ void GetBidsUnaryReactor::HandleV2Failure(const absl::Status& status,
 }
 
 void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
-    const BiddingSignalsRequest& bidding_signals_request) {
+    const BiddingSignalsRequest& bidding_signals_request,
+    std::unique_ptr<std::string> byos_output) {
   if (bidding_signals_fetch_mode_ == BiddingSignalsFetchMode::NOT_FETCHED) {
     FinishWithStatus(grpc::Status(grpc::StatusCode::INTERNAL,
                                   kCheckBiddingSignalsFetchFlagV2ErrorMsg));
@@ -688,7 +715,8 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
           .release();
   grpc::ClientContext* client_context = client_contexts_.Add();
   auto maybe_bidding_signals_request = CreateV2BiddingRequest(
-      bidding_signals_request, config_.propagate_buyer_signals_to_tkv);
+      bidding_signals_request, config_.propagate_buyer_signals_to_tkv,
+      std::move(byos_output));
   if (!maybe_bidding_signals_request.ok()) {
     PS_VLOG(kNoisyWarn, log_context_) << "Failed creating TKV bidding request. "
                                       << maybe_bidding_signals_request.status();
@@ -720,8 +748,16 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
                               std::move(bid_signal));
               return;
             }
-            auto signals =
-                ConvertV2BiddingSignalsToV1(*std::move(kv_look_up_result));
+            KVV2AdapterStats v2_adapter_stats;
+            auto signals = ConvertV2BiddingSignalsToV1(
+                *std::move(kv_look_up_result), v2_adapter_stats);
+            PS_VLOG(kStats, log_context_)
+                << "Number of values with additional json string parsing "
+                   "applied:"
+                << v2_adapter_stats.values_with_json_string_parsing
+                << " and without additional json string parsing applied:"
+                << v2_adapter_stats.values_without_json_string_parsing;
+
             if (!signals.ok()) {
               HandleV2Failure(signals.status(),
                               "Failed converting TKV response. ",
@@ -764,10 +800,16 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
 
   if (bidding_signals_fetch_mode_ != BiddingSignalsFetchMode::NOT_FETCHED) {
     BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
-    UseKvV2(raw_request_.client_type(), config_.is_tkv_v2_browser_enabled,
-            config_.test_mode, config_.tkv_v2_address_empty)
-        ? MayGetProtectedAudienceBidsV2(bidding_signals_request)
-        : MayGetProtectedAudienceBidsV1(bidding_signals_request);
+    if (UseKvV2(raw_request_.client_type(), config_.is_tkv_v2_browser_enabled,
+                config_.test_mode, config_.tkv_v2_address_empty)) {
+      MayGetProtectedAudienceBidsV2(bidding_signals_request);
+    } else if (config_.is_hybrid_enabled &&
+               raw_request_.client_type() == CLIENT_TYPE_BROWSER) {
+      MayGetProtectedAudienceBidsV1(bidding_signals_request,
+                                    /* is_hybrid*/ true);
+    } else {
+      MayGetProtectedAudienceBidsV1(bidding_signals_request);
+    }
   } else {
     PrepareAndGenerateProtectedAudienceBid(std::make_unique<BiddingSignals>());
   }

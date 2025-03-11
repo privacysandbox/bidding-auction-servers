@@ -51,10 +51,11 @@ inline constexpr char kTestBuyerAndSellerReportingId[] =
 
 ScoreAdsResponse::AdScore MakeAnAdScore() {
   // Populate rejection reasons and highest other buyers.
-  return MakeARandomAdScore(
+  auto score = MakeARandomAdScore(
       /*hob_buyer_entries = */ 2,
       /*rejection_reason_ig_owners = */ 2,
       /*rejection_reason_ig_per_owner = */ 2);
+  return score;
 }
 
 AuctionResult::Error MakeAnError() {
@@ -330,7 +331,8 @@ class AdScoreToAuctionResultWithKAnonTest : public AdScoreToAuctionResultTest {
         {.ig_index = kSampleIgIndex,
          .ig_owner = kSampleIgOwner,
          .ig_name = kSampleIgName,
-         .bucket_name = kSampleBucket,
+         .bucket_name =
+             std::vector<uint8_t>(kSampleBucket.begin(), kSampleBucket.end()),
          .bucket_value = kSampleValue,
          .ad_render_url = kSampleAdRenderUrl,
          .ad_component_render_url = kSampleAdComponentRenderUrl,
@@ -386,7 +388,7 @@ TEST_F(AdScoreToAuctionResultWithKAnonTest, MapsKAnonData) {
           owner: "foo_owner"
           ig_name: "foo_ig_name"
           ghost_winner_private_aggregation_signals {
-            bucket: "bucket"
+            bucket: "\001\003\005\007\t"
             value: 21
           }
           ghost_winner_for_top_level_auction {
@@ -608,15 +610,18 @@ class CreateAuctionResultCiphertextTest : public testing::Test {
   }
 };
 
-TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForAndroid) {
+TEST_F(CreateAuctionResultCiphertextTest, ConvertsTopLevelAdScoreForAndroid) {
   UpdateGroupMap empty_updates;
   AuctionResult expected =
       MapBasicScoreFieldsToAuctionResult(this->valid_score_);
+  ScoreAdsResponse::AdScore top_level_score = this->valid_score_;
+  top_level_score.set_seller(MakeARandomString());
+  expected.mutable_auction_params()->set_component_seller(
+      top_level_score.seller());
   auto decrypted_message = MakeDecryptedMessage();
   auto output = CreateNonChaffAuctionResultCiphertext(
-      kEmptyAdAuctionResultNonce, this->valid_score_, std::nullopt,
-      empty_updates, ClientType::CLIENT_TYPE_ANDROID, *decrypted_message,
-      *this->log_context_);
+      kEmptyAdAuctionResultNonce, top_level_score, std::nullopt, empty_updates,
+      ClientType::CLIENT_TYPE_ANDROID, *decrypted_message, *this->log_context_);
 
   ASSERT_TRUE(output.ok()) << output.status();
   EXPECT_THAT(DecryptAppProtoAuctionResult(*output, decrypted_message->context),
@@ -678,7 +683,8 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWebWithKAnonData) {
       {.ig_index = kSampleIgIndex,
        .ig_owner = kSampleIgOwner,
        .ig_name = kSampleIgName,
-       .bucket_name = kSampleBucket,
+       .bucket_name =
+           std::vector<uint8_t>(kSampleBucket.begin(), kSampleBucket.end()),
        .bucket_value = kSampleValue,
        .ad_render_url = kSampleAdRenderUrl,
        .ad_component_render_url = kSampleAdComponentRenderUrl,
@@ -740,7 +746,7 @@ TEST_F(CreateAuctionResultCiphertextTest, ConvertsAdScoreForWebWithKAnonData) {
           owner: "foo_owner"
           ig_name: "foo_ig_name"
           ghost_winner_private_aggregation_signals {
-            bucket: "bucket"
+            bucket: "\001\003\005\007\t"
             value: 21
           }
         }

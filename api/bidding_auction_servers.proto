@@ -594,7 +594,7 @@ message AuctionResult {
 
       int32 value = 2;
     }
-    optional GhostWinnerPrivateAggregationSignals ghost_winner_private_aggregation_signals = 6;
+    repeated GhostWinnerPrivateAggregationSignals ghost_winner_private_aggregation_signals = 6;
 
     // In case of multiseller auction, the associated data for the ghost winner
     // will be returned so that the ghost winning bid can be scored
@@ -1528,6 +1528,10 @@ message GenerateProtectedAppSignalsBidsRequest {
     // Represents all blob versions the buyer logic should use for this request.
     // Buyer can pass this information to the Seller in RTB response.
     BuyerBlobVersions blob_versions = 14;
+
+    // Top level seller passed in case of component auctions. This is forwarded
+    // to generateBid.
+    string top_level_seller = 15;
   }
 
   // Encrypted GenerateProtectedAppSignalsBidsRawRequest.
@@ -1574,6 +1578,12 @@ message ProtectedAppSignalsAdWithBid {
 
   // Temporary unlimited size egress features. Meant for experimentation only.
   string temporary_unlimited_egress_payload = 10;
+
+  // If the bid being generated in a component auction and this value is not
+  // true, the bid is ignored. If not present, this value is considered false.
+  // This field must be present and true to be forwarded to the top level
+  // seller.
+  bool allow_component_auction = 11;
 }
 
 // Encrypted response to GenerateProtectedAppSignalsBidsRequest with bid prices
@@ -2004,6 +2014,11 @@ message ScoreAdsResponse {
 
     // Used for top level seller orchestrated auctions.
     optional KAnonJoinCandidate k_anon_join_candidate = 23;
+
+    // Used for top level seller orchestrated auctions.
+    // Contains the domain of the component
+    // seller for the winning ad.
+    string seller = 24;
   }
 
   // The response includes the top scored ad, optionally ghost winner(s), along

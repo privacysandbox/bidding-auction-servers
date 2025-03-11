@@ -23,7 +23,7 @@
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "services/auction_service/auction_constants.h"
-#include "services/auction_service/reporting/reporting_helper_test_constants.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/constants/common_constants.h"
@@ -172,12 +172,12 @@ absl::StatusOr<std::string> BuildJsonObject(const ReportingResponse& response,
 
 BuyerReportingMetadata GetTestBuyerReportingMetadata() {
   return {
-      .buyer_signals = kTestBuyerSignals,
+      .buyer_signals = kTestBuyerSignalsObj,
       .join_count = kTestJoinCount,
       .recency = kTestRecency,
       .modeling_signals = kTestModelingSignals,
-      .seller = kTestSeller,
-      .interest_group_name = kTestInterestGroupName,
+      .seller = kTestSeller.data(),
+      .interest_group_name = kTestInterestGroupName.data(),
       .ad_cost = kTestAdCost,
       .data_version = kTestDataVersion,
   };
@@ -219,7 +219,7 @@ ReportingDispatchRequestData GetTestComponentDispatchRequestData(
                                  seller_data_version);
   reporting_dispatch_request_data.component_reporting_metadata = {
       .top_level_seller = kTestTopLevelSeller,
-      .component_seller = kTestSeller,
+      .component_seller = kTestSeller.data(),
       .modified_bid_currency = winning_ad_score.bid_currency(),
       .modified_bid = winning_ad_score.bid()};
   return reporting_dispatch_request_data;

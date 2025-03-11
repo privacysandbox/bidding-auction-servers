@@ -868,7 +868,8 @@ TEST(ChromeResponseUtils, SerializesBothWinnerAndKAnonGhostWinner) {
           {.ig_index = kSampleIgIndex,
            .ig_owner = kSampleIgOwner,
            .ig_name = kSampleIgName,
-           .bucket_name = kSampleBucket,
+           .bucket_name =
+               std::vector<uint8_t>(kSampleBucket.begin(), kSampleBucket.end()),
            .bucket_value = kSampleValue,
            .ad_render_url = kSampleAdRenderUrl,
            .ad_component_render_url = kSampleAdComponentRenderUrl,
@@ -925,7 +926,7 @@ TEST(ChromeResponseUtils, SerializesBothWinnerAndKAnonGhostWinner) {
           owner: "foo_owner"
           ig_name: "foo_ig_name"
           ghost_winner_private_aggregation_signals {
-            bucket: "bucket"
+            bucket: "\001\003\005\007\t"
             value: 21
           }
           ghost_winner_for_top_level_auction {
@@ -950,7 +951,8 @@ TEST(ChromeResponseUtils, SerializesKAnonGhostWinnerAndDoesntSetChaff) {
           {.ig_index = kSampleIgIndex,
            .ig_owner = kSampleIgOwner,
            .ig_name = kSampleIgName,
-           .bucket_name = kSampleBucket,
+           .bucket_name =
+               std::vector<uint8_t>(kSampleBucket.begin(), kSampleBucket.end()),
            .bucket_value = kSampleValue,
            .ad_render_url = kSampleAdRenderUrl,
            .ad_component_render_url = kSampleAdComponentRenderUrl,
@@ -998,7 +1000,7 @@ TEST(ChromeResponseUtils, SerializesKAnonGhostWinnerAndDoesntSetChaff) {
           owner: "foo_owner"
           ig_name: "foo_ig_name"
           ghost_winner_private_aggregation_signals {
-            bucket: "bucket"
+            bucket: "\001\003\005\007\t"
             value: 21
           }
           ghost_winner_for_top_level_auction {
@@ -1382,7 +1384,8 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
           {.ig_index = kSampleIgIndex,
            .ig_owner = kSampleIgOwner,
            .ig_name = kSampleIgName,
-           .bucket_name = kSampleBucket,
+           .bucket_name =
+               std::vector<uint8_t>(kSampleBucket.begin(), kSampleBucket.end()),
            .bucket_value = kSampleValue,
            .ad_render_url = kSampleAdRenderUrl,
            .ad_component_render_url = kSampleAdComponentRenderUrl,
@@ -1431,7 +1434,7 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
           owner: "foo_owner"
           ig_name: "foo_ig_name"
           ghost_winner_private_aggregation_signals {
-            bucket: "bucket"
+            bucket: "\001\003\005\007\t"
             value: 21
           }
           ghost_winner_for_top_level_auction {
@@ -1674,7 +1677,8 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
           {.ig_index = kSampleIgIndex,
            .ig_owner = kSampleIgOwner,
            .ig_name = kSampleIgName,
-           .bucket_name = kSampleBucket,
+           .bucket_name =
+               std::vector<uint8_t>(kSampleBucket.begin(), kSampleBucket.end()),
            .bucket_value = kSampleValue,
            .ad_render_url = kSampleAdRenderUrl,
            .ad_component_render_url = kSampleAdComponentRenderUrl,
@@ -1737,8 +1741,8 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
           "6f7274696e674964782173656c65637465644275796572416e6453656c6c65725265"
           "706f7274696e674964782173656c65637465644275796572416e6453656c6c657252"
           "65706f7274696e674964782467686f737457696e6e65725072697661746541676772"
-          "65676174696f6e5369676e616c73a26576616c756515666275636b6574666275636b"
-          "657472696e74657265737447726f75704f776e6572781868747470733a2f2f627579"
+          "65676174696f6e5369676e616c7381a26576616c756515666275636b657445010305"
+          "070972696e74657265737447726f75704f776e6572781868747470733a2f2f627579"
           "65722d6164746563682e636f6d78196b416e6f6e57696e6e65724a6f696e43616e64"
           "696461746573a36f616452656e64657255524c486173684501020304056f7265706f"
           "7274696e6749644861736845020406080978196164436f6d706f6e656e7452656e64"

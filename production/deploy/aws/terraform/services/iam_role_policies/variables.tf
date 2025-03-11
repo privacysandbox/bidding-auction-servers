@@ -38,3 +38,8 @@ variable "region" {
   description = "AWS region in which services have been created"
   type        = string
 }
+
+variable "coordinator_role_arns" {
+  description = "ARNs for coordinator roles."
+  type        = list(string)
+}

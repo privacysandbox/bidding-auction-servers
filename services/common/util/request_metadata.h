@@ -28,7 +28,24 @@
 #include "absl/strings/str_cat.h"
 #include "include/grpcpp/server_context.h"
 #include "services/common/clients/async_client.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
+
+inline constexpr absl::string_view kIllegalHeaderError =
+    "Illegal character provided in request header: (key: %s, value: %s)";
+
+// Validates that the candidate header key contains only supported gRPC header
+// key characters as defined by:
+// https://github.com/grpc/grpc/blob/ca0d85cea5242d6740ba6cf1dc5c0b9647856fca/src/core/lib/surface/validate_metadata.cc#L33-L42
+bool IsValidHeaderKey(absl::string_view candidate_key);
+
+// Validates that the candidate header value contains only supported gRPC header
+// value characters as defined by:
+// https://github.com/grpc/grpc/blob/ca0d85cea5242d6740ba6cf1dc5c0b9647856fca/src/core/lib/surface/validate_metadata.cc#L107-L114
+bool IsValidHeaderValue(absl::string_view candidate_value);
+
+bool IsValidHeader(absl::string_view candidate_key,
+                   absl::string_view candidate_value);
 
 // Maps metadata from a server context to a hash map.
 // Only maps metadata keys passed in source_target_key_map.
@@ -38,7 +55,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 // Target metadata - {"X-ABC-ID": "1234" }
 // source_target_key_map - {"ABC-ID" : "X-ABC-ID"}
 template <std::size_t N>
-inline RequestMetadata GrpcMetadataToRequestMetadata(
+inline absl::StatusOr<RequestMetadata> GrpcMetadataToRequestMetadata(
     const std::multimap<grpc::string_ref, grpc::string_ref>& client_metadata,
     const std::array<std::pair<std::string_view, std::string_view>, N>&
         source_target_key_map) {
@@ -49,11 +66,16 @@ inline RequestMetadata GrpcMetadataToRequestMetadata(
     std::string source_key = absl::AsciiStrToLower(src);
     if (const auto& found_metadata_itr = client_metadata.find(source_key);
         found_metadata_itr != client_metadata.end()) {
-      mapped_metadata.insert(
-          {dst.data(), std::string(found_metadata_itr->second.begin(),
-                                   found_metadata_itr->second.end())});
+      std::string client_metadata_val = std::string(
+          found_metadata_itr->second.begin(), found_metadata_itr->second.end());
+      if (!IsValidHeaderValue(client_metadata_val)) {
+        return absl::InvalidArgumentError(absl::StrFormat(
+            kIllegalHeaderError, source_key, client_metadata_val));
+      }
+      mapped_metadata.insert({dst.data(), std::move(client_metadata_val)});
     }
   }
+
   return mapped_metadata;
 }
 

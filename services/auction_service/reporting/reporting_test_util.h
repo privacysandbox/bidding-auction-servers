@@ -20,8 +20,8 @@
 #include <string>
 
 #include "rapidjson/document.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/reporting/reporting_helper.h"
-#include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -89,6 +89,8 @@ void VerifyPASBuyerReportingSignalsJson(
     const BuyerReportingDispatchRequestData&
         expected_buyer_dispatch_request_data,
     const SellerReportingDispatchRequestData& seller_dispatch_request_data);
+
+void VerifyBuyerReportingUrl(const ScoreAdsResponse::AdScore& scored_ad);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_TEST_UTIL_H_

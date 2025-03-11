@@ -29,6 +29,11 @@ namespace privacy_sandbox::bidding_auction_servers {
 struct BiddingSignals {
   std::unique_ptr<std::string> trusted_signals;
   uint32_t data_version;
+  // By default this should be false
+  // However, AdTechs can indicate through a header that is ultimately
+  // mapped to this flag, that they don't want to make a downstream v2
+  // request and the B&A server should process the returned v1 BYOS response.
+  bool is_hybrid_v1_return = false;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

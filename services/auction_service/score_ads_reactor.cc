@@ -486,7 +486,7 @@ void ScoreAdsReactor::BuildScoreAdRequestForComponentGhostWinners(
           << dispatch_request.status();
       continue;
     }
-
+    // TODO(b/398916952): Add support for PAS ghost winners
     auto [unused_it, inserted] = ad_data_.try_emplace(
         dispatch_request->id, MapKAnonGhostWinnerToAdWithBidMetadata(
                                   ghost_winner.owner(), ghost_winner.ig_name(),
@@ -530,7 +530,7 @@ void ScoreAdsReactor::BuildScoreAdRequestForComponentWinner(
       code_version_);
   if (!dispatch_request.ok()) {
     PS_VLOG(kDispatch, log_context_)
-        << "Failed to create scoring request for protected audience: "
+        << "Failed to create scoring request for component candidate: "
         << dispatch_request.status();
     return;
   }
@@ -541,7 +541,7 @@ void ScoreAdsReactor::BuildScoreAdRequestForComponentWinner(
           GetComponentReportingDataInAuctionResult(auction_result));
   if (!reporting_inserted) {
     PS_VLOG(kNoisyWarn, log_context_)
-        << "Could not insert reporting data for Protected Audience ScoreAd "
+        << "Could not insert reporting data for component candidate. ScoreAd "
            "Request id "
            "conflict detected: "
         << dispatch_request->id;
@@ -553,15 +553,36 @@ void ScoreAdsReactor::BuildScoreAdRequestForComponentWinner(
   }
 
   // Map all fields from a component auction result to a
-  // AdWithBidMetadata used in this reactor. This way all the parsing
-  // and result handling logic for single seller auctions can be
-  // re-used for top-level auctions.
-  auto [unused_it, inserted] = ad_data_.try_emplace(
-      dispatch_request->id, MapAuctionResultToAdWithBidMetadata(
-                                auction_result, /*k_anon_status=*/true));
-  if (!inserted) {
+  // ProtectedAppSignals/ProtectedAudience AdWithBidMetadata used in this
+  // reactor. This way all the parsing and result handling logic for single
+  // seller auctions can be re-used for top-level auctions.
+  bool insertion_success = false;
+  switch (auction_result.ad_type()) {
+    case AdType::AD_TYPE_PROTECTED_AUDIENCE_AD: {
+      auto [unused_it, inserted] = ad_data_.try_emplace(
+          dispatch_request->id, MapAuctionResultToAdWithBidMetadata(
+                                    auction_result, /*k_anon_status=*/true));
+      insertion_success = inserted;
+      break;
+    }
+    case AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD: {
+      auto [unused_it, inserted] = protected_app_signals_ad_data_.try_emplace(
+          dispatch_request->id,
+          MapAuctionResultToProtectedAppSignalsAdWithBidMetadata(
+              auction_result,
+              /*k_anon_status=*/true));
+      insertion_success = inserted;
+      break;
+    }
+    default:
+      PS_VLOG(kNoisyWarn, log_context_)
+          << "Skipped ad with unknown ad type " << auction_result.DebugString();
+      return;
+  }
+
+  if (!insertion_success) {
     PS_VLOG(kNoisyWarn, log_context_)
-        << "Protected Audience ScoreAd Request id "
+        << "Component candidate ScoreAd Request id "
            "conflict detected: "
         << dispatch_request->id;
     LogIfError(
@@ -570,6 +591,10 @@ void ScoreAdsReactor::BuildScoreAdRequestForComponentWinner(
                 1, metric::kAuctionScoreAdsFailedToInsertDispatchRequest));
     return;
   }
+
+  component_ad_seller_.try_emplace(
+      dispatch_request->id, std::move(*auction_result.mutable_auction_params()
+                                           ->mutable_component_seller()));
 
   ad_k_anon_join_cand_.try_emplace(
       dispatch_request->id,
@@ -801,18 +826,6 @@ void ScoreAdsReactor::Execute() {
     raw_request_.clear_protected_app_signals_ad_bids();
   }
 
-  if (auction_scope_ ==
-          AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER &&
-      !raw_request_.protected_app_signals_ad_bids().empty()) {
-    // This path should be unreachable from SFE.
-    // Component PA and PAS auctions cannot be done together for now.
-    PS_LOG(ERROR, log_context_)
-        << "Finishing RPC: " << kDeviceComponentAuctionWithPAS;
-    FinishWithStatus(::grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                                    kDeviceComponentAuctionWithPAS));
-    return;
-  }
-
   benchmarking_logger_->BuildInputBegin();
   std::shared_ptr<std::string> auction_config =
       BuildAuctionConfig(raw_request_);
@@ -1012,6 +1025,10 @@ void ScoreAdsReactor::PerformReportingWithSellerAndBuyerCodeIsolation(
                  protected_app_signals_ad_data_.find(id);
              protected_app_signals_ad_it !=
              protected_app_signals_ad_data_.end()) {
+    if (auction_scope_ == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
+      DispatchReportResultRequestForTopLevelAuction(id);
+      return;
+    }
     InitializeBuyerReportingDispatchRequestData(winning_ad_score);
 
     const auto& protected_app_signals_ad = protected_app_signals_ad_it->second;
@@ -1024,8 +1041,7 @@ void ScoreAdsReactor::PerformReportingWithSellerAndBuyerCodeIsolation(
     buyer_reporting_dispatch_request_data_.temporary_unlimited_egress_payload =
         protected_app_signals_ad->temporary_unlimited_egress_payload();
     if (IsComponentAuction(auction_scope_)) {
-      PS_LOG(ERROR, log_context_)
-          << "Multi seller auction is unavailable for PAS";
+      DispatchReportResultRequestForComponentAuction(winning_ad_score);
     } else {
       DispatchReportResultRequest();
     }
@@ -1524,6 +1540,13 @@ void ScoreAdsReactor::PopulateRelevantFieldsInResponse(
   } else {
     ad_score.set_render(protected_app_signals_ad_with_bid->render());
   }
+
+  if (auction_scope_ == AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
+    if (auto it = component_ad_seller_.find(request_id);
+        it != component_ad_seller_.end()) {
+      ad_score.set_seller(it->second);
+    }
+  }
 }
 
 void ScoreAdsReactor::PopulateHighestScoringOtherBidsData(
@@ -1692,8 +1715,8 @@ void ScoreAdsReactor::ScoreAdsCallback(
   const bool has_winning_ad = winner_index != -1;
   // No ad won.
   if (!has_winning_ad) {
-    PS_LOG(WARNING, log_context_) << "No ad was selected as most desirable and "
-                                  << "no ghost winners found";
+    PS_VLOG(kNoisyWarn, log_context_)
+        << "No ad was selected as most desirable and no ghost winners found";
     LogIfError(metric_context_
                    ->AccumulateMetric<metric::kAuctionErrorCountByErrorCode>(
                        1, metric::kAuctionScoreAdsNoAdSelected));
@@ -1884,7 +1907,7 @@ void ScoreAdsReactor::ReportWinCallback(
           ->mutable_interaction_reporting_urls()
           ->try_emplace(event, interactionReportingUrl);
     }
-    SetPrivateAggregationContributionsInResponse(
+    SetPrivateAggregationContributionsInResponseForBuyer(
         std::move(report_win_response->pagg_response));
   }
   EncryptAndFinishOK();
@@ -1920,7 +1943,7 @@ void ScoreAdsReactor::CancellableReportResultCallback(
           SetSellerReportingUrlsInResponseForComponentAuction(
               std::move(*report_result_response), raw_response_);
         } else {
-          SetPrivateAggregationContributionsInResponse(
+          SetPrivateAggregationContributionsInResponseForSeller(
               std::move(report_result_response->pagg_response));
           SetSellerReportingUrlsInResponse(std::move(*report_result_response),
                                            raw_response_);
@@ -1975,7 +1998,16 @@ void ScoreAdsReactor::CancellableReportResultCallback(
   EncryptAndFinishOK();
 }
 
-void ScoreAdsReactor::SetPrivateAggregationContributionsInResponse(
+void ScoreAdsReactor::SetPrivateAggregationContributionsInResponseForSeller(
+    PrivateAggregateReportingResponse pagg_response) {
+  if (!pagg_response.contributions().empty()) {
+    pagg_response.set_adtech_origin(raw_request_.seller());
+    raw_response_.mutable_ad_score()->add_top_level_contributions()->Swap(
+        &pagg_response);
+  }
+}
+
+void ScoreAdsReactor::SetPrivateAggregationContributionsInResponseForBuyer(
     PrivateAggregateReportingResponse pagg_response) {
   if (!pagg_response.contributions().empty()) {
     // ig_idx and adtech_origin should be set for the buyer

@@ -23,13 +23,19 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+using ::privacy_sandbox::server_common::byob::Mode;
 using ::privacy_sandbox::server_common::byob::UdfBlob;
 
 absl::StatusOr<GenerateBidByobDispatchClient>
 GenerateBidByobDispatchClient::Create(int num_workers) {
   PS_ASSIGN_OR_RETURN(
       auto byob_service,
-      roma_service::ByobGenerateProtectedAudienceBidService<>::Create({}));
+      roma_service::ByobGenerateProtectedAudienceBidService<>::Create(
+          {
+              .lib_mounts = "",
+              .enable_seccomp_filter = true,
+          },
+          /*mode=*/Mode::kModeNsJailSandbox));
   return GenerateBidByobDispatchClient(std::move(byob_service), num_workers);
 }
 

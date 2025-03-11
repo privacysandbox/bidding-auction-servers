@@ -29,7 +29,7 @@ struct KAnonAuctionResultDataInputs {
   int ig_index = -1;
   std::string ig_owner;
   std::string ig_name;
-  std::string bucket_name;
+  std::vector<uint8_t> bucket_name;
   int bucket_value = -1;
   std::string ad_render_url;
   std::string ad_component_render_url;

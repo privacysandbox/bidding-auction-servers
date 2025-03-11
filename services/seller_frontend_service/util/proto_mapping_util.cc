@@ -174,7 +174,7 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
   return PackageAuctionResultCiphertext(data_to_compress, decrypted_request);
 }
 
-absl::StatusOr<std::string> PackageAuctionResultForApp(
+absl::StatusOr<std::string> PackageTopLevelAuctionResultForApp(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const std::optional<AuctionResult::Error>& error,
     OhttpHpkeDecryptedMessage& decrypted_request,
@@ -184,6 +184,10 @@ absl::StatusOr<std::string> PackageAuctionResultForApp(
 
   AuctionResult result =
       MapAdScoreToAuctionResult(high_score, error, std::move(kanon_data));
+  if (high_score) {
+    result.mutable_auction_params()->set_component_seller(high_score->seller());
+  }
+
   if (server_common::log::PS_VLOG_IS_ON(kPlain)) {
     PS_VLOG(kPlain, log_context)
         << "AuctionResult exported in EventMessage if consented";
@@ -288,9 +292,9 @@ absl::StatusOr<std::string> CreateNonChaffAuctionResultCiphertext(
   absl::StatusOr<std::string> auction_result_ciphertext;
   switch (client_type) {
     case CLIENT_TYPE_ANDROID:
-      return PackageAuctionResultForApp(ad_score, /*error =*/std::nullopt,
-                                        decrypted_request, log_context,
-                                        std::move(kanon_data));
+      return PackageTopLevelAuctionResultForApp(
+          ad_score, /*error =*/std::nullopt, decrypted_request, log_context,
+          std::move(kanon_data));
     case CLIENT_TYPE_BROWSER:
       return PackageAuctionResultForWeb(
           auction_result_nonce, ad_score, bidding_group_map, update_group_map,
@@ -308,7 +312,7 @@ absl::StatusOr<std::string> CreateErrorAuctionResultCiphertext(
     RequestLogContext& log_context) {
   switch (client_type) {
     case CLIENT_TYPE_ANDROID:
-      return PackageAuctionResultForApp(
+      return PackageTopLevelAuctionResultForApp(
           /*high_score=*/std::nullopt, auction_error, decrypted_request,
           log_context);
     case CLIENT_TYPE_BROWSER:
@@ -328,7 +332,7 @@ absl::StatusOr<std::string> CreateChaffAuctionResultCiphertext(
     RequestLogContext& log_context) {
   switch (client_type) {
     case CLIENT_TYPE_ANDROID:
-      return PackageAuctionResultForApp(
+      return PackageTopLevelAuctionResultForApp(
           /*high_score=*/std::nullopt, /*error =*/std::nullopt,
           decrypted_request, log_context);
     case CLIENT_TYPE_BROWSER:

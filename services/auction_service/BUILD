@@ -108,6 +108,15 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "auction_test_constants",
+    hdrs = ["auction_test_constants.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/strings",
+    ],
+)
+
 cc_test(
     name = "score_ads_reactor_test",
     size = "small",
@@ -162,12 +171,37 @@ cc_test(
 )
 
 cc_test(
+    name = "score_ads_reactor_component_auction_test",
+    size = "small",
+    srcs = [
+        "auction_test_constants.h",
+        "score_ads_reactor_component_auction_test.cc",
+    ],
+    deps = [
+        ":auction_constants",
+        ":score_ads_reactor",
+        ":score_ads_reactor_test_util",
+        "//api:bidding_auction_servers_cc_proto_builder",
+        "//services/auction_service/code_wrapper:buyer_reporting_udf_wrapper",
+        "//services/auction_service/code_wrapper:seller_udf_wrapper",
+        "//services/auction_service/reporting:reporting_test_util",
+        "//services/auction_service/udf_fetcher:adtech_code_version_util",
+        "//services/common/test:random",
+        "//services/common/test/utils:test_init",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
+    ],
+)
+
+cc_test(
     name = "auction_service_test",
     size = "small",
     srcs = [
         "auction_service_integration_test_util.cc",
         "auction_service_integration_test_util.h",
         "auction_service_test.cc",
+        "auction_test_constants.h",
     ],
     deps = [
         ":auction_service",
@@ -196,7 +230,10 @@ cc_test(
 cc_test(
     name = "auction_service_integration_test",
     size = "large",
-    srcs = ["auction_service_integration_test.cc"],
+    srcs = [
+        "auction_service_integration_test.cc",
+        "auction_test_constants.h",
+    ],
     deps = [
         ":auction_service",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
@@ -230,6 +267,7 @@ cc_test(
         "auction_service_integration_test_util.cc",
         "auction_service_integration_test_util.h",
         "auction_service_reporting_integration_test.cc",
+        "auction_test_constants.h",
     ],
     deps = [
         ":auction_service",
@@ -292,6 +330,7 @@ cc_binary(
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/metric:udf_metric",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:signal_handler",
         "//services/common/util:tcmalloc_utils",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli
@@ -343,6 +382,7 @@ cc_library(
         ":score_ads_reactor",
         "//services/auction_service/benchmarking:score_ads_benchmarking_logger",
         "//services/auction_service/benchmarking:score_ads_no_op_logger",
+        "//services/auction_service/reporting:reporting_test_util",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/encryption:mock_crypto_client_wrapper",

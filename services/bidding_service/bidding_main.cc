@@ -67,6 +67,7 @@
 #include "services/common/util/file_util.h"
 #include "services/common/util/read_system.h"
 #include "services/common/util/request_response_constants.h"
+#include "services/common/util/signal_handler.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/encryption/key_fetcher/key_fetcher_manager.h"
@@ -217,7 +218,6 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_bidding_tcmalloc_max_total_thread_cache_bytes,
                         BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
-
   if (absl::GetFlag(FLAGS_init_config_client)) {
     PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
         << "Config client failed to initialize.";
@@ -518,7 +518,8 @@ absl::Status RunServer() {
       absl::GetFlag(FLAGS_enable_temporary_unlimited_egress);
 
   PS_VLOG(5) << "Temp egress enabled: " << enable_temporary_unlimited_egress;
-
+  int per_adtech_paapi_contributions_limit =
+      absl::GetFlag(FLAGS_per_adtech_paapi_contributions_limit);
   BiddingServiceRuntimeConfig runtime_config = {
       .tee_ad_retrieval_kv_server_addr =
           std::move(tee_ad_retrieval_kv_server_addr),
@@ -543,6 +544,8 @@ absl::Status RunServer() {
       .kv_server_egress_tls =
           config_client.GetBooleanParameter(KV_SERVER_EGRESS_TLS),
       .enable_private_aggregate_reporting = enable_private_aggregate_reporting,
+      .per_adtech_paapi_contributions_limit =
+          per_adtech_paapi_contributions_limit,
       .enable_cancellation = absl::GetFlag(FLAGS_enable_cancellation),
       .enable_kanon = absl::GetFlag(FLAGS_enable_kanon),
       .enable_temporary_unlimited_egress = enable_temporary_unlimited_egress};
@@ -633,11 +636,12 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
+  privacy_sandbox::bidding_auction_servers::RegisterCommonSignalHandlers();
   absl::InitializeSymbolizer(argv[0]);
   privacysandbox::server_common::SetRLimits({
       .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
   });
-  absl::FailureSignalHandlerOptions options;
+  absl::FailureSignalHandlerOptions options = {.call_previous_handler = true};
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();

@@ -247,10 +247,13 @@ class GetBidsUnaryReactor : public grpc::ServerUnaryReactor {
   // server
   void LogInitiatedRequestErrorMetrics(absl::string_view server_name,
                                        const absl::Status& status);
+
   [[deprecated]] void MayGetProtectedAudienceBidsV1(
-      const BiddingSignalsRequest& bidding_signals_request);
+      const BiddingSignalsRequest& bidding_signals_request,
+      bool is_hybrid = false);
   void MayGetProtectedAudienceBidsV2(
-      const BiddingSignalsRequest& bidding_signals_request);
+      const BiddingSignalsRequest& bidding_signals_request,
+      std::unique_ptr<std::string> byos_output = nullptr);
   void HandleV2Failure(const absl::Status& status,
                        absl::string_view error_message,
                        EventMessage::KvSignal bid_signal);

@@ -91,7 +91,7 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const ProtectedAppSignals& protected_app_signals, const std::string& seller,
     const std::string& publisher_name,
     absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data,
-    bool enable_unlimited_egress) {
+    bool enable_unlimited_egress, absl::string_view top_level_seller) {
   GenerateProtectedAppSignalsBidsRawRequest raw_request;
   raw_request.mutable_blob_versions()
       ->set_protected_app_signals_generate_bid_udf("pas/generateBid");
@@ -109,6 +109,9 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
   if (contextual_pas_data) {
     *raw_request.mutable_contextual_protected_app_signals_data() =
         *std::move(contextual_pas_data);
+  }
+  if (!top_level_seller.empty()) {
+    raw_request.set_top_level_seller(top_level_seller);
   }
   raw_request.set_enable_unlimited_egress(enable_unlimited_egress);
   PS_LOG(INFO) << "Created request:\n" << raw_request.DebugString();
@@ -180,6 +183,27 @@ std::string CreateGenerateBidsUdfResponse(
                           render, bid, egress_payload_string,
                           debug_reporting_urls,
                           temporary_egress_payload_string);
+}
+
+std::string CreateGenerateBidsComponentUdfResponse(
+    absl::string_view render, double bid,
+    absl::string_view egress_payload_string,
+    absl::string_view debug_reporting_urls,
+    absl::string_view temporary_egress_payload_string,
+    bool allow_component_auction) {
+  return absl::Substitute(R"JSON(
+    [{
+      "render": "$0",
+      "bid": $1,
+      "egressPayload": "$2",
+      "debugReportUrls": $3,
+      "temporaryUnlimitedEgressPayload": "$4",
+      "allowComponentAuction": $5
+    }]
+  )JSON",
+                          render, bid, egress_payload_string,
+                          debug_reporting_urls, temporary_egress_payload_string,
+                          allow_component_auction);
 }
 
 void SetupContextualProtectedAppSignalsRomaExpectations(

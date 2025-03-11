@@ -15,11 +15,11 @@ python_register_toolchains("//builders/bazel")
 
 http_archive(
     name = "google_privacysandbox_servers_common",
-    # 2025-02-10
-    sha256 = "ae91cd49c679f71346b6123768ff753234fc010c0dfce2847d6f3e4d6fa09ec9",
-    strip_prefix = "data-plane-shared-libraries-4e138f8c8b0204cf525660e53177ac5be5519dd1",
+    # 2025-02-11
+    sha256 = "96ad94b628d009e229e2fd58d6cb117e29331e1e5bccc19fccf9634eb5943fe6",
+    strip_prefix = "data-plane-shared-libraries-b442136d9cbe2872d8d55da95d176fd9a2d77b68",
     urls = [
-        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/4e138f8c8b0204cf525660e53177ac5be5519dd1.zip",
+        "https://github.com/privacysandbox/data-plane-shared-libraries/archive/b442136d9cbe2872d8d55da95d176fd9a2d77b68.zip",
     ],
 )
 
@@ -77,11 +77,11 @@ http_archive(
 
 http_archive(
     name = "service_value_key_fledge_privacysandbox",
-    # commit bdadee7c80dd84197f9253d4fd92c310f457be00 2024-09-26
-    sha256 = "6f91715f5ac946b2c5a9c4536f8e7deebf74b73e5b75e93163fd0e6276731ac1",
-    strip_prefix = "protected-auction-key-value-service-bdadee7c80dd84197f9253d4fd92c310f457be00",
+    # commit/db6a0b8593867d1d33fcfa116ee77d893d2b71fa 2025-01-15
+    sha256 = "00f42bf01e150a2bbe2e345fa21dc6fc0685a7632cc475937846fa0f643736e5",
+    strip_prefix = "protected-auction-key-value-service-1.1.0",
     urls = [
-        "https://github.com/privacysandbox/protected-auction-key-value-service/archive/bdadee7c80dd84197f9253d4fd92c310f457be00.zip",
+        "https://github.com/privacysandbox/protected-auction-key-value-service/archive/refs/tags/v1.1.0.zip",
     ],
 )
 
@@ -118,17 +118,6 @@ local_repository(
     name = "tensorflow_v2_14_0",
     path = "services/inference_sidecar/modules/tensorflow_v2_14_0",
 )
-
-load("@rules_python//python:pip.bzl", "pip_parse")
-
-pip_parse(
-    name = "cost_estimation_deps",
-    requirements_lock = "//tools/cost_estimation:requirements_lock.txt",
-)
-
-load("@cost_estimation_deps//:requirements.bzl", cost_estimation_install_deps = "install_deps")
-
-cost_estimation_install_deps()
 
 http_archive(
     name = "libevent",
@@ -181,3 +170,12 @@ http_archive(
 load("@com_google_cpp_proto_builder//:workspace.bzl", "init_cpp_pb_external_repositories")
 
 init_cpp_pb_external_repositories()
+
+# Needed for libunwind
+load("@google_privacysandbox_servers_common//build_defs/cc/shared:sandboxed_api.bzl", "sandboxed_api")
+
+sandboxed_api()
+
+load("@com_google_sandboxed_api//sandboxed_api/bazel:sapi_deps.bzl", "sapi_deps")
+
+sapi_deps()

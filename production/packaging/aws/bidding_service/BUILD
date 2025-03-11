@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@google_privacysandbox_servers_common//third_party:container_deps.bzl", "get_user")
 load(
     "@io_bazel_rules_docker//container:container.bzl",
     "container_image",
@@ -27,6 +28,8 @@ load(
 )
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
+
+user = get_user("root")
 
 pkg_files(
     name = "server_executables",
@@ -136,16 +139,46 @@ container_layer(
     ],
 )
 
-pkg_tar(
+pkg_files(
     name = "root_certs",
     srcs = ["@com_github_grpc_grpc//:root_certificates"],
+    renames = {
+        "@com_github_grpc_grpc//:etc/roots.pem": "etc/ssl/certs/ca-certificates.crt",
+    },
+)
+
+root_certs_files = [
+    ":root_certs",
+]
+
+pkg_tar(
+    name = "root_certs_tar",
+    srcs = root_certs_files,
 )
 
 container_layer(
     name = "root_certs_layer",
-    directory = "/etc/",
+    directory = "/",
     tars = [
-        ":root_certs",
+        ":root_certs_tar",
+    ],
+)
+
+pkg_tar(
+    name = "var_run_runsc_tar_{}".format(user.flavor),
+    srcs = [
+        "@google_privacysandbox_servers_common//src/roma/byob/container:var_run_runsc_dir",
+    ],
+    owner = "{}.{}".format(
+        user.uid,
+        user.gid,
+    ),
+)
+
+container_layer(
+    name = "byob_runtime_container_layer",
+    tars = [
+        "@google_privacysandbox_servers_common//src/roma/byob/container:byob_runtime_container_with_dir_{user}.tar".format(user = user.user),
     ],
 )
 
@@ -171,6 +204,7 @@ container_image(
         ":cddl_specs_layer",
         ":root_certs_layer",
         ":server_binary_layer",
+        ":byob_runtime_container_layer",
     ] + select({
         "//:e2e_build": [
         ],
@@ -179,6 +213,8 @@ container_image(
     tars = [
         "@google_privacysandbox_servers_common//src/aws/proxy:libnsm_and_proxify_tar",
         "@google_privacysandbox_servers_common//src/cpio/client_providers/kms_client_provider/aws:kms_binaries",
+        ":var_run_runsc_tar_{user}".format(user = user.user),
+        "@google_privacysandbox_servers_common//src/roma/byob/container:gvisor_tar_{user}".format(user = user.user),
     ],
 )
 

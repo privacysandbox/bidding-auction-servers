@@ -82,7 +82,8 @@ module "iam_role_policies" {
   environment               = var.environment
   server_instance_role_name = module.iam_roles.instance_role_name
   autoscaling_group_arns    = [module.autoscaling_sfe.autoscaling_group_arn, module.autoscaling_auction.autoscaling_group_arn]
-  # server_parameter_arns     = []
+  coordinator_role_arns     = var.coordinator_role_arns
+
 }
 
 module "seller_dashboard" {

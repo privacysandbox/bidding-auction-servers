@@ -24,8 +24,8 @@
 #include "gtest/gtest.h"
 #include "rapidjson/document.h"
 #include "services/auction_service/auction_constants.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/reporting/reporting_helper.h"
-#include "services/auction_service/reporting/reporting_helper_test_constants.h"
 #include "services/auction_service/reporting/reporting_response.h"
 #include "services/auction_service/reporting/seller/seller_reporting_manager.h"
 #include "services/common/constants/common_constants.h"
@@ -355,12 +355,12 @@ BuyerReportingDispatchRequestData GetTestBuyerDispatchRequestData(
   std::shared_ptr<std::string> auction_config =
       std::make_shared<std::string>(kTestAuctionConfig);
   return {.auction_config = auction_config,
-          .buyer_signals = kTestBuyerSignals,
+          .buyer_signals = kTestBuyerSignalsObj,
           .join_count = kTestJoinCount,
           .recency = kTestRecency,
           .modeling_signals = kTestModelingSignals,
-          .seller = kTestSeller,
-          .interest_group_name = kTestInterestGroupName,
+          .seller = kTestSeller.data(),
+          .interest_group_name = kTestInterestGroupName.data(),
           .ad_cost = kTestAdCost,
           .data_version = kTestDataVersion,
           .made_highest_scoring_other_bid = true,
@@ -371,6 +371,22 @@ BuyerReportingDispatchRequestData GetTestBuyerDispatchRequestData(
           .egress_payload = kTestEgressPayload,
           .temporary_unlimited_egress_payload =
               kTestTemporaryUnlimitedEgressPayload};
+}
+
+void VerifyBuyerReportingUrl(const ScoreAdsResponse::AdScore& scored_ad) {
+  EXPECT_EQ(
+      scored_ad.win_reporting_urls().buyer_reporting_urls().reporting_url(),
+      kMinimalReportWinUrl);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .buyer_reporting_urls()
+                .interaction_reporting_urls()
+                .size(),
+            1);
+  EXPECT_EQ(scored_ad.win_reporting_urls()
+                .buyer_reporting_urls()
+                .interaction_reporting_urls()
+                .at(kTestInteractionEvent),
+            kTestInteractionUrl);
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

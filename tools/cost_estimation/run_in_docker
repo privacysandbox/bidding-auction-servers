@@ -1,0 +1,130 @@
+#!/bin/bash
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+function is_absolute_path() {
+  [[ $1 == /* ]]
+}
+
+input_file_args=("--cost_model_file" "--sku_file" "--metrics_file")
+output_file_args=("--save_downloaded_metrics" "--output_file")
+
+NC='\033[0m'
+RED='\033[0;31m'
+
+ALL_ARGS_ARRAY=("$@")
+PWD=$(pwd)
+GCP_ADC_FILE="$HOME/.config/gcloud/application_default_credentials.json"
+DOCKER_BUILD=(docker build -f docker_files/Dockerfile --tag cost_estimation . )
+DOCKER_RUN=(docker run --network=host --volume=/tmp:/tmp)
+INPUT_FILE_MAPPINGS=()
+OUTPUT_FILE_MAPPINGS=()
+declare -i DONE=0
+
+# Parse command-line arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cost_model|--loglevel)
+      shift 2
+      continue
+      ;;
+     --param)
+      shift 3
+      continue
+      ;;
+    --aws_metrics_download)
+      shift 4
+      echo "Adding AWS credential through environment variables AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY to docker. Make sure they are set in your environment."
+      DOCKER_RUN+=( --env=AWS_ACCESS_KEY_ID --env=AWS_SECRET_ACCESS_KEY )
+      continue
+      ;;
+    --gcp_metrics_download)
+      shift 5
+      if [[ ! -f ${GCP_ADC_FILE} ]]; then
+        echo "Cannot find GCP credentials file $GCP_ADC_FILE, not copying credentials to docker."
+      else
+        echo "Found GCP credentials file $GCP_ADC_FILE, copying credentials to docker."
+        DOCKER_RUN+=( --env=GOOGLE_APPLICATION_CREDENTIALS=/app/application_default_credentials.json --volume="$GCP_ADC_FILE":/app/application_default_credentials.json:ro )
+      fi
+      continue
+      ;;
+
+    *)
+      ;;
+  esac
+
+  DONE=0
+
+  for val in "${input_file_args[@]}"; do
+      if [[ "$1" == "$val" ]]; then
+        if is_absolute_path "$2"; then
+          abs_path=$(realpath "$2")
+          INPUT_FILE_MAPPINGS+=( --volume="$abs_path":"$abs_path:ro" )
+        else
+          abs_path=$(realpath "$2")
+          path=$(realpath --relative-to="$PWD" "$2")
+          INPUT_FILE_MAPPINGS+=( --volume="$abs_path":"/app/$path:ro" )
+        fi
+        DONE=1
+        shift 2
+        break
+      fi
+  done
+
+  if [[ ${DONE} -eq 1 ]]; then
+    continue
+  fi
+
+
+  for val in "${output_file_args[@]}"; do
+      if [[ "$1" == "$val" ]]; then
+        dir=$(dirname "$2")
+        if [ ! -d "$dir" ]; then
+          echo "Directory $dir does not exist. Required for $1 $2."
+          exit 1
+        fi
+        touch "$2"
+        if is_absolute_path "$2"; then
+          abs_path=$(realpath "$2")
+          OUTPUT_FILE_MAPPINGS+=( --volume="$abs_path":"$abs_path" )
+        else
+          abs_path=$(realpath "$2")
+          path=/app/$(realpath --relative-to="$PWD" "$2")
+          OUTPUT_FILE_MAPPINGS+=( --volume="$abs_path":"$path" )
+        fi
+        DONE=1
+        shift 2
+        break
+      fi
+  done
+
+  if [[ ${DONE} -eq 1 ]]; then
+    continue
+  fi
+
+  shift 1
+
+done
+
+echo -e "Building cost tool docker with command: ${RED} ${DOCKER_BUILD[*]} ${NC}"
+"${DOCKER_BUILD[@]}"
+
+DOCKER_RUN_COMMAND=("${DOCKER_RUN[@]}")
+DOCKER_RUN_COMMAND+=("${INPUT_FILE_MAPPINGS[@]}")
+DOCKER_RUN_COMMAND+=("${OUTPUT_FILE_MAPPINGS[@]}")
+DOCKER_RUN_COMMAND+=( cost_estimation )
+DOCKER_RUN_COMMAND+=("${ALL_ARGS_ARRAY[@]}")
+echo -e "Running cost tool in docker with command: ${RED} ${DOCKER_RUN_COMMAND[*]} ${NC}"
+"${DOCKER_RUN_COMMAND[@]}"

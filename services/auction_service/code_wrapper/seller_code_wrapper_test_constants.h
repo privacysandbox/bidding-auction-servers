@@ -15,35 +15,21 @@
 #define FLEDGE_SERVICES_SELLER_CODE_WRAPPER_TEST_CONSTANTS_H_
 
 #include "absl/strings/string_view.h"
+#include "services/auction_service/auction_test_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 constexpr char kBuyerOrigin[] = "http://buyer1.com";
-constexpr char kTestReportResultUrl[] =
-    "http://"
-    "test.com&bid=1&bidCurrency=EUR&dataVersion=1989&highestScoringOtherBid=1&"
-    "highestScoringOtherBidCurrency=???&topWindowHostname=fenceStreetJournal."
-    "com&interestGroupOwner=barStandardAds.com&buyerAndSellerReportingId="
-    "undefined&selectedBuyerAndSellerReportingId=undefined";
 constexpr char kTestComponentReportResultUrlWithEverything[] =
     "http://"
-    "test.com&topLevelSeller=topLevelSeller&bid=1&bidCurrency=EUR&dataVersion="
+    "test.com&topLevelSeller=testTopLevelSeller&bid=1&bidCurrency=EUR&"
+    "dataVersion="
     "1989&modifiedBid="
     "2&modifiedBidCurrency=USD&"
     "highestScoringOtherBid=1&highestScoringOtherBidCurrency=???&"
     "topWindowHostname=fenceStreetJournal.com&interestGroupOwner="
     "barStandardAds.com";
 constexpr char kTestComponentReportResultUrlWithNoModifiedBid[] =
-    "http://test.com&topLevelSeller=topLevelSeller&bid=1&modifiedBid=1";
-constexpr char kTestTopLevelReportResultUrl[] =
-    "http://test.com&componentSeller=http://"
-    "componentSeller.com&bid=1&desirability=1";
-constexpr char kTestInteractionEvent[] = "clickEvent";
-constexpr char kTestInteractionReportingUrl[] = "http://click.com";
-constexpr char kTestReportWinUrl[] =
-    "http://test.com?seller=http://"
-    "seller.com&interestGroupName=testInterestGroupName&adCost=2&"
-    "modelingSignals=4&recency=3&joinCount=5";
-constexpr char kTestBuyerReportingId[] = "testBuyerReportingId";
+    "http://test.com&topLevelSeller=testTopLevelSeller&bid=1&modifiedBid=1";
 constexpr absl::string_view kBuyerBaseCodeSimple =
     R"JS_CODE(reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerReportingSignals,
                               directFromSellerSignals){

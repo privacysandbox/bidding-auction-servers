@@ -69,7 +69,7 @@ static_resources:
               private_key: {filename: "/etc/envoy/key.pem"}
             validation_context:
               trusted_ca:
-                filename: /etc/roots.pem
+                filename: /etc/ssl/certs/ca-certificates.crt
 
   clusters:
   - name: grpc_cluster

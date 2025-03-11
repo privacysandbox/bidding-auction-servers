@@ -30,6 +30,8 @@ ENABLE_PROTECTED_AUDIENCE="${ENABLE_PROTECTED_AUDIENCE:-true}"
 ENABLE_PROTECTED_APP_SIGNALS="${ENABLE_PROTECTED_APP_SIGNALS:-false}"
 ENABLE_TKV_V2_BROWSER="${ENABLE_TKV_V2_BROWSER:-false}"
 TELEMETRY_CONFIG="${TELEMETRY_CONFIG:-mode: EXPERIMENT metric_export_interval_ms: 600000}"
+SCORING_SIGNALS_FETCH_MODE="${SCORING_SIGNALS_FETCH_MODE:-REQUIRED}"
+COMMON_LOCK=/var/lock/ba.lock
 
 # Pass in custom docker arguments as a string such as:
 # DOCKER_RUN_ARGS_STRING="--network host -p 172.16.117.19:80:50051"
@@ -43,6 +45,8 @@ else
     # Convert DOCKER_RUN_ARGS_STRING to an array DOCKER_RUN_ARGS
     read -r -a DOCKER_RUN_ARGS <<< "${DOCKER_RUN_ARGS_STRING}"
 fi
+# Pass in custom docker image uri instead of using an image from dist/
+DOCKER_IMAGE_URI="${DOCKER_IMAGE_URI:-}"
 
 SELLER_CODE_FETCH_CONFIG=$(cat << END
 --seller_code_fetch_config={
@@ -60,3 +64,70 @@ SELLER_CODE_FETCH_CONFIG=$(cat << END
     }
 END
 )
+
+function setup_for_local_debian {
+  SERVICE_NAME="$1"
+  shift
+  PROF_PORT="$1"
+  shift
+
+  PROJECT_ROOT=$(git rev-parse --show-toplevel)
+  export PROJECT_ROOT="${PROJECT_ROOT}"
+  declare -a extra_docker_run_args=(
+    "--volume=${PROJECT_ROOT}/bazel-bin/services/${SERVICE_NAME}_service/server:/server/bin/${SERVICE_NAME}"
+    "--name=${SERVICE_NAME}"
+    "--label=${SERVICE_NAME}"
+  )
+  if [[ -n $PROF_PORT ]]; then
+    extra_docker_run_args+=(
+      "-p $PROF_PORT:$PROF_PORT"
+    )
+  fi
+
+  export EXTRA_DOCKER_RUN_ARGS="${extra_docker_run_args[*]}"
+}
+
+
+CPU_PROF_SIGNAL=${CPU_PROF_SIGNAL:-12}
+MEM_PROF_SIGNAL=${MEM_PROF_SIGNAL:-27}
+
+function run_server {
+  MODE="$1"
+  shift
+  SERVICE_NAME="$1"
+  shift
+  SERVER_START_CMD="$1"
+  shift
+  PROF_PORT="$1"
+
+  declare -a cbuild_args=(
+    --seccomp-unconfined
+    --docker-network host
+    --image build-debian
+  )
+
+  if [[ "${MODE}" == "--gdb" ]]; then
+    setup_for_local_debian "${SERVICE_NAME}"
+    "${PROJECT_ROOT}/builders/tools/cbuild"  "${cbuild_args[@]}" \
+    --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
+  elif [[ "${MODE}" == "--cpu-prof" ]]; then
+    setup_for_local_debian "${SERVICE_NAME}" "${PROF_PORT}"
+    cbuild_args+=(
+      --cmd-profiler
+      --cpu-profiler-filename "${SERVICE_NAME}.prof"
+      --cpu-profiler-signal "${CPU_PROF_SIGNAL}"
+    )
+    "${PROJECT_ROOT}/builders/tools/cbuild" "${cbuild_args[@]}" --cmd "${SERVER_START_CMD}"
+  elif [[ "${MODE}" == "--heap-prof" ]]; then
+    setup_for_local_debian "${SERVICE_NAME}" "${PROF_PORT}"
+    cbuild_args+=(
+      --cmd-profiler
+      --heap-profiler-filename "${SERVICE_NAME}.hprof"
+      --heap-profiler-signal "${MEM_PROF_SIGNAL}"
+    )
+    "${PROJECT_ROOT}/builders/tools/cbuild" "${cbuild_args[@]}" --cmd "${SERVER_START_CMD}"
+  else
+    docker_image_uri="${DOCKER_IMAGE_URI:-$(docker load -i dist/debian/${SERVICE_NAME}_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")}"
+    docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
+  fi
+}

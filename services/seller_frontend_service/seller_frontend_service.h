@@ -24,6 +24,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
+#include "services/common/aliases.h"
 #include "services/common/clients/auction_server/scoring_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client_factory.h"
@@ -66,6 +67,7 @@ struct ClientRegistry {
   CryptoClientWrapperInterface* const crypto_client_ptr_;
   std::unique_ptr<AsyncReporter> reporting;
   std::unique_ptr<KAnonCacheManagerInterface> k_anon_cache_manager;
+  std::unique_ptr<InvokedBuyersCache> invoked_buyers_cache;
 };
 
 // SellerFrontEndService implements business logic to orchestrate requests
@@ -82,7 +84,8 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
       std::unique_ptr<CryptoClientWrapperInterface> crypto_client,
       ReportWinMap report_win_map,
       std::unique_ptr<KAnonCacheManagerInterface> k_anon_cache_manager =
-          nullptr)
+          nullptr,
+      std::unique_ptr<InvokedBuyersCache> invoked_buyers_cache = nullptr)
       : config_client_(*config_client),
         key_fetcher_manager_(std::move(key_fetcher_manager)),
         crypto_client_(std::move(crypto_client)),
@@ -171,6 +174,10 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
   SellerFrontEndService(const TrustedServersConfigClient* config_client,
                         ClientRegistry clients)
       : config_client_(*config_client),
+        executor_(std::make_unique<server_common::EventEngineExecutor>(
+            config_client_.GetBooleanParameter(CREATE_NEW_EVENT_ENGINE)
+                ? grpc_event_engine::experimental::CreateEventEngine()
+                : grpc_event_engine::experimental::GetDefaultEventEngine())),
         clients_(std::move(clients)),
         enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
         enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)),

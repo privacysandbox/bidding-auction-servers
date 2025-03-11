@@ -38,12 +38,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+SERVICE_NAME=auction
+BIN=${SERVICE_NAME}
+if [[ -z $1 ]]; then
+  # When we load from .tar file, we don't mount the binary
+  # and it is embededd as "server"
+  BIN="server"
+fi
+
 SERVER_START_CMD=$(cat << END
-/server/bin/server \
+/server/bin/${BIN} \
 --https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
 --init_config_client="false" \
 --port=${AUCTION_PORT} \
---scoring_signals_fetch_mode="REQUIRED" \
+--scoring_signals_fetch_mode="${SCORING_SIGNALS_FETCH_MODE}" \
 --enable_auction_service_benchmark="true" \
 --udf_num_workers=4 \
 --js_worker_queue_len=100 \
@@ -80,3 +88,5 @@ else
   fi
   docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
 fi
+PROF_PORT="${PROF_PORT:-1236}"
+run_server "$1" "${SERVICE_NAME}" "${SERVER_START_CMD}" ${PROF_PORT}

@@ -148,21 +148,30 @@ module "buyer" {
     KV_SERVER_EGRESS_TLS              = "false"          # Do not change unless you are modifying the default GCP architecture.
     TEST_MODE                         = "false"          # Do not change unless you are testing without key fetching.
 
-    ENABLE_BIDDING_SERVICE_BENCHMARK   = ""            # Example: "false"
-    BUYER_KV_SERVER_ADDR               = ""            # Example: "https://kvserver.com/trusted-signals"
-    BUYER_TKV_V2_SERVER_ADDR           = "PLACEHOLDER" # Example: "dns:///kvserver:443"
-    ENABLE_TKV_V2_BROWSER              = ""            # Example: "false"
-    TKV_EGRESS_TLS                     = ""            # Example: "false"
-    TEE_AD_RETRIEVAL_KV_SERVER_ADDR    = ""            # Example: "xds:///ad-retrieval-host"
-    TEE_KV_SERVER_ADDR                 = ""            # Example: "xds:///kv-service-host"
-    AD_RETRIEVAL_TIMEOUT_MS            = ""            # Example: "60000"
-    GENERATE_BID_TIMEOUT_MS            = ""            # Example: "60000"
-    BIDDING_SIGNALS_LOAD_TIMEOUT_MS    = ""            # Example: "60000"
-    ENABLE_BUYER_FRONTEND_BENCHMARKING = ""            # Example: "false"
-    CREATE_NEW_EVENT_ENGINE            = ""            # Example: "false"
-    ENABLE_BIDDING_COMPRESSION         = ""            # Example: "true"
-    ENABLE_PROTECTED_AUDIENCE          = ""            # Example: "true"
-    PS_VERBOSITY                       = ""            # Example: "10"
+    ENABLE_BIDDING_SERVICE_BENCHMARK = "" # Example: "false"
+
+    # Refers to BYOS Buyer Key-Value Server only.
+    BUYER_KV_SERVER_ADDR = "" # Example: "https://kvserver.com/trusted-signals"
+
+    # [BEGIN] Trusted KV real time signal fetching params (Protected Audience Only)
+    ENABLE_TKV_V2_BROWSER    = ""            # Example: "false"
+    TKV_EGRESS_TLS           = ""            # Example: "false"
+    BUYER_TKV_V2_SERVER_ADDR = "PLACEHOLDER" # Example: "dns:///kvserver:443"
+    # [END] Trusted KV real time signal fetching params (Protected Audience Only)
+
+    # [BEGIN] Protected App Signals (PAS) related services.
+    TEE_AD_RETRIEVAL_KV_SERVER_ADDR = "" # Example: "xds:///ad-retrieval-host", Address of the TEE ad retrieval service (Used in non-contextual PAS flow)
+    TEE_KV_SERVER_ADDR              = "" # Example: "xds:///kv-service-host", Address of the TEE KV server address (Used in contextual PAS flow)
+    AD_RETRIEVAL_TIMEOUT_MS         = "" # Example: "60000"
+    # [END] Protected App Signals (PAS) related services.
+
+    GENERATE_BID_TIMEOUT_MS            = "" # Example: "60000"
+    BIDDING_SIGNALS_LOAD_TIMEOUT_MS    = "" # Example: "60000"
+    ENABLE_BUYER_FRONTEND_BENCHMARKING = "" # Example: "false"
+    CREATE_NEW_EVENT_ENGINE            = "" # Example: "false"
+    ENABLE_BIDDING_COMPRESSION         = "" # Example: "true"
+    ENABLE_PROTECTED_AUDIENCE          = "" # Example: "true"
+    PS_VERBOSITY                       = "" # Example: "10"
     # [BEGIN] PAS related params
     ENABLE_PROTECTED_APP_SIGNALS                  = "" # Example: "false"
     PROTECTED_APP_SIGNALS_GENERATE_BID_TIMEOUT_MS = "" # Example: "60000"
@@ -174,12 +183,13 @@ module "buyer" {
     #   "urlFetchTimeoutMs": 30000
     # }"
     # [END] PAS related params
-    BUYER_CODE_FETCH_CONFIG = "" # Example for V8:
+    BUYER_CODE_FETCH_CONFIG = "" # See README for flag descriptions
+    # Example for V8:
     # "{
     #    "fetchMode": 0,
     #    "biddingJsPath": "",
     #    "biddingJsUrl": "https://example.com/generateBid.js",
-    #    "protectedAppSignalsBiddingJsUrl": "placeholder",
+    #    "protectedAppSignalsBiddingJsUrl": "https://example.com/generateBid.js",
     #    "biddingWasmHelperUrl": "",
     #    "protectedAppSignalsBiddingWasmHelperUrl": "",
     #    "urlFetchPeriodMs": 13000000,
@@ -309,6 +319,13 @@ module "buyer_dashboard" {
 
 module "inference_dashboard" {
   source = "../../services/dashboards/inference_dashboard"
+  environment = join("|", concat(
+    [for k, v in local.buyer_traffic_splits : k if v.traffic_weight > 0],
+  [for k, v in local.buyer_header_experiment : k if length(v.match_rules) > 0]))
+}
+
+module "k_anon_dashboard" {
+  source = "../../services/dashboards/k_anon_dashboard"
   environment = join("|", concat(
     [for k, v in local.buyer_traffic_splits : k if v.traffic_weight > 0],
   [for k, v in local.buyer_header_experiment : k if length(v.match_rules) > 0]))

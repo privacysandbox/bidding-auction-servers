@@ -15,44 +15,71 @@
  */
 
 #include <cxxabi.h>
-#include <dlfcn.h>
 #include <execinfo.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "src/util/status_macro/examine_stack.h"
+#include <array>
+#include <string>
+#include <utility>
+
+#include "include/libunwind.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 inline void SignalHandler(int sig) {
-  fprintf(stderr, "Error: signal %d:\n", sig);
-  fprintf(stderr, " %s\n\n",
-          privacy_sandbox::server_common::CurrentStackTrace().c_str());
-  // more details but it's not async signal safe (it uses malloc() internally)
-  fprintf(stderr, "stack trace with more details : \n");
-  constexpr size_t kMaxStack = 128;
-  void* callstack[kMaxStack];
-  int nFrames = backtrace(callstack, kMaxStack);
-  char** symbols = backtrace_symbols(callstack, nFrames);
-  for (int i = 0; i < nFrames; i++) {
-    Dl_info info;
-    if (dladdr(callstack[i], &info)) {
-      char* demangled = NULL;
-      int status;
-      demangled = abi::__cxa_demangle(info.dli_sname, NULL, 0, &status);
-      fprintf(stderr, "%-3d %0*p %s + %zd\n", i, 2 + sizeof(void*) * 2,
-              callstack[i], status == 0 ? demangled : info.dli_sname,
-              (char*)callstack[i] - (char*)info.dli_saddr);
-      free(demangled);
+  fprintf(stderr, "Recived signal: %d:\n", sig);
+  unw_cursor_t cursor;
+  unw_context_t context;
+  unw_getcontext(&context);
+  unw_init_local(&cursor, &context);
+  constexpr int kMaxFrames = 128;
+  constexpr int kMaxSymbolSize = 256;
+  int frame_count = 0;
+  while (unw_step(&cursor) && ++frame_count <= kMaxFrames) {
+    unw_word_t ip, sp, off;
+
+    unw_get_reg(&cursor, UNW_REG_IP, &ip);
+    unw_get_reg(&cursor, UNW_REG_SP, &sp);
+
+    std::string symbol(kMaxSymbolSize + 1, '\0');
+    unw_get_proc_name(&cursor, symbol.data(), kMaxSymbolSize, &off);
+
+    int status;
+    char* demangled_name =
+        abi::__cxa_demangle(symbol.c_str(), nullptr, nullptr, &status);
+    if (status == 0) {
+      fprintf(stderr,
+              "#%-2d 0x%016" PRIxPTR " sp=0x%016" PRIxPTR " %s + 0x%" PRIxPTR
+              "\n",
+              frame_count, ip, sp, demangled_name, off);
+      free(demangled_name);
     } else {
-      fprintf(stderr, "%-3d %0*p\n", i, 2 + sizeof(void*) * 2, callstack[i]);
+      fprintf(stderr,
+              "#%-2d 0x%016" PRIxPTR " sp=0x%016" PRIxPTR " %s + 0x%" PRIxPTR
+              "\n",
+              frame_count, ip, sp, symbol.c_str(), off);
     }
   }
-  free(reinterpret_cast<void*>(symbols));
-  if (nFrames == kMaxStack) fprintf(stderr, "[truncated]\n");
+
+  if (frame_count > kMaxFrames) {
+    fprintf(stderr, "[truncated]\n");
+  }
   exit(1);
 }
+
+inline void RegisterCommonSignalHandlersHelper() {
+  constexpr std::array<int, 7> kHandledSignals = {
+      SIGABRT, SIGSEGV, SIGILL, SIGFPE, SIGABRT, SIGTERM, SIGTRAP};
+  for (auto sig : kHandledSignals) {
+    signal(sig, SignalHandler);
+  }
+}
+
+// Registers common signal handlers helpful for the
+// service usability.
+void RegisterCommonSignalHandlers();
 
 }  // namespace privacy_sandbox::bidding_auction_servers
