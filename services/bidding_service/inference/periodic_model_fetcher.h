@@ -48,7 +48,7 @@ namespace privacy_sandbox::bidding_auction_servers::inference {
 // model fetch callback and model eviction callback.
 class PeriodicModelFetcher : public FetcherInterface {
  public:
-  enum class ModelState { ACTIVE, IN_GRACE_PERIOD, IN_DELETION };
+  enum class ModelState : std::uint8_t { ACTIVE, IN_GRACE_PERIOD, IN_DELETION };
 
   // Record of a loaded model inside the model fetcher.
   struct ModelEntry {

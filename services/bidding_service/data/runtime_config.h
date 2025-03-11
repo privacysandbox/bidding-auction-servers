@@ -71,6 +71,7 @@ struct BiddingServiceRuntimeConfig {
   // Enables private aggregate reporting.
   bool enable_private_aggregate_reporting = false;
 
+  int per_adtech_paapi_contributions_limit = 0;
   bool enable_cancellation = false;
   bool enable_kanon = false;
   bool enable_temporary_unlimited_egress = false;

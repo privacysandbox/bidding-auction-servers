@@ -14,6 +14,7 @@
 
 #include "services/common/clients/http/multi_curl_request_manager.h"
 
+#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -117,10 +118,10 @@ int OnLibcurlTimerUpdate(CURLM* multi, long timeout_ms, void* timer_event_arg) {
   return 0;
 }
 
-MultiCurlRequestManager::MultiCurlRequestManager()
-    : MultiCurlRequestManager(/*event_base=*/nullptr) {}
-
-MultiCurlRequestManager::MultiCurlRequestManager(struct event_base* event_base)
+MultiCurlRequestManager::MultiCurlRequestManager(
+    struct event_base* event_base, const long curlmopt_maxconnects,
+    const long curlmopt_max_total_connections,
+    const long curlmopt_max_host_connections)
     : event_base_(event_base) {
   running_handles_ = 0;
   curl_global_init(CURL_GLOBAL_ALL);
@@ -128,6 +129,18 @@ MultiCurlRequestManager::MultiCurlRequestManager(struct event_base* event_base)
   curl_multi_setopt(request_manager_, CURLMOPT_SOCKETDATA, this);
   curl_multi_setopt(request_manager_, CURLMOPT_SOCKETFUNCTION,
                     OnLibcurlSocketUpdate);
+  if (curlmopt_maxconnects > 0) {
+    // Limits number of connections left alive in cache.
+    curl_multi_setopt(request_manager_, CURLMOPT_MAXCONNECTS,
+                      curlmopt_maxconnects);
+  }
+  // Limits number of connections allowed active.
+  curl_multi_setopt(request_manager_, CURLMOPT_MAX_TOTAL_CONNECTIONS,
+                    curlmopt_max_total_connections);
+  // The maximum amount of simultaneously open connections libcurl may hold
+  // to a single host.
+  curl_multi_setopt(request_manager_, CURLMOPT_MAX_HOST_CONNECTIONS,
+                    curlmopt_max_host_connections);
 }
 
 MultiCurlRequestManager::~MultiCurlRequestManager() {

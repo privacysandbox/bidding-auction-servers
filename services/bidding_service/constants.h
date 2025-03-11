@@ -42,7 +42,7 @@ constexpr absl::string_view kProtectedAudienceGenerateBidsArgs =
 constexpr absl::string_view kProtectedAppSignalsGenerateBidsArgs =
     "ads, sellerAuctionSignals, buyerSignals, "
     "preprocessedDataForRetrieval, encodedOnDeviceSignals, encodingVersion, "
-    "multiBidLimit";
+    "multiBidLimit, auctionMetadata";
 
 constexpr absl::string_view kEncodedProtectedAppSignalsHandler =
     R"JS_CODE(if (encodedOnDeviceSignals) {
@@ -77,6 +77,7 @@ enum class GenerateBidsUdfArgs : std::uint8_t {
   kProtectedAppSignals,
   kProtectedAppSignalsVersion,
   kMultiBidLimit,
+  kAuctionMetadata,
   kFeatureFlags
 };
 

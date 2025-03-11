@@ -201,6 +201,7 @@ class SellerFrontEndServiceTest : public ::testing::Test {
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
   server_common::MockKeyFetcherManager key_fetcher_manager_;
   ReportWinMap report_win_map_;
+  std::unique_ptr<MockExecutor> executor_ = std::make_unique<MockExecutor>();
 };
 
 using ProtectedAuctionInputTypes =
@@ -318,7 +319,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -434,7 +436,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_,
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_,
       /*max_buyers_solicited=*/3,
       /*enable_kanon=*/false);
   // Hard limit is calling 3 buyers since we upped it.
@@ -534,7 +537,8 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   // Hard limit is calling 2 buyers.
   EXPECT_EQ(num_buyers_solicited, 2);
 }
@@ -623,7 +627,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
 
   this->PopulateProtectedAudienceInputCiphertextOnRequest();
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
 }
 
 /**
@@ -692,7 +697,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          std::move(async_reporter)};
   this->PopulateProtectedAudienceInputCiphertextOnRequest();
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
 }
 
 /**
@@ -813,8 +819,11 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
                          this->key_fetcher_manager_,
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
+  EXPECT_CALL(*this->executor_, Run)
+      .WillRepeatedly([](absl::AnyInvocable<void()> closure) { closure(); });
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_,
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_,
       /*max_buyers_solicited=*/2, /*enable_kanon=*/true);
 }
 
@@ -876,7 +885,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -979,7 +989,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_,
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_,
       /*max_buyers_solicited=*/2, enable_kanon);
 }
 
@@ -1038,7 +1049,8 @@ TYPED_TEST(SellerFrontEndServiceTest, DoesNotScoreAdsAfterGettingEmptySignals) {
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   // Decrypt to examine whether the result really is chaff.
   AuctionResult auction_result =
       DecryptBrowserAuctionResultAndNonce(
@@ -1186,7 +1198,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_,
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_,
       /*max_buyers_solicited=*/3,
       /*enable_kanon=*/false,
       /*enable_buyer_private_aggregate_reporting=*/true,
@@ -1494,7 +1507,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          std::move(async_reporter)};
   // Filtered bids checked above in the scoring signals provider mock.
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   scoring_done.Wait();
 
   // Decrypt the response.
@@ -1649,7 +1663,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
           typename TypeParam::InputType>(this->protected_auction_input_);
   this->SetProtectedAuctionCipherText(encrypted_protected_auction_input);
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   AuctionResult auction_result =
       DecryptBrowserAuctionResultAndNonce(
           *response.mutable_auction_result_ciphertext(), encrypted_context)
@@ -1751,7 +1766,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   scoring_done.WaitForNotification();
 }
 
@@ -1835,7 +1851,8 @@ TYPED_TEST(SellerFrontEndServiceTest, PassesFieldsForServerComponentAuction) {
                          &crypto_client,
                          std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   scoring_done.WaitForNotification();
   ASSERT_FALSE(response.auction_result_ciphertext().empty());
   EXPECT_EQ(response.key_id(), key.key_id());
@@ -1948,7 +1965,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   scoring_done.WaitForNotification();
   reporting_count.Wait();
 
@@ -2075,7 +2093,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   scoring_done.WaitForNotification();
   reporting_done.WaitForNotification();
 
@@ -2229,7 +2248,8 @@ TYPED_TEST(
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   scoring_done.WaitForNotification();
 
   AuctionResult auction_result =
@@ -2309,7 +2329,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
                          /*crypto_client=*/nullptr,
                          std::move(async_reporter)};
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
   scoring_done.WaitForNotification();
 
   AuctionResult auction_result =
@@ -2424,7 +2445,7 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyKAnonFieldsPropagateToBuyers) {
   buyer_config.set_per_buyer_multi_bid_limit(10);
 
   RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request,
-                                           enable_kanon);
+                                           this->executor_.get(), enable_kanon);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
@@ -2522,6 +2543,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   buyer_config.set_per_buyer_multi_bid_limit(10);
 
   RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request,
+                                           this->executor_.get(),
                                            /*enable_kanon=*/false);
 }
 
@@ -2606,8 +2628,8 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
   *select_ad_request.mutable_auction_config()->mutable_buyer_list()->Add() =
       chaff_buyer_name;
   SelectAdResponse encrypted_response =
-      RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients,
-                                               select_ad_request);
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, select_ad_request, this->executor_.get());
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
   auto decrypted_response = FromObliviousHTTPResponse(
       *encrypted_response.mutable_auction_result_ciphertext(),
@@ -2734,8 +2756,8 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyChaffCandidatesAreRandomlyChosen) {
         chaff_buyer1_name;
     *select_ad_request.mutable_auction_config()->mutable_buyer_list()->Add() =
         chaff_buyer2_name;
-    (void)RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients,
-                                                   select_ad_request);
+    (void)RunReactorRequest<SelectAdReactorForWeb>(
+        this->config_, clients, select_ad_request, this->executor_.get());
 
     // Both chaff buyers were invoked; ignore this run since the test needs to
     // look at cases where only 1 chaff request was sent.
@@ -2757,6 +2779,127 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyChaffCandidatesAreRandomlyChosen) {
   }
 
   FAIL() << "Chaff request candidates are likely not being shuffled";
+}
+
+TYPED_TEST(SellerFrontEndServiceTest, VerifySameBuyersInvokedOnRequestReplay) {
+  server_common::log::SetGlobalPSVLogLevel(10);
+  this->config_.SetOverride(kTrue, ENABLE_CHAFFING);
+
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  ScoringAsyncClientMock scoring_client;
+  KVAsyncClientMock kv_async_client;
+  BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
+  BuyerBidsResponseMap expected_buyer_bids;
+  std::unique_ptr<server_common::MockKeyFetcherManager> key_fetcher_manager =
+      std::make_unique<server_common::MockKeyFetcherManager>();
+  EXPECT_CALL(*key_fetcher_manager, GetPrivateKey)
+      .WillRepeatedly(Return(GetPrivateKey()));
+  const float winning_bid = 999.0F;
+
+  const std::string non_chaff_buyer_name = std::string(kSampleBuyer.data());
+  std::string chaff_buyer_name = "chaff_buyer";
+
+  std::string generation_id = MakeARandomString();
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, winning_bid, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain, false, "", false, false, {}, false, {}, nullptr,
+          generation_id);
+  std::unique_ptr<MockCache<std::string, InvokedBuyers>> invoked_buyers_cache =
+      std::make_unique<MockCache<std::string, InvokedBuyers>>();
+  EXPECT_CALL(*invoked_buyers_cache, Query)
+      .Times(testing::Exactly(1))
+      .WillRepeatedly([&](const absl::flat_hash_set<std::string>&) {
+        InvokedBuyers invoked_buyers = {
+            .chaff_buyer_names = {chaff_buyer_name},
+            .non_chaff_buyer_names = {non_chaff_buyer_name}};
+        absl::flat_hash_map<std::string, InvokedBuyers> map;
+        map.insert({generation_id, invoked_buyers});
+        return map;
+      });
+  clients.invoked_buyers_cache = std::move(invoked_buyers_cache);
+
+  this->SetupRequest({.num_buyers = 1});
+  absl::Notification non_chaff_buyer_called_notif;
+  auto non_chaff_buyer_execute_mock_lambda =
+      [&non_chaff_buyer_called_notif](
+          std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
+          grpc::ClientContext* context, GetBidDoneCallback on_done,
+          absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_FALSE(get_bids_request->is_chaff());
+        std::move(on_done)(
+            std::make_unique<GetBidsResponse::GetBidsRawResponse>(),
+            /* response_metadata= */ {});
+        non_chaff_buyer_called_notif.Notify();
+        return absl::OkStatus();
+      };
+  auto non_chaff_buyer_execute_mock =
+      [non_chaff_buyer_execute_mock_lambda](
+          std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal)
+            .WillRepeatedly(non_chaff_buyer_execute_mock_lambda);
+        return buyer;
+      };
+  auto non_chaff_buyer_client_mock =
+      [non_chaff_buyer_execute_mock](absl::string_view chaff_buyer_name) {
+        return non_chaff_buyer_execute_mock(
+            std::make_unique<BuyerFrontEndAsyncClientMock>());
+      };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock,
+              Get(non_chaff_buyer_name))
+      .WillRepeatedly(non_chaff_buyer_client_mock);
+
+  // Set up buyer calls for chaff buyer 1.
+  absl::Notification chaff_buyer_called_notif;
+  auto chaff_buyer_execute_mock_lambda =
+      [&chaff_buyer_called_notif](
+          std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
+          grpc::ClientContext* context, GetBidDoneCallback on_done,
+          absl::Duration timeout, RequestConfig request_config) {
+        EXPECT_TRUE(get_bids_request->is_chaff());
+        std::move(on_done)(
+            std::make_unique<GetBidsResponse::GetBidsRawResponse>(),
+            /*response_metadata=*/{});
+        chaff_buyer_called_notif.Notify();
+        return absl::OkStatus();
+      };
+  auto chaff_buyer_execute_mock =
+      [chaff_buyer_execute_mock_lambda](
+          std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal)
+            .WillRepeatedly(chaff_buyer_execute_mock_lambda);
+        return buyer;
+      };
+  auto chaff_buyer_client_mock =
+      [chaff_buyer_execute_mock](absl::string_view chaff_buyer_name) {
+        return chaff_buyer_execute_mock(
+            std::make_unique<BuyerFrontEndAsyncClientMock>());
+      };
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(chaff_buyer_name))
+      .WillRepeatedly(chaff_buyer_client_mock);
+
+  // Mock Entries() on the buyer factory return the 'real' and chaff buyers.
+  std::vector<
+      std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
+      entries;
+  entries.emplace_back(kSampleBuyer,  // The non-chaff buyer.
+                       std::make_shared<BuyerFrontEndAsyncClientMock>());
+  entries.emplace_back(chaff_buyer_name,
+                       std::make_shared<BuyerFrontEndAsyncClientMock>());
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Entries)
+      .WillRepeatedly(Return(std::move(entries)));
+
+  SelectAdRequest select_ad_request =
+      std::move(request_with_context.select_ad_request);
+  (void)RunReactorRequest<SelectAdReactorForWeb>(
+      this->config_, clients, select_ad_request, this->executor_.get());
+
+  non_chaff_buyer_called_notif.WaitForNotification();
+  chaff_buyer_called_notif.WaitForNotification();
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, VerifyPrioritySignals) {
@@ -2858,7 +3001,8 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyPrioritySignals) {
                          std::move(async_reporter)};
 
   Response response = RunRequest<SelectAdReactorForWeb>(
-      this->config_, clients, this->request_, this->report_win_map_);
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
 
   EXPECT_TRUE(success) << "The expected priority signal JSONs were not all "
                           "present in the BFE requests";

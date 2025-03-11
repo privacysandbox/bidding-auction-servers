@@ -25,67 +25,25 @@ The tool outputs this information as a CSV file that can be opened with a spread
 Before running the tool, make sure you have the following setup (commands given for a Debian/Linux
 system):
 
-### Bazel
+### Docker
 
-This code relies on [Bazel](https://bazel.build/) for building. Please
-[install Bazel](https://bazel.build/install) on your system for building the tool.
-
-The code is a part of the Bidding and auction repository, so follow pre-requisites
+The cost estimation tool is a part of the Bidding and auction repository, so follow pre-requisites
 [here](https://github.com/privacysandbox/protected-auction-services-docs/blob/main/bidding_auction_services_aws_guide.md#step-0-prerequisites)
 for downloading and initializing the repository.
 
-Make sure the `PY3_PATH` in `builder/bazel/BUILD` points to the correct python version you want to
-use for executing the tool (must be 3.11.9 or later, as mentioned below)
-
-### Python setup
-
--   Install or update to python3 version 3.11.9 or later for your machine it installed already)
--   Install python3 virtualenv
-
-    ```sh
-      sudo apt-get install python3-venv
-    ```
-
--   Create a [virtual environment](https://docs.python.org/3/library/venv.html).
-
-    > **_NOTE:_** The virtual environment path can be in any directory as long as you have write
-    > access to it. This directory does not need to exist already.
-
-    ```sh
-      python3 -m venv </path/to/new/virtual/environment>
-      # ex: python3 -m venv ~/.pythonenv
-    ```
-
--   Activate the virtual environment
-
-    ```sh
-      source </path/to/new/virtual/environment>/bin/activate
-      # ex: source ~/.pythonenv/bin/activate
-    ```
-
--   Install the required python packages by executing the command in the git repository.
-
-    ```sh
-      cd $(git rev-parse --show-toplevel)
-      pip install -r tools/cost_estimation/requirements_lock.txt
-    ```
+This code relies on [Docker](https://docs.docker.com/) for building and execution. Please
+[install Docker](https://docs.docker.com/get-started/get-docker/) on your system before using the
+tool.
 
 ## Usage
 
-### Build the binary
-
-```sh
-  cd $(git rev-parse --show-toplevel)
-  bazel build //tools/cost_estimation:main
-```
-
-### Run the tool
+### Run the tool using Docker
 
 Sample command for running an AWS seller model:
 
 ```sh
   cd $(git rev-parse --show-toplevel)
-  bazel run tools/cost_estimation:main -- \
+  ./run_in_docker \
   --cost_model aws_buyer_us_west_1 \
   --aws_metrics_download myenv "2024-12-12T00:00:00-07:00" "2024-12-15T00:00:00-07:00" \
   --param bfe:num_instances 1 \
@@ -96,7 +54,7 @@ Sample command for running an GCP buyer model:
 
 ```sh
   cd $(git rev-parse --show-toplevel)
-  bazel run tools/cost_estimation:main -- \
+  ./run_in_docker \
   --cost_model gcp_seller_us_east_4 \
   --gcp_metrics_download myproject myenv "2024-12-12T00:00:00-07:00" "2024-12-15T00:00:00-07:00" \
   --param sfe:num_instances 1 \
@@ -104,6 +62,51 @@ Sample command for running an GCP buyer model:
 ```
 
 > **_NOTE:_** The above commands use the default values for `cost_model_file` and `sku_file`
+
+The above commands use a wrapper script `run_in_docker` to build and run the tool in docker. This
+builds a docker image with all the required depdendencies and runs the tool.
+
+#### File mapping
+
+The wrapper script takes care of mapping the input and output files so that the input files are
+available to the docker image, and the output files are availabe on the host once the tool finishes
+running. Absolute pathnames are mapped to the same path inside docker. Relative pathnames are mapped
+to the same path under the `/app/` folder. Due to this reason, relative pathnames that land outside
+the current working directory will not work. For example, `../../` will not work, but `a/b/c` should
+work fine.
+
+> **_NOTE:_** The wrapper script parses the command line args and adds input and output file
+> mappings for docker. For this to work, the files need to be separated from the option by spaces.
+> E.g. `--metrics_file /tmp/aws.csv` should work fine, but `--metrics_file=/tmp/aws.csv` will not.
+
+#### Default files
+
+The cost.yaml and sku.json file from the tool's source directory are copied as an artifact into the
+docker image. This means you can edit the cost.yaml or sku.json files in the source directory and
+have them be automatically picked up by the tool without specifying either of the file options.
+
+We write out the full paths of any file written or read from at the INFO log level. Add
+`--loglevel info` to your command to have the tool print the full path of each file that is read
+from or written to.
+
+> **_NOTE:_** The output file names printed are the names of the files in the docker image. When
+> default files are used by omitting them in the options, the printed names will be under the `/app`
+> directory, where the source is copied.
+
+### Authentication with cloud providers
+
+The tools downloads metrics from supported cloud providers. This requires authentication. See the
+sections [--aws_metrics_download](#--aws_metrics_download) and
+[--gcp_metrics_download](#--gcp_metrics_download) for details of setting up this auth. The wrapper
+script described above will propagate this auth to the docker image.
+
+For AWS, this is done by propagating the environment variables: `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY`. Please make sure these environment variables are set if you're using AWS.
+
+For GCP, this is done by making the credentials file
+`$HOME/.config/gcloud/application_default_credentials.json` accessible to the docker image by
+mounting it with [--volume](https://docs.docker.com/engine/storage/volumes/). Please make sure this
+file is available if you're using GCP.
 
 ### Tool Options
 
@@ -303,29 +306,6 @@ The key becomes the variable name, which will be accessible to the cost model. T
 provide deployment specific data like number of servers used etc. to the cost model. E.g. you can
 pass the sfe:num_instances, bfe:num_instance etc. to pass the number of instances for each service
 your cost model needs.
-
-> **_NOTE:_**
->
-> #### Filenames and working directories
->
-> The above commands for running the tool involve `bazel run`. Bazel creates
-> [output directories](https://bazel.build/remote/output-directories) and the execution of the tool
-> happens with this as the current working directory.
->
-> -   All relative filenames will be relative to this output directory. If you use relative
->     pathnames for saving or loading files, then they will be interpreted relative to this
->     directory.
-> -   The cost.yaml and sku.json file from the tool's source directory are copied as an artifact
->     into the build output directory. The defaults have been adjusted so that if no
->     `--cost_model_file` or `--sku_file` option is specified, then the default included files are
->     loaded. This means you can edit the cost.yaml or sku.json files in the source directory and
->     have them be automatically picked up by the tool without specifying either of the file
->     options.
-> -   Absolute filenames continue to work as expected and are _not_ interpreted relative to any
->     path.
-> -   We write out the full paths of any file written or read from at the INFO log level. Add
->     `--loglevel info` to your command to have the tool print the full path of each file that is
->     read from or written to.
 
 ## Cost model
 

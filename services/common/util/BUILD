@@ -75,7 +75,7 @@ cc_test(
 cc_library(
     name = "request_metadata",
     srcs = [
-        "request_metadata.h",
+        "request_metadata.cc",
     ],
     hdrs = [
         "request_metadata.h",
@@ -255,10 +255,21 @@ cc_test(
 
 cc_library(
     name = "signal_handler",
+    srcs = select({
+        "//:non_prod_build": ["signal_handler_non_prod.cc"],
+        "//conditions:default": ["signal_handler_prod.cc"],
+    }),
     hdrs = ["signal_handler.h"],
     deps = [
-        "@google_privacysandbox_servers_common//src/util/status_macro:examine_stack",
-    ],
+        "@org_gnu_libunwind//:unwind-ptrace",
+    ] + select({
+        "//:non_prod_build": [
+            "//services/common/util:file_util",
+            "@com_google_tcmalloc//tcmalloc:malloc_extension",
+            "@com_google_tcmalloc//tcmalloc:profile_marshaler",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(

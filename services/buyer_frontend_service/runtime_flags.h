@@ -59,8 +59,9 @@ inline constexpr absl::string_view BIDDING_SIGNALS_FETCH_MODE =
     "BIDDING_SIGNALS_FETCH_MODE";
 inline constexpr absl::string_view PROPAGATE_BUYER_SIGNALS_TO_TKV =
     "PROPAGATE_BUYER_SIGNALS_TO_TKV";
+inline constexpr absl::string_view ENABLE_HYBRID = "ENABLE_HYBRID";
 
-inline constexpr int kNumRuntimeFlags = 20;
+inline constexpr int kNumRuntimeFlags = 21;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -82,6 +83,7 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     BFE_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
     BIDDING_SIGNALS_FETCH_MODE,
     PROPAGATE_BUYER_SIGNALS_TO_TKV,
+    ENABLE_HYBRID,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {

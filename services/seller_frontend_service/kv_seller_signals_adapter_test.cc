@@ -44,7 +44,12 @@ kv_server::v2::RequestPartition GetPartitionWithoutId(
   return partition;
 }
 
-TEST(KvSellerSignalsAdapter, CreateV2ScoringRequestSuccess) {
+class KvSellerSignalsAdapterTest : public ::testing::Test {
+ protected:
+  KVV2AdapterStats v2_adapter_stats_;
+};
+
+TEST_F(KvSellerSignalsAdapterTest, CreateV2ScoringRequestSuccess) {
   google::protobuf::Struct expected_metadata;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"pb(
@@ -169,8 +174,8 @@ TEST(KvSellerSignalsAdapter, CreateV2ScoringRequestSuccess) {
                                             partition3.DebugString()));
 }
 
-TEST(KvSellerSignalsAdapter,
-     CreateV2ScoringRequestWithConsentedDebugConfigSuccess) {
+TEST_F(KvSellerSignalsAdapterTest,
+       CreateV2ScoringRequestWithConsentedDebugConfigSuccess) {
   server_common::ConsentedDebugConfiguration expected_consented_debug_config;
   ASSERT_TRUE(TextFormat::ParseFromString(R"pb(is_consented: true
                                                token: "test_token")pb",
@@ -213,7 +218,8 @@ TEST(KvSellerSignalsAdapter,
   EXPECT_THAT(GetPartitionWithoutId(request, 0), EqualsProto(partition));
 }
 
-TEST(KvSellerSignalsAdapter, CreateV2ScoringRequestSetsPasEnabledSuccess) {
+TEST_F(KvSellerSignalsAdapterTest,
+       CreateV2ScoringRequestSetsPasEnabledSuccess) {
   google::protobuf::Struct expected_metadata;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"pb(
@@ -295,7 +301,7 @@ TEST(KvSellerSignalsAdapter, CreateV2ScoringRequestSetsPasEnabledSuccess) {
 
 // This is for permitting graceful failures in case someone disobeys the spec,
 // as AdRenderUrls are required to be present for all AdWithBids.
-TEST(KvSellerSignalsAdapter, CreateV2ScoringRequestNoRenderUrlsSuccess) {
+TEST_F(KvSellerSignalsAdapterTest, CreateV2ScoringRequestNoRenderUrlsSuccess) {
   kv_server::v2::GetValuesRequest expected;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"pb(
@@ -346,8 +352,8 @@ TEST(KvSellerSignalsAdapter, CreateV2ScoringRequestNoRenderUrlsSuccess) {
   EXPECT_THAT(request, EqualsProto(expected));
 }
 
-TEST(KvSellerSignalsAdapter,
-     CreateV2ScoringRequestNoAdComponentRenderUrlsSuccess) {
+TEST_F(KvSellerSignalsAdapterTest,
+       CreateV2ScoringRequestNoAdComponentRenderUrlsSuccess) {
   kv_server::v2::GetValuesRequest expected;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"pb(
@@ -396,7 +402,7 @@ TEST(KvSellerSignalsAdapter,
   EXPECT_THAT(request, EqualsProto(expected));
 }
 
-TEST(KvSellerSignalsAdapter, CreateV2ScoringRequestNoUrlsFailure) {
+TEST_F(KvSellerSignalsAdapterTest, CreateV2ScoringRequestNoUrlsFailure) {
   auto get_bid_response1 =
       std::make_unique<GetBidsResponse::GetBidsRawResponse>();
   get_bid_response1->mutable_bids()->Add();
@@ -416,7 +422,7 @@ TEST(KvSellerSignalsAdapter, CreateV2ScoringRequestNoUrlsFailure) {
   ASSERT_FALSE(maybe_result.ok());
 }
 
-TEST(KvSellerSignalsAdapter, ConvertV2ResponseToV1ScoringSignalsSuccess) {
+TEST_F(KvSellerSignalsAdapterTest, ConvertV2ResponseToV1ScoringSignalsSuccess) {
   kv_server::v2::GetValuesResponse response;
   std::string compression_group = R"JSON(
   [
@@ -522,7 +528,8 @@ TEST(KvSellerSignalsAdapter, ConvertV2ResponseToV1ScoringSignalsSuccess) {
                       absl::CEscape(compression_group_2)),
       &response));
   auto result = ConvertV2ResponseToV1ScoringSignals(
-      std::make_unique<kv_server::v2::GetValuesResponse>(response));
+      std::make_unique<kv_server::v2::GetValuesResponse>(response),
+      v2_adapter_stats_);
   CHECK_OK(result) << result.status();
   std::string expected_parsed_signals =
       R"JSON(
@@ -543,7 +550,7 @@ TEST(KvSellerSignalsAdapter, ConvertV2ResponseToV1ScoringSignalsSuccess) {
   ASSERT_EQ(actual_signals_json, expected_signals_json);
 }
 
-TEST(KvSellerSignalsAdapter, MalformedJson) {
+TEST_F(KvSellerSignalsAdapterTest, MalformedJson) {
   kv_server::v2::GetValuesResponse response;
   std::string compression_group = R"JSON(
   [
@@ -598,11 +605,12 @@ TEST(KvSellerSignalsAdapter, MalformedJson) {
                       absl::CEscape(compression_group)),
       &response));
   auto result = ConvertV2ResponseToV1ScoringSignals(
-      std::make_unique<kv_server::v2::GetValuesResponse>(response));
+      std::make_unique<kv_server::v2::GetValuesResponse>(response),
+      v2_adapter_stats_);
   ASSERT_FALSE(result.ok());
 }
 
-TEST(KvSellerSignalsAdapter, EmptyJson) {
+TEST_F(KvSellerSignalsAdapterTest, EmptyJson) {
   kv_server::v2::GetValuesResponse response;
   ASSERT_TRUE(TextFormat::ParseFromString(
       R"(
@@ -612,7 +620,8 @@ TEST(KvSellerSignalsAdapter, EmptyJson) {
         })",
       &response));
   auto result = ConvertV2ResponseToV1ScoringSignals(
-      std::make_unique<kv_server::v2::GetValuesResponse>(response));
+      std::make_unique<kv_server::v2::GetValuesResponse>(response),
+      v2_adapter_stats_);
   ASSERT_FALSE(result.ok());
 }
 

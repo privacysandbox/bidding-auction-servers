@@ -35,6 +35,7 @@ cc_library(
         ":error_code",
         "//services/common/util:read_system",
         "//services/common/util:reporting_util",
+        "//services/seller_frontend_service/k_anon:constants",
         "@google_privacysandbox_servers_common//src/metric:context_map",
         "@google_privacysandbox_servers_common//src/metric:key_fetch",
         "@inference_common//utils:inference_error_code",

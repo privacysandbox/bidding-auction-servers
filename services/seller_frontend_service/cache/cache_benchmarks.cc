@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+// Benchmark of cache.h in the context of a K-Anon cache.
 // Run the benchmark as follows:
 // builders/tools/bazel-debian run --dynamic_mode=off -c opt --copt=-gmlt \
 //   --copt=-fno-omit-frame-pointer --fission=yes --strip=never \
-//   services/seller_frontend_service/k_anon:k_anon_cache_benchmarks -- \
+//   services/seller_frontend_service/cache:cache_benchmarks -- \
 //   --benchmark_time_unit=us --benchmark_repetitions=10
 
 #include "absl/algorithm/container.h"
@@ -26,7 +27,7 @@
 #include "benchmark/benchmark.h"
 #include "services/common/test/utils/test_init.h"
 #include "services/common/util/hash_util.h"
-#include "services/seller_frontend_service/k_anon/k_anon_cache.h"
+#include "services/seller_frontend_service/cache/cache.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
@@ -71,8 +72,7 @@ absl::flat_hash_set<std::string> ConstructKAnonClientHash(int range) {
   return hash_set;
 }
 
-absl::flat_hash_map<std::string, std::string> ConstructKAnonCacheHash(
-    int range) {
+absl::flat_hash_map<std::string, std::string> ConstructCacheHash(int range) {
   if (range < 3) {
     return {};
   }
@@ -114,12 +114,11 @@ static void BM_QueryBothCacheWithAllHashes(benchmark::State& state) {
   std::unique_ptr<server_common::EventEngineExecutor> executor =
       std::make_unique<server_common::EventEngineExecutor>(
           grpc_event_engine::experimental::CreateEventEngine());
-  KAnonCache<std::string, std::string> k_anon_cache(
+  Cache<std::string, std::string> k_anon_cache(
       unresolved.size(), absl::Minutes(30), executor.get());
-  KAnonCache<std::string, std::string> non_k_anon_cache(
+  Cache<std::string, std::string> non_k_anon_cache(
       unresolved.size(), absl::Minutes(30), executor.get());
-  auto status =
-      k_anon_cache.Insert(ConstructKAnonCacheHash(state.range(kRangeArg)));
+  auto status = k_anon_cache.Insert(ConstructCacheHash(state.range(kRangeArg)));
   status = non_k_anon_cache.Insert(
       ConstructNonKAnonCacheHash(state.range(kRangeArg)));
 
@@ -169,12 +168,11 @@ static void BM_QueryCachesUsingSetDifference(benchmark::State& state) {
   std::unique_ptr<server_common::EventEngineExecutor> executor =
       std::make_unique<server_common::EventEngineExecutor>(
           grpc_event_engine::experimental::CreateEventEngine());
-  KAnonCache<std::string, std::string> k_anon_cache(
+  Cache<std::string, std::string> k_anon_cache(
       unresolved.size(), absl::Minutes(30), executor.get());
-  KAnonCache<std::string, std::string> non_k_anon_cache(
+  Cache<std::string, std::string> non_k_anon_cache(
       unresolved.size(), absl::Minutes(30), executor.get());
-  auto status =
-      k_anon_cache.Insert(ConstructKAnonCacheHash(state.range(kRangeArg)));
+  auto status = k_anon_cache.Insert(ConstructCacheHash(state.range(kRangeArg)));
   status = non_k_anon_cache.Insert(
       ConstructNonKAnonCacheHash(state.range(kRangeArg)));
 

@@ -354,6 +354,7 @@ cc_binary(
         "//services/common/util:file_util",
         "//services/common/util:read_system",
         "//services/common/util:request_response_constants",
+        "//services/common/util:signal_handler",
         "//services/common/util:tcmalloc_utils",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc++_reflection",  # for grpc_cli

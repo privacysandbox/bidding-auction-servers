@@ -31,6 +31,7 @@ cc_library(
         "//services/common/clients:client_params_template",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/clients/http_kv_server/util:http_kv_server_gen_url_utils",
+        "//services/common/clients/http_kv_server/util:http_kv_server_process_response_utils",
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_metadata",
         "//services/common/util:request_response_constants",

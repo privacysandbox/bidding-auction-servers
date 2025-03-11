@@ -71,14 +71,15 @@ T GetDecodedProtectedAuctionInputHelper(absl::string_view encoded_data,
 
 SelectAdReactorForApp::SelectAdReactorForApp(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
-    SelectAdResponse* response, const ClientRegistry& clients,
+    SelectAdResponse* response, server_common::Executor* executor,
+    const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
     const ReportWinMap& report_win_map, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
     int per_adtech_paapi_contributions_limit, bool fail_fast)
-    : SelectAdReactor(context, request, response, clients, config_client,
-                      report_win_map, enable_cancellation, enable_kanon,
-                      fail_fast) {}
+    : SelectAdReactor(context, request, response, executor, clients,
+                      config_client, report_win_map, enable_cancellation,
+                      enable_kanon, fail_fast) {}
 
 absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,

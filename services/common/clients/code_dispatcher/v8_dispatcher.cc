@@ -75,6 +75,40 @@ absl::Status V8Dispatcher::Execute(std::unique_ptr<DispatchRequest> request,
 absl::Status V8Dispatcher::BatchExecute(
     std::vector<DispatchRequest>& batch,
     BatchDispatchDoneCallback batch_callback) {
-  return roma_service_.BatchExecute(batch, std::move(batch_callback));
+  const size_t batch_size = batch.size();
+  auto batch_response =
+      std::make_shared<std::vector<absl::StatusOr<DispatchResponse>>>(
+          batch_size, absl::StatusOr<DispatchResponse>());
+  auto finished_counter = std::make_shared<std::atomic<size_t>>(0);
+  auto batch_callback_ptr =
+      std::make_shared<BatchDispatchDoneCallback>(std::move(batch_callback));
+
+  for (size_t index = 0; index < batch_size; ++index) {
+    auto single_callback =
+        [batch_response, finished_counter, batch_callback_ptr,
+         index](absl::StatusOr<DispatchResponse> obj_response) {
+          (*batch_response)[index] = std::move(obj_response);
+          auto finished_value = finished_counter->fetch_add(1);
+          if (finished_value + 1 == batch_response->size()) {
+            (*batch_callback_ptr)(std::move(*batch_response));
+          }
+        };
+
+    absl::Status result;
+    while (
+        !(result = roma_service_
+                       .Execute(std::make_unique<DispatchRequest>(batch[index]),
+                                single_callback)
+                       .status())
+             .ok()) {
+      // If the first request from the batch got a failure, return failure
+      // without waiting.
+      if (index == 0) {
+        return result;
+      }
+    }
+  }
+
+  return absl::OkStatus();
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

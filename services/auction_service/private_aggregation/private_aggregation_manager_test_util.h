@@ -44,7 +44,6 @@ inline constexpr absl::string_view kTestCustomEvent = "custom_event_1";
 inline constexpr float kTestBidInSellerCurrency = 10.0f;
 inline constexpr float kTestBidInBuyerCurrency = 7.5f;
 inline constexpr float kTestHighestScoringOtherBidValue = 5.0f;
-inline constexpr int kTestIgIdx = 1;
 
 // Helper function to test AppendAdEventContributionsToPaggResponse with
 // different input values.

@@ -109,11 +109,11 @@ void GetTraceFromCurl(CURL* handle) {
 static struct timeval OneSecond = {1, 0};
 
 MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
-    server_common::Executor* executor, int64_t keepalive_interval_sec,
-    int64_t keepalive_idle_sec, std::string ca_cert)
+    server_common::Executor* executor,
+    const MultiCurlHttpFetcherAsyncOptions& options)
     : executor_(executor),
-      keepalive_idle_sec_(keepalive_idle_sec),
-      keepalive_interval_sec_(keepalive_interval_sec),
+      keepalive_idle_sec_(options.keepalive_idle_sec),
+      keepalive_interval_sec_(options.keepalive_interval_sec),
       skip_tls_verification_(
           absl::GetFlag(FLAGS_https_fetch_skips_tls_verification)
               .value_or(false)),
@@ -126,12 +126,15 @@ MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
                                   /*event_callback=*/ShutdownEventLoop,
                                   /*arg=*/this,
                                   /*priority=*/0, &OneSecond)),
-      multi_curl_request_manager_(event_base_.get()),
+      multi_curl_request_manager_(event_base_.get(),
+                                  options.curlmopt_maxconnects,
+                                  options.curlmopt_max_total_connections,
+                                  options.curlmopt_max_host_connections),
       multi_timer_event_(Event(
           event_base_.get(), /*fd=*/-1, /*event_type=*/0,
           /*event_callback=*/multi_curl_request_manager_.MultiTimerCallback,
           /*arg=*/&multi_curl_request_manager_)),
-      ca_cert_(std::move(ca_cert)) {
+      ca_cert_(options.ca_cert) {
   multi_curl_request_manager_.Configure([this]() { PerformCurlUpdate(); },
                                         multi_timer_event_.get());
   // Start execution loop.

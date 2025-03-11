@@ -333,11 +333,13 @@ absl::StatusOr<BuyerInputMapEncoded> GetEncodedBuyerInputMap(
 }
 
 std::string SerializeCbor(cbor_item_t* root) {
-  const size_t kSerialzedDataSize = cbor_serialized_size(root);
-  char buffer[kSerialzedDataSize];
-  size_t actual_cbor_size = cbor_serialize(
-      root, reinterpret_cast<unsigned char*>(buffer), kSerialzedDataSize);
-  return std::string(buffer, actual_cbor_size);
+  const size_t serialized_data_size = cbor_serialized_size(root);
+  std::string buffer(serialized_data_size, '\0');
+  size_t actual_cbor_size =
+      cbor_serialize(root, reinterpret_cast<unsigned char*>(buffer.data()),
+                     serialized_data_size);
+  buffer.resize(actual_cbor_size);
+  return buffer;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

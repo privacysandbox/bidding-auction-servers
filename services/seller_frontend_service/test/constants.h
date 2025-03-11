@@ -82,7 +82,7 @@ inline constexpr char kSampleSelectedBuyerAndSellerReportingId[] =
     "selectedBuyerAndSellerReportingId";
 inline constexpr int kSampleWinnerPositionalIndex = 5;
 inline constexpr int kSampleIgIndex = 10;
-inline constexpr char kSampleBucket[] = "bucket";
+inline constexpr std::array<uint8_t, 5> kSampleBucket = {1, 3, 5, 7, 9};
 inline constexpr int kSampleValue = 21;
 
 }  // namespace privacy_sandbox::bidding_auction_servers

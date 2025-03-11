@@ -35,4 +35,18 @@ absl::StatusOr<std::string> GetFileContent(absl::string_view path,
                      std::istreambuf_iterator<char>());
 }
 
+absl::Status WriteToFile(absl::string_view path, absl::string_view contents,
+                         bool log_on_error) {
+  std::ofstream ofs(path.data(), std::ios::binary);
+  if (!ofs.is_open()) {
+    std::string err_str = absl::StrCat(kPathFailed, path);
+    ABSL_LOG_IF(ERROR, log_on_error) << err_str;
+    return absl::InvalidArgumentError(std::move(err_str));
+  }
+
+  ofs << contents;
+  ofs.close();
+  return absl::OkStatus();
+}
+
 }  // namespace privacy_sandbox::bidding_auction_servers

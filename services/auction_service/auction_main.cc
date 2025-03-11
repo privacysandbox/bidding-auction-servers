@@ -53,6 +53,7 @@
 #include "services/common/feature_flags.h"
 #include "services/common/metric/udf_metric.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/signal_handler.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
@@ -410,11 +411,12 @@ absl::Status RunServer() {
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 int main(int argc, char** argv) {
+  privacy_sandbox::bidding_auction_servers::RegisterCommonSignalHandlers();
   absl::InitializeSymbolizer(argv[0]);
   privacysandbox::server_common::SetRLimits({
       .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
   });
-  absl::FailureSignalHandlerOptions options;
+  absl::FailureSignalHandlerOptions options = {.call_previous_handler = true};
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();

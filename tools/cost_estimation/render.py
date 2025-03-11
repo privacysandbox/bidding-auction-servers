@@ -16,8 +16,8 @@
 import io
 import csv
 from string import Template
-from tools.cost_estimation.sql_expr import SqlExecutor
-from tools.cost_estimation.utils import dict_to_csv
+from sql_expr import SqlExecutor
+from utils import dict_to_csv
 
 ADDITIONAL_INFO_MESSAGE = (
     "The accuracy of the following estimates may vary. "

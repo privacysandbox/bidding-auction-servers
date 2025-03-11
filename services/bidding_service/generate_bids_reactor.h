@@ -103,6 +103,7 @@ class GenerateBidsReactor
 
   // UDF version to use for this request.
   absl::string_view protected_audience_generate_bid_version_;
+  int per_adtech_paapi_contributions_limit_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -36,6 +36,7 @@ inline constexpr char kHostname[] = "hostname";
 inline constexpr char kClientType[] = "client_type";
 inline constexpr char kExperimentGroupId[] = "experiment_group_id";
 inline constexpr char kBuyerSignals[] = "buyer_signals";
+inline constexpr char kByosOutput[] = "byos_output";
 
 kv_server::v2::GetValuesRequest GetRequest(
     const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request) {
@@ -78,17 +79,19 @@ absl::Status ValidateInterestGroups(const BuyerInputForBidding& buyer_input) {
 }  // namespace
 
 absl::StatusOr<std::unique_ptr<BiddingSignals>> ConvertV2BiddingSignalsToV1(
-    std::unique_ptr<kv_server::v2::GetValuesResponse> response) {
-  PS_ASSIGN_OR_RETURN(
-      auto trusted_signals,
-      ConvertKvV2ResponseToV1String({kKeys, kInterestGroupNames}, *response));
+    std::unique_ptr<kv_server::v2::GetValuesResponse> response,
+    KVV2AdapterStats& v2_adapter_stats) {
+  PS_ASSIGN_OR_RETURN(auto trusted_signals, ConvertKvV2ResponseToV1String(
+                                                {kKeys, kInterestGroupNames},
+                                                *response, v2_adapter_stats));
   return std::make_unique<BiddingSignals>(BiddingSignals{
       std::make_unique<std::string>(std::move(trusted_signals))});
 }
 
 absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesRequest>>
 CreateV2BiddingRequest(const BiddingSignalsRequest& bidding_signals_request,
-                       bool propagate_buyer_signals_to_tkv) {
+                       bool propagate_buyer_signals_to_tkv,
+                       std::unique_ptr<std::string> byos_output) {
   auto& bids_request = bidding_signals_request.get_bids_raw_request_;
   PS_RETURN_IF_ERROR(
       ValidateInterestGroups(bids_request.buyer_input_for_bidding()));
@@ -104,7 +107,10 @@ CreateV2BiddingRequest(const BiddingSignalsRequest& bidding_signals_request,
     (*req->mutable_metadata()->mutable_fields())[kBuyerSignals]
         .set_string_value(bids_request.buyer_signals());
   }
-
+  if (byos_output != nullptr) {
+    (*req->mutable_metadata()->mutable_fields())[kByosOutput].set_string_value(
+        std::move(*byos_output));
+  }
   int compression_and_partition_id = 0;
   // TODO (b/369181315): this needs to be reworked to include multiple IGs's
   // keys per partition.

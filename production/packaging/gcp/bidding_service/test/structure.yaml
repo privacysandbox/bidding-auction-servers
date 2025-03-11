@@ -39,9 +39,5 @@ fileExistenceTests:
     path: /lib/libcddl.so
     shouldExist: true
 
-  - name: prod-ca-certs
-    path: /etc/roots.pem
-    shouldExist: true
-
 licenseTests:
   - debian: true

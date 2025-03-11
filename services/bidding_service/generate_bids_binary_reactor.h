@@ -63,7 +63,9 @@ class GenerateBidsBinaryReactor
 
   // Initiates the synchronous execution for the interest group at the given
   // index of the GenerateBidsRequest.
-  void ExecuteForInterestGroup(int ig_index);
+  void ExecuteForInterestGroup(
+      roma_service::GenerateProtectedAudienceBidRequest& bid_request,
+      int ig_index);
 
   // Once all bids are fetched, this callback gets executed.
   void OnAllBidsDone(bool any_successful_bids);

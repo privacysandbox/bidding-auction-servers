@@ -15,10 +15,10 @@
 
 import unittest
 
-from tools.cost_estimation.render import CsvRenderer
-from tools.cost_estimation.sql_expr import SqlExecutor
-from tools.cost_estimation.estimator import CostEstimator
-from tools.cost_estimation.render import ADDITIONAL_INFO_MESSAGE
+from render import CsvRenderer
+from sql_expr import SqlExecutor
+from estimator import CostEstimator
+from render import ADDITIONAL_INFO_MESSAGE
 
 
 class CsvRendererTest(unittest.TestCase):

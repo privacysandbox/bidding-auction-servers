@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef SERVICES_SELLER_FRONTEND_SERVICE_K_ANON_DOUBLY_LINKED_LIST_H_
-#define SERVICES_SELLER_FRONTEND_SERVICE_K_ANON_DOUBLY_LINKED_LIST_H_
+#ifndef SERVICES_SELLER_FRONTEND_SERVICE_CACHE_DOUBLY_LINKED_LIST_H_
+#define SERVICES_SELLER_FRONTEND_SERVICE_CACHE_DOUBLY_LINKED_LIST_H_
 
 #include <memory>
 #include <string>
@@ -27,7 +27,7 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 // K-anon data stored in the DLL.
 template <typename KeyT, typename ValueT>
-struct KAnonHashData {
+struct CacheHashData {
   KeyT key;
   ValueT value;
   std::unique_ptr<Event> timer_event = nullptr;
@@ -36,13 +36,13 @@ struct KAnonHashData {
 // DLL Node.
 template <typename KeyT, typename ValueT>
 struct Node {
-  std::unique_ptr<KAnonHashData<KeyT, ValueT>> data;
+  std::unique_ptr<CacheHashData<KeyT, ValueT>> data;
   Node* next = nullptr;
   Node* prev = nullptr;
 
   explicit Node(
-      std::unique_ptr<KAnonHashData<KeyT, ValueT>> k_anon_hash_data = nullptr)
-      : data(std::move(k_anon_hash_data)) {}
+      std::unique_ptr<CacheHashData<KeyT, ValueT>> cache_hash_data = nullptr)
+      : data(std::move(cache_hash_data)) {}
 };
 
 // Doubly linked list to back up the k-anon cache.
@@ -72,9 +72,9 @@ class DoublyLinkedList {
   }
 
   Node<KeyT, ValueT>* InsertAtFront(
-      std::unique_ptr<KAnonHashData<KeyT, ValueT>> k_anon_hash_data) {
+      std::unique_ptr<CacheHashData<KeyT, ValueT>> cache_hash_data) {
     auto node =
-        std::make_unique<Node<KeyT, ValueT>>(std::move(k_anon_hash_data));
+        std::make_unique<Node<KeyT, ValueT>>(std::move(cache_hash_data));
     auto* node_ptr = node.release();
     node_ptr->next = head_->next;
     node_ptr->prev = head_.get();
@@ -122,4 +122,4 @@ class DoublyLinkedList {
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 
-#endif  // SERVICES_SELLER_FRONTEND_SERVICE_K_ANON_DOUBLY_LINKED_LIST_H_
+#endif  // SERVICES_SELLER_FRONTEND_SERVICE_CACHE_DOUBLY_LINKED_LIST_H_

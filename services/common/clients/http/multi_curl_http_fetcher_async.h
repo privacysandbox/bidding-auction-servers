@@ -43,6 +43,15 @@ struct DataToUpload {
   int offset = 0;
 };
 
+struct MultiCurlHttpFetcherAsyncOptions {
+  const int64_t keepalive_interval_sec = 2;
+  const int64_t keepalive_idle_sec = 2;
+  std::string ca_cert = "/etc/ssl/certs/ca-certificates.crt";
+  const long curlmopt_maxconnects = 0L;
+  const long curlmopt_max_total_connections = 0L;
+  const long curlmopt_max_host_connections = 0L;
+};
+
 // MultiCurlHttpFetcherAsync provides a thread-safe libcurl wrapper to perform
 // asynchronous HTTP invocations with client caching(connection pooling), and
 // TLS session sharing. It uses a single curl multi handle to perform
@@ -62,10 +71,10 @@ class MultiCurlHttpFetcherAsync final : public HttpFetcherAsync {
   // OS sends a keep alive probe.
   // If the other endpoint does not reply, OS sends another keep alive
   // probe after keepalive_interval_sec.
-  explicit MultiCurlHttpFetcherAsync(server_common::Executor* executor,
-                                     int64_t keepalive_interval_sec = 2,
-                                     int64_t keepalive_idle_sec = 2,
-                                     std::string ca_cert = "/etc/roots.pem");
+  explicit MultiCurlHttpFetcherAsync(
+      server_common::Executor* executor,
+      const MultiCurlHttpFetcherAsyncOptions& options =
+          MultiCurlHttpFetcherAsyncOptions{});
 
   // Cleans up all sessions and errors out any pending open HTTP calls.
   // Please note: Any class using this must ensure that the instance is only

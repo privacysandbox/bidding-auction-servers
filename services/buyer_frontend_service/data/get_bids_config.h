@@ -54,6 +54,8 @@ struct GetBidsConfig {
       BiddingSignalsFetchMode::REQUIRED;
   // TKV per buyer signals propagation
   bool propagate_buyer_signals_to_tkv = false;
+  // Enable hybrid mode
+  bool is_hybrid_enabled = false;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

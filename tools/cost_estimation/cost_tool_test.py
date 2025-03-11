@@ -16,8 +16,8 @@
 
 import unittest
 from unittest.mock import patch, mock_open, MagicMock
-from tools.cost_estimation.cost_tool import CostTool
-from tools.cost_estimation.render import ADDITIONAL_INFO_MESSAGE
+from cost_tool import CostTool
+from render import ADDITIONAL_INFO_MESSAGE
 
 
 class CostToolTest(unittest.TestCase):

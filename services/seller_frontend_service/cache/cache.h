@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#ifndef SERVICES_SELLER_FRONTEND_SERVICE_K_ANON_K_ANON_CACHE_H_
-#define SERVICES_SELLER_FRONTEND_SERVICE_K_ANON_K_ANON_CACHE_H_
+#ifndef SERVICES_SELLER_FRONTEND_SERVICE_CACHE_CACHE_H_
+#define SERVICES_SELLER_FRONTEND_SERVICE_CACHE_CACHE_H_
 
 #include <memory>
 #include <string>
@@ -37,7 +37,7 @@
 #include "gmock/gmock.h"
 #include "services/common/util/event.h"
 #include "services/common/util/event_base.h"
-#include "services/seller_frontend_service/k_anon/doubly_linked_list.h"
+#include "services/seller_frontend_service/cache/doubly_linked_list.h"
 #include "services/seller_frontend_service/k_anon/k_anon_utils.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/util/status_macro/status_macros.h"
@@ -45,10 +45,10 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 template <typename KeyT, typename ValueT>
-class KAnonCacheInterface {
+class CacheInterface {
  public:
-  KAnonCacheInterface() = default;
-  virtual ~KAnonCacheInterface() = default;
+  CacheInterface() = default;
+  virtual ~CacheInterface() = default;
 
   virtual absl::flat_hash_map<KeyT, ValueT> Query(
       const absl::flat_hash_set<KeyT>& keys) = 0;
@@ -58,12 +58,12 @@ class KAnonCacheInterface {
 };
 
 template <typename KeyT, typename ValueT>
-class KAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
+class Cache : public CacheInterface<KeyT, ValueT> {
  public:
   // Constructs a cache with provided `capacity` which determines how
   // many entries can be stored in the cache. Uses `ttl` to initialize
   // the TTL of each newly inserted entry into the cache.
-  explicit KAnonCache(
+  explicit Cache(
       int capacity, absl::Duration ttl, server_common::Executor* executor,
       absl::AnyInvocable<std::string(const KeyT&, const ValueT&)>
           entry_stringify_func =
@@ -98,7 +98,7 @@ class KAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
     PS_VLOG(5) << "Event loop started";
   }
 
-  ~KAnonCache() {
+  ~Cache() {
     PS_VLOG(6)
         << "Ensuring that event loop has started before trying to stop it";
     eventloop_started_.WaitForNotification();
@@ -179,12 +179,13 @@ class KAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
         continue;
       }
 
-      auto expiry_event_data = std::make_unique<ExpiryEventData>(
-          ExpiryEventData{.key = entry.first, .k_anon_cache = this});
+      auto expiry_event_data =
+          std::make_unique<ExpiryEventData>(ExpiryEventData{
+              .key = entry.first, .k_anon_cache = this, .executor = executor_});
       PS_VLOG(5) << "Setting the entry timeout: "
                  << absl::DurationFromTimeval(expiry_);
       auto data = std::make_unique<
-          KAnonHashData<KeyT, ValueT>>(KAnonHashData<KeyT, ValueT>{
+          CacheHashData<KeyT, ValueT>>(CacheHashData<KeyT, ValueT>{
           .key = entry.first,
           .value = entry.second,
           .timer_event = std::make_unique<Event>(
@@ -233,51 +234,54 @@ class KAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
   // Callback to invoke upon an entry expiration.
   static void EntryExpiryCallback(int fd, short event_type, void* arg) {
     PS_VLOG(6) << " " << __func__ << " event type: " << event_type;
-    auto expiry_event_data = std::unique_ptr<KAnonCache::ExpiryEventData>(
-        reinterpret_cast<KAnonCache::ExpiryEventData*>(arg));
-    const auto& key = expiry_event_data->key;
-    if ((event_type & EV_TIMEOUT) == 0) {
-      // Event was manually activated. This is done in order to clean up the
-      // passed in argument.
-      PS_VLOG(5) << "Event manually activated for key: " << key
-                 << ", will reclaim the argument memory";
-      return;
-    }
+    auto expiry_event_data = std::unique_ptr<Cache::ExpiryEventData>(
+        reinterpret_cast<Cache::ExpiryEventData*>(arg));
+    expiry_event_data->executor->Run(
+        [expiry_event_data = std::move(expiry_event_data),
+         event_type]() mutable {
+          const auto& key = expiry_event_data->key;
+          if ((event_type & EV_TIMEOUT) == 0) {
+            // Event was manually activated. This is done in order to clean up
+            // the `expiry_event_data` passed in argument.
+            PS_VLOG(5) << "Event manually activated for key: " << key
+                       << ", will reclaim the argument memory";
+            return;
+          }
 
-    auto* cache = expiry_event_data->k_anon_cache;
-    absl::MutexLock lock(&cache->cache_mutex_);
-    PS_VLOG(5) << " " << __func__;
-    // Since the Event object destruction will always manually activate the
-    // event, we should rely on the final activation to reclaim this user data.
-    // Otherwise, we might end up trying to clean up the same memory twice.
-    // NOLINTNEXTLINE
-    expiry_event_data.release();
-    auto& hash_to_node = cache->hash_to_node_;
-    auto it = hash_to_node.find(key);
-    if (it == hash_to_node.end()) {
-      PS_VLOG(5) << "Expiration event for entry: " << key
-                 << ", but entry has already been evicted";
-      return;
-    }
+          auto* cache = expiry_event_data->k_anon_cache;
+          absl::MutexLock lock(&cache->cache_mutex_);
+          // Since the Event object destruction will always manually activate
+          // the event, we should rely on the final activation to reclaim this
+          // user data. Otherwise, we might end up trying to clean up the same
+          // memory twice. NOLINTNEXTLINE
+          expiry_event_data.release();
+          auto& hash_to_node = cache->hash_to_node_;
+          auto it = hash_to_node.find(key);
+          if (it == hash_to_node.end()) {
+            PS_VLOG(5) << "Expiration event for entry: " << key
+                       << ", but entry has already been evicted";
+            return;
+          }
 
-    PS_VLOG(5) << "Expiration event for entry: " << key
-               << ", removing the entry from cache";
-    --cache->num_entries_;
-    cache->dll_.Remove(it->second);
-    hash_to_node.erase(it->first);
+          PS_VLOG(5) << "Expiration event for entry: " << key
+                     << ", removing the entry from cache";
+          --cache->num_entries_;
+          cache->dll_.Remove(it->second);
+          hash_to_node.erase(it->first);
+        });
   }
 
   // Notifies about the start of event loop. Helps ensure that the shutdown does
   // not happen before the eventloop is started.
   static void StartedEventLoop(int fd, short event_type, void* arg) {
-    auto* self = reinterpret_cast<KAnonCache<KeyT, ValueT>*>(arg);
+    auto* self = reinterpret_cast<Cache<KeyT, ValueT>*>(arg);
     PS_VLOG(5) << "Notifying event loop start";
     self->eventloop_started_.Notify();
   }
 
   // Shuts down the event loop and signals the notification about shutdown.
   static void ShutdownEventLoop(int fd, short event_type, void* arg) {
-    auto* self = reinterpret_cast<KAnonCache<KeyT, ValueT>*>(arg);
+    auto* self = reinterpret_cast<Cache<KeyT, ValueT>*>(arg);
     if (!self->shutdown_requested_.HasBeenNotified()) {
       return;
     }
@@ -345,7 +349,8 @@ class KAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
 
   struct ExpiryEventData {
     KeyT key;
-    KAnonCache<KeyT, ValueT>* k_anon_cache;
+    Cache<KeyT, ValueT>* k_anon_cache;
+    server_common::Executor* executor;
   };
 
   // Event loop shut down event checking frequency.
@@ -362,7 +367,7 @@ class KAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
   static inline struct timeval OneMicrosecond = {0, 1};
 
   std::string StringifyCacheKeys(const absl::flat_hash_set<KeyT>& keys) {
-    static const std::string kUnspecified = "Unspecified";
+    static const ValueT kUnspecified;
     std::string str;
     for (const auto& key : keys) {
       absl::StrAppend(&str, entry_stringify_func_(key, kUnspecified), ",");
@@ -384,10 +389,10 @@ class KAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
 };
 
 template <typename KeyT, typename ValueT>
-class MockKAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
+class MockCache : public CacheInterface<KeyT, ValueT> {
  public:
-  MockKAnonCache() = default;
-  ~MockKAnonCache() override = default;
+  MockCache() = default;
+  ~MockCache() override = default;
   MOCK_METHOD((absl::flat_hash_map<KeyT, ValueT>), Query,
               (const absl::flat_hash_set<KeyT>&), (override));
   MOCK_METHOD(absl::Status, Insert,
@@ -396,4 +401,4 @@ class MockKAnonCache : public KAnonCacheInterface<KeyT, ValueT> {
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 
-#endif  // SERVICES_SELLER_FRONTEND_SERVICE_K_ANON_K_ANON_CACHE_H_
+#endif  // SERVICES_SELLER_FRONTEND_SERVICE_CACHE_CACHE_H_

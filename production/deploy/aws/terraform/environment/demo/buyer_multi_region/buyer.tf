@@ -156,6 +156,14 @@ locals {
     # FETCHED_BUT_OPTIONAL: Call to KV server is made and must not fail. All interest groups are sent to generateBid() irrespective of whether they have bidding signals or not.
     # Any other value/REQUIRED (default): Call to KV server is made and must not fail. Only those interest groups are sent to generateBid() that have at least one bidding signals key for which non-empty bidding signals are fetched.
     BIDDING_SIGNALS_FETCH_MODE = "REQUIRED"
+
+    // The following options can be adjusted to affect the behavior of libcurl, which is used in the BYOS buyer KV signals fetch. Limits in these parameters have been shown to improve BFE performance and stability when under high throughput load. You may adjust these to be more restrictive if you are experiencing BFE becoming unresponsive, or less restrictive if you find BFE throuhgput insufficient.
+    // Constrains the size of the libcurl connection cache. Recommended value of 512 for stability. See https://curl.se/libcurl/c/CURLMOPT_MAXCONNECTS.html.
+    CURLMOPT_MAXCONNECTS = 512
+    // Sets the maximum number of simultaneously open connections. Recommended value of 24 for stability. See https://curl.se/libcurl/c/CURLMOPT_MAX_TOTAL_CONNECTIONS.html.
+    CURLMOPT_MAX_TOTAL_CONNECTIONS = 24
+    // Sets the maximum number of connections to a single host. 0 is default, means unlimited. https://curl.se/libcurl/c/CURLMOPT_MAX_HOST_CONNECTIONS.html.
+    CURLMOPT_MAX_HOST_CONNECTIONS = 0
   }
 }
 
@@ -204,12 +212,13 @@ module "buyer-us-east-1" {
 
   # --- Params below are not generally expected to change between regions. ---
 
-  source              = "../../../modules/buyer"
-  environment         = local.environment
-  enclave_debug_mode  = false # Example: false, set to true for extended logs
-  root_domain         = local.buyer_root_domain
-  root_domain_zone_id = "" # Example: "Z1011487GET92S4MN4CM"
-  operator            = local.buyer_operator
+  source                = "../../../modules/buyer"
+  environment           = local.environment
+  enclave_debug_mode    = false # Example: false, set to true for extended logs
+  root_domain           = local.buyer_root_domain
+  root_domain_zone_id   = "" # Example: "Z1011487GET92S4MN4CM"
+  operator              = local.buyer_operator
+  coordinator_role_arns = [var.runtime_flags.PRIMARY_COORDINATOR_ACCOUNT_IDENTITY, var.runtime_flags.SECONDARY_COORDINATOR_ACCOUNT_IDENTITY]
 
   # Certificate authority
   country_for_cert_auth      = "" # Example: "US"
@@ -269,12 +278,13 @@ module "buyer-us-west-1" {
 
   # --- Params below are not generally expected to change between regions. ---
 
-  source              = "../../../modules/buyer"
-  environment         = local.environment
-  enclave_debug_mode  = false # Example: false, set to true for extended logs
-  root_domain         = local.buyer_root_domain
-  root_domain_zone_id = "" # Example: "Z1011487GET92S4MN4CM"
-  operator            = local.buyer_operator
+  source                = "../../../modules/buyer"
+  environment           = local.environment
+  enclave_debug_mode    = false # Example: false, set to true for extended logs
+  root_domain           = local.buyer_root_domain
+  root_domain_zone_id   = "" # Example: "Z1011487GET92S4MN4CM"
+  operator              = local.buyer_operator
+  coordinator_role_arns = [var.runtime_flags.PRIMARY_COORDINATOR_ACCOUNT_IDENTITY, var.runtime_flags.SECONDARY_COORDINATOR_ACCOUNT_IDENTITY]
 
   # Certificate authority
   country_for_cert_auth      = "" # Example: "US"

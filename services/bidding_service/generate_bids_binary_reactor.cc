@@ -32,11 +32,24 @@ inline constexpr absl::Duration kDefaultGenerateBidExecutionTimeout =
     absl::Seconds(1);
 
 roma_service::GenerateProtectedAudienceBidRequest
-BuildProtectedAudienceBidRequest(RawRequest& raw_request,
-                                 IGForBidding& ig_for_bidding,
-                                 bool logging_enabled) {
+BuildProtectedAudienceBidRequest(RawRequest& raw_request, bool logging_enabled,
+                                 bool debug_reporting_enabled) {
   roma_service::GenerateProtectedAudienceBidRequest bid_request;
+  bid_request.set_auction_signals(
+      std::move(*raw_request.mutable_auction_signals()));
+  bid_request.set_per_buyer_signals(
+      std::move(*raw_request.mutable_buyer_signals()));
+  // Populate server metadata.
+  roma_service::ServerMetadata* server_metadata =
+      bid_request.mutable_server_metadata();
+  server_metadata->set_logging_enabled(logging_enabled);
+  server_metadata->set_debug_reporting_enabled(debug_reporting_enabled);
+  return bid_request;
+}
 
+void UpdateProtectedAudienceBidRequest(
+    roma_service::GenerateProtectedAudienceBidRequest& bid_request,
+    const RawRequest& raw_request, IGForBidding& ig_for_bidding) {
   // Populate interest group.
   roma_service::ProtectedAudienceInterestGroup* interest_group =
       bid_request.mutable_interest_group();
@@ -56,10 +69,6 @@ BuildProtectedAudienceBidRequest(RawRequest& raw_request,
           ig_for_bidding.mutable_ad_component_render_ids()->end())};
   *interest_group->mutable_user_bidding_signals() =
       std::move(*ig_for_bidding.mutable_user_bidding_signals());
-
-  // Populate auction, buyer, and bidding signals.
-  bid_request.set_auction_signals(raw_request.auction_signals());
-  bid_request.set_per_buyer_signals(raw_request.buyer_signals());
   *bid_request.mutable_trusted_bidding_signals() =
       std::move(*ig_for_bidding.mutable_trusted_bidding_signals());
 
@@ -97,15 +106,6 @@ BuildProtectedAudienceBidRequest(RawRequest& raw_request,
                                              ? raw_request.multi_bid_limit()
                                              : kDefaultMultiBidLimit);
   }
-
-  // Populate server metadata.
-  roma_service::ServerMetadata* server_metadata =
-      bid_request.mutable_server_metadata();
-  server_metadata->set_debug_reporting_enabled(
-      raw_request.enable_debug_reporting());
-  server_metadata->set_logging_enabled(logging_enabled);
-
-  return bid_request;
 }
 
 std::vector<AdWithBid> ParseProtectedAudienceBids(
@@ -271,23 +271,29 @@ void GenerateBidsBinaryReactor::Execute() {
 
   // Send execution requests for each interest group immediately.
   start_binary_execution_time_ = absl::Now();
-  for (int ig_index = 0; ig_index < ig_count; ++ig_index) {
-    ExecuteForInterestGroup(ig_index);
-  }
-}
 
-void GenerateBidsBinaryReactor::ExecuteForInterestGroup(int ig_index) {
-  // Populate bid request for given interest group.
   roma_service::GenerateProtectedAudienceBidRequest bid_request =
       BuildProtectedAudienceBidRequest(
           raw_request_,
-          *raw_request_.mutable_interest_group_for_bidding(ig_index),
-          enable_adtech_code_logging_ || !server_common::log::IsProd());
+          enable_adtech_code_logging_ || !server_common::log::IsProd(),
+          enable_buyer_debug_url_generation_ &&
+              raw_request_.enable_debug_reporting());
+  for (int ig_index = 0; ig_index < ig_count; ++ig_index) {
+    ExecuteForInterestGroup(bid_request, ig_index);
+  }
+}
+
+void GenerateBidsBinaryReactor::ExecuteForInterestGroup(
+    roma_service::GenerateProtectedAudienceBidRequest& bid_request,
+    int ig_index) {
+  // Populate bid request for given interest group.
+  UpdateProtectedAudienceBidRequest(
+      bid_request, raw_request_,
+      *raw_request_.mutable_interest_group_for_bidding(ig_index));
   const std::string ig_name = bid_request.interest_group().name();
   const bool logging_enabled = bid_request.server_metadata().logging_enabled();
   const bool debug_reporting_enabled =
       bid_request.server_metadata().debug_reporting_enabled();
-
   // Make asynchronous execute call using the BYOB client.
   PS_VLOG(kNoisyInfo) << "Starting UDF execution for IG: " << ig_name;
   absl::Status execute_status = byob_client_->Execute(

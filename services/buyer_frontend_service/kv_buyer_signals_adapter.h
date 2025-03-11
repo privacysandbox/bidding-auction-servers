@@ -24,6 +24,7 @@
 #include "public/query/v2/get_values_v2.pb.h"
 #include "services/buyer_frontend_service/data/bidding_signals.h"
 #include "services/buyer_frontend_service/providers/bidding_signals_async_provider.h"
+#include "services/common/clients/kv_server/kv_v2.h"
 
 using kv_server::v2::GetValuesResponse;
 
@@ -44,7 +45,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 // function can be reworked to potentially not have this conversion or have an
 // optimized version of it.
 absl::StatusOr<std::unique_ptr<BiddingSignals>> ConvertV2BiddingSignalsToV1(
-    std::unique_ptr<kv_server::v2::GetValuesResponse> response);
+    std::unique_ptr<kv_server::v2::GetValuesResponse> response,
+    KVV2AdapterStats& v2_adapter_stats);
 
 // Create a TKV v2 request given a list of IG keys.
 // Current implementation creates a partition for each IG. This can be improved
@@ -55,7 +57,8 @@ absl::StatusOr<std::unique_ptr<BiddingSignals>> ConvertV2BiddingSignalsToV1(
 // those on TKV side to do the keys lookup.
 absl::StatusOr<std::unique_ptr<kv_server::v2::GetValuesRequest>>
 CreateV2BiddingRequest(const BiddingSignalsRequest& bidding_signals_request,
-                       bool propagate_buyer_signals_to_tkv = false);
+                       bool propagate_buyer_signals_to_tkv = false,
+                       std::unique_ptr<std::string> byos_output = nullptr);
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_BUYER_FRONTEND_SERVICE_KV_BUYER_SIGNALS_ADAPTER_H_

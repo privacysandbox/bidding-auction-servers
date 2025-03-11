@@ -670,6 +670,21 @@ std::unique_ptr<AdWithBidMetadata> MapAuctionResultToAdWithBidMetadata(
   return ad;
 }
 
+std::unique_ptr<
+    ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata>
+MapAuctionResultToProtectedAppSignalsAdWithBidMetadata(
+    AuctionResult& auction_result, bool k_anon_status) {
+  auto ad = std::make_unique<ProtectedAppSignalsAdWithBidMetadata>();
+  ad->set_bid(auction_result.bid());
+  ad->set_allocated_render(auction_result.release_ad_render_url());
+  ad->set_allocated_owner(auction_result.release_interest_group_owner());
+  ad->set_allocated_bid_currency(auction_result.release_bid_currency());
+  ad->set_k_anon_status(k_anon_status);
+  // Do not set egress payload since that will be included
+  // in the component reporting signals.
+  return ad;
+}
+
 std::unique_ptr<AdWithBidMetadata> MapKAnonGhostWinnerToAdWithBidMetadata(
     absl::string_view owner, absl::string_view ig_name,
     GhostWinnerForTopLevelAuction& ghost_winner) {

@@ -155,7 +155,8 @@ bool ValidateComponentAuctionResult(
   }
 
   report_error_lambda(
-      auction_result.ad_type() != AdType::AD_TYPE_PROTECTED_AUDIENCE_AD,
+      ((auction_result.ad_type() != AdType::AD_TYPE_PROTECTED_AUDIENCE_AD) &&
+       (auction_result.ad_type() != AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD)),
       absl::StrFormat(kErrorInAuctionResult,
                       kUnsupportedAdTypeInAuctionResultError));
 

@@ -80,6 +80,9 @@ constexpr char kTestDebugReportingUrls[] = R"JSON(
   "auction_debug_win_url": "test.com/debugWin"
 }
 )JSON";
+constexpr char kEmptyAuctionMetadata[] = "{}";
+constexpr char kTestAuctionMetadata[] =
+    R"JSON({"topLevelSeller":"https://www.example-top-ssp.com"})JSON";
 
 // Creates a test PrivateAggregationContribution object.
 PrivateAggregateContribution CreateTestPAggContribution(
@@ -97,7 +100,8 @@ GenerateProtectedAppSignalsBidsRawRequest CreateRawProtectedAppSignalsRequest(
     const std::string& publisher_name,
     absl::optional<ContextualProtectedAppSignalsData> contextual_pas_data =
         absl::nullopt,
-    bool enable_unlimited_egress = false);
+    bool enable_unlimited_egress = false,
+    absl::string_view top_level_seller = "");
 
 // Creates a generate protected app signals bids request using the provided
 // raw request.
@@ -121,6 +125,15 @@ std::string CreateGenerateBidsUdfResponse(
     absl::string_view debug_reporting_urls = kTestDebugReportingUrls,
     absl::string_view temporary_egress_payload_string =
         kTestTemporaryEgressPayload);
+
+// Creates a mock response from `generateBid` UDF for a component auction.
+std::string CreateGenerateBidsComponentUdfResponse(
+    absl::string_view render = kTestRenderUrl, double bid = kTestWinningBid,
+    absl::string_view egress_payload_string = kTestEgressPayload,
+    absl::string_view debug_reporting_urls = kTestDebugReportingUrls,
+    absl::string_view temporary_egress_payload_string =
+        kTestTemporaryEgressPayload,
+    bool allow_component_auction = true);
 
 // Creates a mock response from ads retrieval service.
 absl::StatusOr<kv_server::v2::GetValuesResponse>

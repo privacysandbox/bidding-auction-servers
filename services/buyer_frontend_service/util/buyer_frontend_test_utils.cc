@@ -39,6 +39,8 @@ using ::testing::_;
 using ::testing::An;
 using ::testing::AnyNumber;
 
+inline constexpr char kByosOutput[] = "byos_output";
+
 void SetupBiddingProviderMock(
     const MockAsyncProvider<BiddingSignalsRequest, BiddingSignals>& provider,
     const BiddingProviderMockOptions& options) {
@@ -61,6 +63,7 @@ void SetupBiddingProviderMock(
           if (!options.bidding_signals_value.empty()) {
             bidding_signals->trusted_signals =
                 std::make_unique<std::string>(options.bidding_signals_value);
+            bidding_signals->is_hybrid_v1_return = options.is_hybrid_v1_return;
           }
           std::move(on_done)(std::move(bidding_signals), get_byte_size);
         }
@@ -118,6 +121,34 @@ void SetupBiddingProviderMockV2(
                                /* response_metadata= */ {});
             return absl::OkStatus();
           });
+}
+
+void SetupBiddingProviderMockHybrid(
+    KVAsyncClientMock* kv_async_client,
+    const kv_server::v2::GetValuesResponse& response,
+    const std::string& v1_byos_output) {
+  EXPECT_CALL(
+      *kv_async_client,
+      ExecuteInternal(
+          An<std::unique_ptr<GetValuesRequest>>(), An<grpc::ClientContext*>(),
+          An<absl::AnyInvocable<
+              void(absl::StatusOr<std::unique_ptr<GetValuesResponse>>,
+                   ResponseMetadata) &&>>(),
+          An<absl::Duration>(), An<RequestConfig>()))
+      .WillOnce([v1_byos_output, response](
+                    std::unique_ptr<GetValuesRequest> get_values_raw_request,
+                    grpc::ClientContext* context, auto on_done,
+                    absl::Duration timeout, RequestConfig request_config) {
+        std::string byos_output_passed_to_v2_request =
+            get_values_raw_request->metadata()
+                .fields()
+                .at(kByosOutput)
+                .string_value();
+        EXPECT_EQ(v1_byos_output, byos_output_passed_to_v2_request);
+        std::move(on_done)(std::make_unique<GetValuesResponse>(response),
+                           /* response_metadata= */ {});
+        return absl::OkStatus();
+      });
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

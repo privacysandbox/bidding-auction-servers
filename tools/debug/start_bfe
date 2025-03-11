@@ -18,9 +18,18 @@ source $(dirname "$0")/common
 BUYER_KV_SERVER_ADDR="${BUYER_KV_SERVER_ADDR:-}"
 BUYER_TKV_V2_SERVER_ADDR="${BUYER_TKV_V2_SERVER_ADDR:-}"
 BIDDING_SERVER_ADDR="${BIDDING_SERVER_ADDR:-127.0.0.1:${BIDDING_PORT}}"
+BIDDING_SIGNALS_FETCH_MODE="${BIDDING_SIGNALS_FETCH_MODE:-"REQUIRED"}"
+
+SERVICE_NAME=buyer_frontend
+BIN=${SERVICE_NAME}
+if [[ -z $1 ]]; then
+  # When we load from .tar file, we don't mount the binary
+  # and it is embededd as "server"
+  BIN="server"
+fi
 
 SERVER_START_CMD=$(cat << END
-/server/bin/server \
+/server/bin/${BIN} \
 --init_config_client="false" \
 --port=${BFE_PORT} \
 --https_fetch_skips_tls_verification="${SKIP_TLS_VERIFICATION}" \
@@ -28,7 +37,7 @@ SERVER_START_CMD=$(cat << END
 --bidding_server_addr="${BIDDING_SERVER_ADDR}" \
 --buyer_kv_server_addr="${BUYER_KV_SERVER_ADDR}" \
 --buyer_tkv_v2_server_addr="${BUYER_TKV_V2_SERVER_ADDR}" \
---bidding_signals_fetch_mode="REQUIRED" \
+--bidding_signals_fetch_mode="${BIDDING_SIGNALS_FETCH_MODE}" \
 --enable_buyer_frontend_benchmarking="true" \
 --generate_bid_timeout_ms=60000 \
 --bidding_signals_load_timeout_ms 60000 \
@@ -49,16 +58,5 @@ SERVER_START_CMD=$(cat << END
 END
 )
 
-if [[ $1 == "--gdb" ]]; then
-  export PROJECT_ROOT=$(git rev-parse --show-toplevel)
-  export EXTRA_DOCKER_RUN_ARGS=(
-    "--volume=${PROJECT_ROOT}/bazel-bin/services/buyer_frontend_service/server:/server/bin/server"
-    "--name=bfe"
-  )
-  ${PROJECT_ROOT}/builders/tools/cbuild --seccomp-unconfined \
-  --docker-network host --image build-debian \
-  --cmd "apt-get update && apt-get -y install gdb && gdb -ex=r --args ${SERVER_START_CMD}"
-else
-  docker_image_uri="$(docker load -i dist/debian/buyer_frontend_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")"
-  docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
-fi
+PROF_PORT="${PROF_PORT:-1235}"
+run_server "$1" "${SERVICE_NAME}" "${SERVER_START_CMD}" ${PROF_PORT}

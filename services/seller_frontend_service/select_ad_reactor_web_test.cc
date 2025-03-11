@@ -109,6 +109,9 @@ class SelectAdReactorForWebTest : public ::testing::Test {
     config_.SetOverride("dns:///kv-v2-host", TRUSTED_KEY_VALUE_V2_SIGNALS_HOST);
     config_.SetOverride(kSignalsRequired, SCORING_SIGNALS_FETCH_MODE);
     config_.SetOverride("", HEADER_PASSED_TO_BUYER);
+
+    EXPECT_CALL(*this->executor_, Run)
+        .WillRepeatedly([](absl::AnyInvocable<void()> closure) { closure(); });
   }
 
   void SetProtectedAuctionCipherText(
@@ -124,8 +127,7 @@ class SelectAdReactorForWebTest : public ::testing::Test {
 
   TrustedServersConfigClient config_ = TrustedServersConfigClient({});
   const HpkeKeyset default_keyset_ = HpkeKeyset{};
-  std::unique_ptr<server_common::Executor> executor_ =
-      std::make_unique<MockExecutor>();
+  std::unique_ptr<MockExecutor> executor_ = std::make_unique<MockExecutor>();
   std::unique_ptr<KAnonGrpcClient> k_anon_grpc_client_ =
       std::make_unique<KAnonGrpcClient>(
           KAnonClientConfig{.ca_root_pem = kTestCaCertPath});
@@ -172,7 +174,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyCborEncoding) {
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
                  << MessageToJson(response_with_cbor);
 
@@ -247,7 +250,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyChaffedResponse) {
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
 
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
@@ -422,7 +426,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyLogContextPropagates) {
                          /* *crypto_client = */ nullptr,
                          std::move(async_reporter)};
   SelectAdResponse response_with_cbor =
-      RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
+      RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request,
+                                               this->executor_.get());
 }
 
 TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
@@ -483,7 +488,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyBadInputGetsValidated) {
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -549,7 +555,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyNoBuyerInputsIsAnError) {
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -624,7 +631,8 @@ TYPED_TEST(SelectAdReactorForWebTest,
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   EXPECT_FALSE(response_with_cbor.auction_result_ciphertext().empty());
 
   // Decrypt the response.
@@ -812,7 +820,8 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyConsentedDebugConfigPropagates) {
                                 buyer_front_end_async_client_factory_mock);
 
   SelectAdResponse response_with_cbor =
-      RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request);
+      RunReactorRequest<SelectAdReactorForWeb>(this->config_, clients, request,
+                                               this->executor_.get());
 }
 
 TYPED_TEST(SelectAdReactorForWebTest,
@@ -843,7 +852,8 @@ TYPED_TEST(SelectAdReactorForWebTest,
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
                  << MessageToJson(response_with_cbor);
 
@@ -926,7 +936,8 @@ TYPED_TEST(SelectAdReactorForWebTest, FailsEncodingWhenModifiedBidIsZero) {
 
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
                  << MessageToJson(response_with_cbor);
 
@@ -973,7 +984,8 @@ TYPED_TEST(SelectAdReactorForWebTest,
 
   SelectAdResponse response_with_proto =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, request_with_context.select_ad_request);
+          this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get());
   ABSL_LOG(INFO) << "Encrypted SelectAdResponse:\n"
                  << MessageToJson(response_with_proto);
   ASSERT_FALSE(response_with_proto.auction_result_ciphertext().empty());
@@ -1086,6 +1098,7 @@ TYPED_TEST(SelectAdReactorForWebTest, VerifyPopulatedKAnonAuctionResultData) {
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get(),
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
           /*per_adtech_paapi_contributions_limit=*/100,
@@ -1294,6 +1307,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
   SelectAdResponse response_with_proto =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get(),
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
           /*per_adtech_paapi_contributions_limit=*/100,
@@ -1489,6 +1503,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get(),
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
           /*per_adtech_paapi_contributions_limit=*/100,
@@ -1694,6 +1709,7 @@ TYPED_TEST(SelectAdReactorForWebTest, QueriesAllRequiredHashes) {
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get(),
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
           /*per_adtech_paapi_contributions_limit=*/100,
@@ -1817,6 +1833,7 @@ TYPED_TEST(SelectAdReactorForWebTest, SetsKAnonStatusOnScoringRequests) {
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get(),
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
           /*per_adtech_paapi_contributions_limit=*/100,
@@ -1947,6 +1964,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get(),
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
           /*per_adtech_paapi_contributions_limit=*/100,
@@ -2044,6 +2062,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get(),
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
           /*per_adtech_paapi_contributions_limit=*/100,
@@ -2137,6 +2156,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
   SelectAdResponse response_with_cbor =
       RunReactorRequest<SelectAdReactorForWeb>(
           this->config_, clients, request_with_context.select_ad_request,
+          this->executor_.get(),
           /*enable_kanon=*/true,
           /*enable_buyer_private_aggregate_reporting=*/false,
           /*per_adtech_paapi_contributions_limit=*/100,

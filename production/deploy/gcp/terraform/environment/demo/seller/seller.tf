@@ -145,26 +145,33 @@ module "seller" {
     # Note: Setting this flag to true will disable validation of buyerReportWinJsUrls.
     TEST_MODE = "false" # Do not change unless you are testing without key fetching.
 
-    ENABLE_AUCTION_SERVICE_BENCHMARK       = ""            # Example: "false"
-    GET_BID_RPC_TIMEOUT_MS                 = ""            # Example: "60000"
+    ENABLE_AUCTION_SERVICE_BENCHMARK = ""            # Example: "false"
+    GET_BID_RPC_TIMEOUT_MS           = ""            # Example: "60000"
+    SCORE_ADS_RPC_TIMEOUT_MS         = ""            # Example: "60000"
+    SELLER_ORIGIN_DOMAIN             = ""            # Example: "https://sellerorigin.com"
+    K_ANON_API_KEY                   = "PLACEHOLDER" # API Key used to query k-anon service.
+
+    # [BEGIN] Trusted KV real time signal fetching params
+    ENABLE_TKV_V2_BROWSER                  = ""            # Example: "false", Whether or not to use a trusted KV for browser clients. (Android clients traffic always need a trusted KV.)
+    TKV_EGRESS_TLS                         = ""            # Example: "false", Whether or not to use TLS when talking to TKV. (Useful when TKV is not in the same VPC/mesh)
+    TRUSTED_KEY_VALUE_V2_SIGNALS_HOST      = "PLACEHOLDER" # Example: "dns:///keyvaluesignals:443", Address where the TKV is listening.
     KEY_VALUE_SIGNALS_FETCH_RPC_TIMEOUT_MS = ""            # Example: "60000"
-    SCORE_ADS_RPC_TIMEOUT_MS               = ""            # Example: "60000"
-    SELLER_ORIGIN_DOMAIN                   = ""            # Example: "https://sellerorigin.com"
-    KEY_VALUE_SIGNALS_HOST                 = ""            # Example: "https://keyvaluesignals.com/trusted-signals"
-    K_ANON_API_KEY                         = "PLACEHOLDER" # API Key used to query k-anon service.
-    ENABLE_TKV_V2_BROWSER                  = ""            # Example: "false"
-    TKV_EGRESS_TLS                         = ""            # Example: "false"
-    TRUSTED_KEY_VALUE_V2_SIGNALS_HOST      = "PLACEHOLDER" # Example: "dns:///keyvaluesignals:443"
-    BUYER_SERVER_HOSTS                     = ""            # Example: "{ \"https://example-bidder.com\": { \"url\": \"dns:///bidding-service-host:443\", \"cloudPlatform\": \"GCP\" } }"
-    SELLER_CLOUD_PLATFORMS_MAP             = ""            # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
-    ENABLE_SELLER_FRONTEND_BENCHMARKING    = ""            # Example: "false"
-    ENABLE_AUCTION_COMPRESSION             = ""            # Example: "false"
-    ENABLE_BUYER_COMPRESSION               = ""            # Example: "false"
-    ENABLE_PROTECTED_APP_SIGNALS           = ""            # Example: "false"
-    ENABLE_PROTECTED_AUDIENCE              = ""            # Example: "true"
-    PS_VERBOSITY                           = ""            # Example: "10"
-    CREATE_NEW_EVENT_ENGINE                = ""            # Example: "false"
-    SELLER_CODE_FETCH_CONFIG               = ""            # Example:
+    # [END] Trusted KV real time signal fetching params
+
+    # [BEGIN] Untrusted KV real time signal fetching params
+    KEY_VALUE_SIGNALS_HOST = "" # Example: "https://keyvaluesignals.com/trusted-signals"
+    # [END] Untrusted KV real time signal fetching params
+
+    BUYER_SERVER_HOSTS                  = "" # Example: "{ \"https://example-bidder.com\": { \"url\": \"dns:///bidding-service-host:443\", \"cloudPlatform\": \"GCP\" } }"
+    SELLER_CLOUD_PLATFORMS_MAP          = "" # Example: "{ \"https://partner-seller1.com\": "GCP", \"https://partner-seller2.com\": "AWS"}"
+    ENABLE_SELLER_FRONTEND_BENCHMARKING = "" # Example: "false"
+    ENABLE_AUCTION_COMPRESSION          = "" # Example: "false"
+    ENABLE_BUYER_COMPRESSION            = "" # Example: "false"
+    ENABLE_PROTECTED_APP_SIGNALS        = "" # Example: "false"
+    ENABLE_PROTECTED_AUDIENCE           = "" # Example: "true"
+    PS_VERBOSITY                        = "" # Example: "10"
+    CREATE_NEW_EVENT_ENGINE             = "" # Example: "false"
+    SELLER_CODE_FETCH_CONFIG            = "" # Example:
     # "{
     #     "fetchMode": 0,
     #     "auctionJsPath": "",
@@ -194,8 +201,6 @@ module "seller" {
     K_ANON_CLIENT_TIME_OUT_MS           = "" # Example: "60000"
     NUM_K_ANON_SHARDS                   = "" # Example: "1"
     NUM_NON_K_ANON_SHARDS               = "" # Example: "1"
-    TEST_MODE_K_ANON_CACHE_TTL_MS       = "" # Example: "180"
-    TEST_MODE_NON_K_ANON_CACHE_TTL_MS   = "" # Example: "180"
     ENABLE_K_ANON_QUERY_CACHE           = "" # Example: "true"
     # Coordinator-based attestation flags.
     # These flags are production-ready and you do not need to change them.
@@ -241,6 +246,10 @@ module "seller" {
 
     # Http headers in sfe request to be passed in bfe request, in lower case separated by comma without space.
     # Example:  HEADER_PASSED_TO_BUYER =  "exp-id,exp-id789"
+
+    ALLOW_COMPRESSED_AUCTION_CONFIG = "" # Example: "true"
+    ENABLE_PRIORITY_VECTOR          = "" # Example: "true"
+    ENABLE_BUYER_CACHING            = "" # Example: "true"
   }, each.value.runtime_flag_override)
 
   frontend_domain_name               = local.seller_domain_name

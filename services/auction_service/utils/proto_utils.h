@@ -111,8 +111,8 @@ constexpr int ScoreArgIndex(ScoreAdArgs arg) {
 /**
  * Maps GhostWinnerForTopLevelAuction object to AdWithBidMetadata object for
  * creating dispatch requests and performing post auction operations.
- * The ghost_winner object is invalidated after this method is called
- * since this method will try to move values rather than copy.
+ * The fields related to bid in this object are invalidated after this method
+ * is called since this method will try to move values rather than copy.
  */
 std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>
 MapKAnonGhostWinnerToAdWithBidMetadata(
@@ -123,12 +123,23 @@ MapKAnonGhostWinnerToAdWithBidMetadata(
 /**
  * Maps component auction result object to AdWithBidMetadata object for
  * creating dispatch requests and performing post auction operations.
- * The auction result object is invalidated after this method is called
- * since this method will try to move values rather than copy.
+ * The fields related to bid in this object are invalidated after this method
+ * is called since this method will try to move values rather than copy.
  */
 std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>
 MapAuctionResultToAdWithBidMetadata(AuctionResult& auction_result,
                                     bool k_anon_status = false);
+
+/**
+ * Maps component auction result object to ProtectedAppSignalsAdWithBidMetadata
+ * object for creating dispatch requests and performing post auction operations.
+ * The fields related to bid in this object are invalidated after this method
+ * is called since this method will try to move values rather than copy.
+ */
+std::unique_ptr<
+    ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata>
+MapAuctionResultToProtectedAppSignalsAdWithBidMetadata(
+    AuctionResult& auction_result, bool k_anon_status = false);
 
 /**
  * Builds the ScoreAdInput, following the description here:

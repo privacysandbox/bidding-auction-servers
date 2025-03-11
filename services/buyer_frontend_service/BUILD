@@ -141,6 +141,7 @@ cc_binary(
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:signal_handler",
         "//services/common/util:tcmalloc_utils",
         "@aws_sdk_cpp//:core",
         "@com_github_grpc_grpc//:grpc++",

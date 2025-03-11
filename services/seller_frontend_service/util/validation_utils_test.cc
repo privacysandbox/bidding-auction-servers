@@ -270,8 +270,7 @@ TEST(ValidateComponentAuctionResultTest, ReportsErrors) {
   std::string generation_id = MakeARandomString();
   AuctionResult component_auction_result = MakeARandomComponentAuctionResult(
       MakeARandomString(), MakeARandomString());
-  component_auction_result.set_ad_type(
-      AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD);
+  component_auction_result.set_ad_type(AdType::AD_TYPE_UNKNOWN);
   component_auction_result.mutable_win_reporting_urls()
       ->mutable_top_level_seller_reporting_urls()
       ->set_reporting_url(MakeARandomString());

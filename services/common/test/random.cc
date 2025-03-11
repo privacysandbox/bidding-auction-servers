@@ -649,6 +649,8 @@ AdWithBid MakeARandomAdWithBid(int64_t seed, bool debug_reporting_enabled,
   }
   *bid.add_private_aggregation_contributions() =
       MakeARandomPrivateAggregationContribution(seed);
+  *bid.add_private_aggregation_contributions() =
+      MakeARandomPrivateAggregationContribution(seed);
   return bid;
 }
 
@@ -957,6 +959,15 @@ AuctionResult MakeARandomComponentAuctionResult(
   result.mutable_ad_component_render_urls()->Add(MakeARandomString());
   result.set_bid(MakeARandomNumber<float>(0.1, 1.0));
   result.set_bid_currency(MakeARandomString());
+  return result;
+}
+
+AuctionResult MakeARandomPASComponentAuctionResult(
+    std::string generation_id, std::string top_level_seller) {
+  AuctionResult result = MakeARandomComponentAuctionResult(
+      std::move(generation_id), std::move(top_level_seller), {});
+  result.set_interest_group_name("");
+  result.set_ad_type(AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD);
   return result;
 }
 }  // namespace privacy_sandbox::bidding_auction_servers

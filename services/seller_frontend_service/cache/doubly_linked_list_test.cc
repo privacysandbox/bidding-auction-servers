@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "services/seller_frontend_service/k_anon/doubly_linked_list.h"
+#include "services/seller_frontend_service/cache/doubly_linked_list.h"
 
 #include "absl/strings/string_view.h"
 #include "include/gtest/gtest.h"
@@ -29,16 +29,16 @@ class DoublyLinkedListTest : public ::testing::Test {
  protected:
   DoublyLinkedList<std::string, std::string> dll_;
 
-  std::unique_ptr<KAnonHashData<std::string, std::string>> TestHashData1() {
-    return std::make_unique<KAnonHashData<std::string, std::string>>(
-        KAnonHashData<std::string, std::string>{
+  std::unique_ptr<CacheHashData<std::string, std::string>> TestHashData1() {
+    return std::make_unique<CacheHashData<std::string, std::string>>(
+        CacheHashData<std::string, std::string>{
             .key = kTestKey1,
         });
   }
 
-  std::unique_ptr<KAnonHashData<std::string, std::string>> TestHashData2() {
-    return std::make_unique<KAnonHashData<std::string, std::string>>(
-        KAnonHashData<std::string, std::string>{
+  std::unique_ptr<CacheHashData<std::string, std::string>> TestHashData2() {
+    return std::make_unique<CacheHashData<std::string, std::string>>(
+        CacheHashData<std::string, std::string>{
             .key = kTestKey2,
         });
   }

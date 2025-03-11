@@ -79,9 +79,10 @@ TEST(GrpcMetadataToRequestMetadata, MapsKeysInArrayFromGrpcContextToMetadata) {
   std::array old_keys_to_new_keys = CreateKeyPairsMap<2>(original, new_keys);
   std::multimap grpc_metadata = CreateGrpcMetadata(original);
 
-  RequestMetadata output =
+  absl::StatusOr<RequestMetadata> output =
       GrpcMetadataToRequestMetadata(grpc_metadata, old_keys_to_new_keys);
-  VerifyOnlyKeysInArrayMappedFromGrpcContextToMetadata(original, output,
+  ASSERT_TRUE(output.ok()) << output.status();
+  VerifyOnlyKeysInArrayMappedFromGrpcContextToMetadata(original, *output,
                                                        old_keys_to_new_keys);
 }
 
@@ -92,9 +93,10 @@ TEST(GrpcMetadataToRequestMetadata, IgnoresKeysFromGrpcContextNotInArray) {
   auto old_keys_to_new_keys = CreateKeyPairsMap<1>(original, new_keys);
   auto grpc_metadata = CreateGrpcMetadata(original);
 
-  RequestMetadata output =
+  absl::StatusOr<RequestMetadata> output =
       GrpcMetadataToRequestMetadata(grpc_metadata, old_keys_to_new_keys);
-  VerifyOnlyKeysInArrayMappedFromGrpcContextToMetadata(original, output,
+  ASSERT_TRUE(output.ok()) << output.status();
+  VerifyOnlyKeysInArrayMappedFromGrpcContextToMetadata(original, *output,
                                                        old_keys_to_new_keys);
 }
 
@@ -106,9 +108,25 @@ TEST(GrpcMetadataToRequestMetadata, HandlesEmptyInput) {
   auto old_keys_to_new_keys = CreateKeyPairsMap<1>(sample, new_keys);
   auto grpc_metadata = CreateGrpcMetadata(empty_map);
 
-  RequestMetadata output =
+  absl::StatusOr<RequestMetadata> output =
       GrpcMetadataToRequestMetadata(grpc_metadata, old_keys_to_new_keys);
-  EXPECT_EQ(empty_map, output);
+  ASSERT_TRUE(output.ok()) << output.status();
+  EXPECT_EQ(empty_map, *output);
+}
+
+TEST(GrpcMetadataToRequestMetadata, IsValidHeader) {
+  EXPECT_FALSE(IsValidHeader("valid", "invalid \xC3 \xA9"));
+  EXPECT_FALSE(IsValidHeader("\xF9 (invalid) \xD9", "valid"));
+  EXPECT_FALSE(IsValidHeader("INVALID", "valid"));
+  EXPECT_TRUE(IsValidHeader("-valid_", "V A L I D !@#$%^&*()_+"));
+  EXPECT_TRUE(IsValidHeader(
+      "x-user-agent",
+      "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) "
+      "Chrome/121.0.6167.101 Mobile Safari/537.36,gzip(foo)"));
+  EXPECT_TRUE(IsValidHeader("x-bna-client-ip",
+                            "0000:000:zz0z:000:00zz:00z0:z000:0000"));
+  EXPECT_TRUE(IsValidHeader("x-accept-language",
+                            "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"));
 }
 
 TEST(RequestMetadataToHttpHeaders, ConvertsMapToHeaders) {

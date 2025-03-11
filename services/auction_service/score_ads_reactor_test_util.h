@@ -24,34 +24,84 @@
 
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/test/mocks.h"
+#include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 using ProtectedAppSignalsAdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
 
-constexpr char kKeyId[] = "keyid";
-constexpr char kSecret[] = "secret";
-constexpr float kTestBid = 1.25;
-constexpr char kTestProtectedAppSignalsAdOwner[] = "https://PAS-Ad-Owner.com";
-constexpr char kTestReportingWinResponseJson[] =
-    R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"], "sellerErrors":["testLog"], "sellerWarnings":["testLog"],
-"reportWinResponse":{"reportWinUrl":"http://reportWinUrl.com","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"buyerLogs":["testLog"], "buyerErrors":["testLog"], "buyerWarnings":["testLog"]})";
-constexpr char kTestReportingResponseJson[] =
-    R"({"reportResultResponse":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","sendReportToInvoked":true,"registerAdBeaconInvoked":true,"interactionReportingUrls":{"click":"http://event.com"}},"sellerLogs":["testLog"]})";
-constexpr char kEmptyTestReportingResponseJson[] =
-    R"({"reportResultResponse":{"reportResultUrl":"","sendReportToInvoked":false,"registerAdBeaconInvoked":false,"interactionReportingUrls":{}},"sellerLogs":[], "sellerErrors":[], "sellerWarnings":[])";
-constexpr char kTestReportResultResponseJson[] =
-    R"({"response":{"reportResultUrl":"http://reportResultUrl.com","signalsForWinner":"{testKey:testValue}","interactionReportingUrls":{"click":"http://event.com"}},"logs":["testLog"], "errors":["testLog"], "warnings":["testLog"]})";
-constexpr char kTestTopLevelReportResultUrl[] = "http://reportResultUrl.com";
+struct ScoreAdsRawRequestOptions {
+  absl::string_view seller_signals = kTestSellerSignals;
+  absl::string_view auction_signals = kTestAuctionSignals;
+  absl::string_view scoring_signals = kTestScoringSignals;
+  absl::string_view publisher_hostname = kTestPublisherHostName;
+  const bool enable_debug_reporting = false;
+  const bool enable_adtech_code_logging = false;
+  absl::string_view top_level_seller = "";
+  absl::string_view seller_currency = "";
+  const uint32_t seller_data_version = kSellerDataVersion;
+};
+
+ScoreAdsRequest::ScoreAdsRawRequest BuildRawRequest(
+    std::vector<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>
+        ads_with_bids_to_add,
+    const ScoreAdsRawRequestOptions& options = ScoreAdsRawRequestOptions{});
+
+ScoreAdsRequest::ScoreAdsRawRequest BuildProtectedAppSignalsRawRequest(
+    std::vector<ScoreAdsRequest::ScoreAdsRawRequest::
+                    ProtectedAppSignalsAdWithBidMetadata>
+        ads_with_bids_to_add,
+    const ScoreAdsRawRequestOptions& options = ScoreAdsRawRequestOptions{});
+
+struct AdWithBidMetadataParams {
+  absl::string_view render_url = kTestRenderUrl;
+  const float bid = kTestBid;
+  absl::string_view interest_group_name = kTestInterestGroupName;
+  absl::string_view interest_group_owner = kTestInterestGroupOwner;
+  absl::string_view interest_group_origin = kInterestGroupOrigin;
+  const double ad_cost = kTestAdCost;
+  const uint32_t data_version = kTestDataVersion;
+  std::optional<absl::string_view> buyer_reporting_id;
+  std::optional<absl::string_view> buyer_and_seller_reporting_id;
+  std::optional<absl::string_view> selected_buyer_and_seller_reporting_id;
+  const int number_of_component_ads = kTestNumOfComponentAds;
+  const bool k_anon_status = false;
+  absl::string_view metadata_key = kTestMetadataKey;
+  const int metadata_value = kTestAdMetadataValue;
+  absl::string_view ad_component_render_url_base =
+      kTestAdComponentRenderUrlBase;
+  absl::string_view bid_currency = "";
+  const bool make_metadata = true;
+};
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
+BuildTestAdWithBidMetadata(
+    const AdWithBidMetadataParams& params = AdWithBidMetadataParams{});
 
 ProtectedAppSignalsAdWithBidMetadata GetProtectedAppSignalsAdWithBidMetadata(
     absl::string_view render_url, float bid = kTestBid);
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
+GetTestAdWithBidBarbecueWithComponents();
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata GetTestAdWithBidBar(
+    absl::string_view buyer_reporting_id = "");
+
+void PopulateTestAdWithBidMetdata(
+    const PostAuctionSignals& post_auction_signals,
+    const BuyerReportingDispatchRequestData& buyer_dispatch_data,
+    ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata&
+        ad_with_bid_metadata);
+
+ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata
+GetTestAdWithBidBarbecue();
 
 void SetupTelemetryCheck(const ScoreAdsRequest& request);
 

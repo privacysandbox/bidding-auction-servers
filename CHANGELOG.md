@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.8.0 (2025-03-06)
+
+
+### Features
+
+* *_signals_fetch_mode works in local startup scripts
+* Add BYOB functional support for AWS
+* Add DOCKER_IMAGE_URI param to local startup scripts
+* Add ENABLE_BUYER_CACHING flag to Terraform
+* Add hybrid logic for buyers ([04229da]( )), closes [/github.com/WICG/turtledove/blob/692ad8825e9b7e6b1b1347b9b0d38ee1fdaadf63/FLEDGE_Key_Value_Server_API.md#query-api-version-1]( ) [/github.com/WICG/turtledove/blob/main/FLEDGE_Key_Value_Server_API.md#query-api-version-2]( )
+* Add invoked buyers cache on SFE
+* Implement support for PAS top level auction in SFE
+* Migrate B&A repo off of BatchExecute
+* Modify libcurl to set maxes for connections
+* Parse per key value string into structured rapidjson value
+* Update BYOB to use NSJail sandbox
+* Winning ad component seller domain included in response for Android top level auction
+
+
+### Bug Fixes
+
+* Collect debug urls from generateBid binary only when enableBuyerDebugUrlGeneration is true
+* Expect bytestring for GhostWinnerPrivateAggregationSignals' bucket field
+* Fix gdb command for local services
+* Fixes the non k-anon cache metric
+* Mount roots.pem for SFE
+* Rename /etc/roots.pem to default location
+* Revert use of confidential_instance_type in terraform-provider-google
+* terraform plan less noisy for blob load status dashboard (gh issue [#35]( ))
+* Use default event engine for K-Anon/invoked buyer cache
+* Validate gRPC headers on SFE/BFE/Bidding services
+
 ## 4.7.0 (2025-02-11)
 
 

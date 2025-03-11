@@ -21,7 +21,7 @@ import boto3
 from google.cloud import monitoring_v3
 from google.api import metric_pb2
 from datetime import timezone
-from tools.cost_estimation.utils import log_and_get_file_path
+from utils import log_and_get_file_path
 
 logger = logging.getLogger(__name__)
 

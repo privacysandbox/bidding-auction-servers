@@ -711,6 +711,41 @@ TEST(CreateGenerateProtectedAppSignalsBidsRawRequestTest,
             kTestProtectedAppSignals);
   EXPECT_EQ(request->seller(), kTestSeller);
   EXPECT_EQ(request->publisher_name(), kTestPublisherName);
+  EXPECT_TRUE(request->top_level_seller().empty());
+  EXPECT_TRUE(request->enable_debug_reporting());
+  EXPECT_TRUE(request->enable_unlimited_egress());
+  ASSERT_TRUE(request->enforce_kanon());
+  EXPECT_EQ(request->multi_bid_limit(), kTestMultiBidLimit);
+  EXPECT_EQ(request->log_context().generation_id(), kTestGenerationId);
+  EXPECT_EQ(request->log_context().adtech_debug_id(), kTestAdTechDebugId);
+  EXPECT_TRUE(request->consented_debug_config().is_consented());
+  EXPECT_EQ(request->consented_debug_config().token(),
+            kTestConsentedDebuggingToken);
+  ASSERT_TRUE(request->has_contextual_protected_app_signals_data());
+  ASSERT_EQ(
+      request->contextual_protected_app_signals_data().ad_render_ids_size(), 1);
+  EXPECT_EQ(
+      request->contextual_protected_app_signals_data().ad_render_ids().at(0),
+      kTestContextualPasAdRenderId);
+}
+
+TEST(CreateGenerateProtectedAppSignalsBidsRawRequestTest,
+     SetsAppropriateFieldsForComponentAuction) {
+  auto get_bids_request = CreateGetBidsRawRequest();
+  get_bids_request.set_top_level_seller(kTestSeller);
+
+  auto request = CreateGenerateProtectedAppSignalsBidsRawRequest(
+      get_bids_request, /*enable_kanon=*/true);
+
+  EXPECT_EQ(request->auction_signals(), kTestAuctionSignals);
+  EXPECT_EQ(request->buyer_signals(), kTestBuyerSignals);
+  EXPECT_EQ(request->protected_app_signals().encoding_version(),
+            kTestEncodingVersion);
+  EXPECT_EQ(request->protected_app_signals().app_install_signals(),
+            kTestProtectedAppSignals);
+  EXPECT_EQ(request->seller(), kTestSeller);
+  EXPECT_EQ(request->publisher_name(), kTestPublisherName);
+  EXPECT_EQ(request->top_level_seller(), kTestSeller);
   EXPECT_TRUE(request->enable_debug_reporting());
   EXPECT_TRUE(request->enable_unlimited_egress());
   ASSERT_TRUE(request->enforce_kanon());

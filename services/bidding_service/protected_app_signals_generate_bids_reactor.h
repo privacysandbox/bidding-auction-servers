@@ -240,6 +240,8 @@ class ProtectedAppSignalsGenerateBidsReactor
   std::unique_ptr<metric::BiddingContext> metric_context_;
 
   const bool enable_temporary_unlimited_egress_;
+
+  AuctionScope auction_scope_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

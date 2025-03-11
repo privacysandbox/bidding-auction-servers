@@ -19,20 +19,20 @@ import yaml
 import logging
 from datetime import datetime
 
-from tools.cost_estimation.utils import (
+from utils import (
     read_from_yaml_or_die,
     write_to_named_or_temp_file,
     dict_to_csv,
     log_and_get_file_path,
 )
-from tools.cost_estimation.sql_expr import SqlExecutor
-from tools.cost_estimation.metrics_loader import (
+from sql_expr import SqlExecutor
+from metrics_loader import (
     CsvFileMetricsLoader,
     GcpMetricsLoader,
     AwsMetricsLoader,
 )
-from tools.cost_estimation.render import CsvRenderer
-from tools.cost_estimation.estimator import CostEstimator
+from render import CsvRenderer
+from estimator import CostEstimator
 
 logger = logging.getLogger(__name__)
 

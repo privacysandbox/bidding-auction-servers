@@ -222,13 +222,13 @@ template <class T>
 SelectAdResponse RunRequest(
     const TrustedServersConfigClient& config_client,
     const ClientRegistry& clients, const SelectAdRequest& request,
-    const ReportWinMap& report_win_map, const int max_buyers_solicited = 2,
-    const bool enable_kanon = false,
+    server_common::Executor* executor, const ReportWinMap& report_win_map,
+    const int max_buyers_solicited = 2, const bool enable_kanon = false,
     const bool enable_buyer_private_aggregate_reporting = false,
     int per_adtech_paapi_contributions_limit = 100) {
   grpc::CallbackServerContext context;
   SelectAdResponse response;
-  T reactor(&context, &request, &response, clients, config_client,
+  T reactor(&context, &request, &response, executor, clients, config_client,
             report_win_map,
             /*enable_cancellation=*/false, enable_kanon,
             enable_buyer_private_aggregate_reporting,
@@ -553,14 +553,14 @@ template <typename T>
 SelectAdResponse RunReactorRequest(
     const TrustedServersConfigClient& config_client,
     const ClientRegistry& clients, const SelectAdRequest& request,
-    bool enable_kanon = false,
+    server_common::Executor* executor, bool enable_kanon = false,
     bool enable_buyer_private_aggregate_reporting = false,
     int per_adtech_paapi_contributions_limit = 100, bool fail_fast = false,
     const ReportWinMap& report_win_map = {}) {
   metric::SfeContextMap()->Get(&request);
   grpc::CallbackServerContext context;
   SelectAdResponse response;
-  T reactor(&context, &request, &response, clients, config_client,
+  T reactor(&context, &request, &response, executor, clients, config_client,
             report_win_map,
             /*enable_cancellation=*/false, enable_kanon,
             enable_buyer_private_aggregate_reporting,

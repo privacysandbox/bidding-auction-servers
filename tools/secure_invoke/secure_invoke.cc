@@ -83,12 +83,13 @@ int main(int argc, char** argv) {
       << "Failed to unescape private key.";
   std::string private_key_hex = absl::BytesToHexString(private_key_bytes);
 
-  std::string id =
+  auto id =
       privacy_sandbox::server_common::ToOhttpKeyId(absl::GetFlag(FLAGS_key_id));
+  CHECK_OK(id);
   const HpkeKeyset keyset = {
       .public_key = std::move(public_key_hex),
       .private_key = std::move(private_key_hex),
-      .key_id = static_cast<uint8_t>(stoi(id)),
+      .key_id = static_cast<uint8_t>(stoi(*std::move(id))),
   };
 
   std::optional<bool> enable_debug_reporting =

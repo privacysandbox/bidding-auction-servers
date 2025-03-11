@@ -43,6 +43,32 @@ sources to check in order to gain a full understanding of each flag:
    these integrate with the codebase, you can use the same principles as from step 1. For examples,
    please refer to `./buyer/buyer.tf` and `./seller/seller.tf`.
 
+#### Bring-Your-Own-Binary (BYOB) Flags
+
+1. Make your
+   [generateBid UDF binary](https://github.com/privacysandbox/protected-auction-services-docs/blob/main/bidding_auction_services_api.md#generatebid-binary-spec)
+   available via URL, cloud bucket, or local path (testing only), and add the corresponding BYOB
+   flags to `BUYER_CODE_FETCH_CONFIG`.
+
+    - URL: `"fetchMode": 0` and `"biddingExecutableUrl": "[your URL]"`
+    - Cloud bucket: `"fetchMode": 1`, `"protectedAuctionBiddingExecutableBucket": "[your bucket]"`,
+      and `"protectedAuctionBiddingExecutableBucketDefaultBlob": "[your default blob path]"`
+    - Local path: `"fetchMode": 2` and `"biddingExecutablePath": "[your path]"`
+
+    If the correct combination of `fetchMode` and `executableUrl/Path/Bucket` is not specified, the
+    server tries to load JS/WASM instead.
+
+1. Note that BYOB currently only supports Protected Audience. The `ENABLE_PROTECTED_AUDIENCE` flag
+   must be true and the `ENABLE_PROTECTED_APP_SIGNALS` flag must be false if the BYOB flags are set
+   or the server will crash.
+1. The `UDF_NUM_WORKERS` flag can be used to specify the number of workers to be started for the
+   UDF.
+1. Logs returned by the UDF in the `log_messages` field of `GenerateProtectedAudienceBidResponse`
+   are printed by servers built with non_prod build mode at verbosity level 3. The `PS_VERBOSITY`
+   flag should be set to >= 3 to view them. Note that the standard logs from the UDF
+   [are not exported for now](https://github.com/privacysandbox/data-plane-shared-libraries/blob/main/docs/roma/byob/sdk/docs/udf/Communication%20Interface.md#standard-output-stdout)
+   (this will be added later on in 2025).
+
 ### AWS Architecture Flags
 
 Running a stack in AWS requires a large number of parameters to be specified by the operator. These

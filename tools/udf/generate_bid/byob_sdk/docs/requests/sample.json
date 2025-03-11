@@ -20,7 +20,7 @@
         "join_count": 1,
         "bid_count": 15,
         "recency": 150000000,
-        "prev_wins": "[]"
+        "prev_wins_ms": "[]"
     },
     "server_metadata": {
         "debug_reporting_enabled": true,

@@ -18,6 +18,7 @@
 
 #include "absl/synchronization/notification.h"
 #include "gtest/gtest.h"
+#include "services/common/clients/http_kv_server/util/process_response.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 
@@ -169,6 +170,7 @@ TEST_F(KeyValueAsyncHttpClientTest,
                     expected_output_struct->result);
           EXPECT_EQ(actualOutputStruct.value()->data_version,
                     expected_output_struct->data_version);
+          EXPECT_EQ(actualOutputStruct.value()->is_hybrid_v1_return, false);
         }
         callback_invoked.Notify();
       };
@@ -304,6 +306,115 @@ TEST_F(KeyValueAsyncHttpClientTest, NegativeDataVersionHeaderRejected) {
         absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
         headers[kDataVersionResponseHeaderName] =
             absl::StatusOr<std::string>(absl::StrFormat("%d", -5));
+        actual_http_response.headers = std::move(headers);
+        // Now, call the callback (Note: we defined it above!) with the
+        // 'response' from the 'server'
+        std::move(done_callback)(actual_http_response);
+      });
+
+  // Finally, actually call the function to perform the test
+  CheckGetValuesFromKeysViaHttpClient(std::move(input), {},
+                                      std::move(done_callback_to_check_val));
+  callback_invoked.WaitForNotification();
+}
+
+TEST_F(KeyValueAsyncHttpClientTest, HybridVOneOnlyHeaderIsPropagated) {
+  // Our client will be given this input object.
+  const GetBuyerValuesInput get_values_client_input = {
+      {"1j1043317685", "1j112014758"},
+      {"ig_name_likes_boots"},
+      "www.usatoday.com",
+      ClientType::CLIENT_TYPE_UNKNOWN,
+      kEgId};
+  // We must transform it to a unique ptr to match the function signature.
+  std::unique_ptr<GetBuyerValuesInput> input =
+      std::make_unique<GetBuyerValuesInput>(get_values_client_input);
+  // This is the URL we expect to see built from the input object.
+  absl::flat_hash_set<std::string> expected_urls;
+  expected_urls.emplace(absl::StrCat(
+      hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+      "&keys="
+      "1j1043317685,1j112014758&"
+      "interestGroupNames=ig_name_likes_boots"));
+  expected_urls.emplace(absl::StrCat(
+      hostname_, "?hostname=www.usatoday.com&experimentGroupId=", kEgId,
+      "&keys="
+      "1j112014758,1j1043317685&"
+      "interestGroupNames=ig_name_likes_boots"));
+  // Now we define what we expect to get back out of the client, which is a
+  // GetBuyerValuesOutput struct.
+  const std::string expected_response_body_json_string = R"json({
+            "keys": {
+              "1j1043317685": {
+                "constitution_author": "madison",
+                "money_man": "hamilton"
+              },
+              "1j112014758": {
+                "second_president": "adams"
+              }
+            },
+            "perInterestGroupData": {
+              "ig_name_likes_boots": {
+                "priorityVector": {
+                  "signal1": 1776
+                }
+              }
+            }
+          })json";
+
+  std::unique_ptr<GetBuyerValuesOutput> expected_output_struct =
+      std::make_unique<GetBuyerValuesOutput>(GetBuyerValuesOutput(
+          {expected_response_body_json_string, kRequestSizeDontCheck,
+           kResponseSizeDontCheck, kDataVersionHeaderValue}));
+
+  // Define the lambda function which is the callback.
+  // Inside this callback, we will actually check that the client correctly
+  // parses what it gets back from the "server" (mocked below).
+  absl::Notification callback_invoked;
+  absl::AnyInvocable<
+      void(absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>) &&>
+      done_callback_to_check_val =
+          // Capture the expected output struct for comparison
+      [&callback_invoked,
+       expected_output_struct = std::move(expected_output_struct)](
+          // This is what the client actually passes back
+          absl::StatusOr<std::unique_ptr<GetBuyerValuesOutput>>
+              actualOutputStruct) {
+        // We can't make any assertions here because if we do and they fail the
+        // callback will never be notified.
+        EXPECT_TRUE(actualOutputStruct.ok());
+        if (actualOutputStruct.ok()) {
+          EXPECT_EQ(actualOutputStruct.value()->result,
+                    expected_output_struct->result);
+          EXPECT_EQ(actualOutputStruct.value()->data_version,
+                    expected_output_struct->data_version);
+          EXPECT_EQ(actualOutputStruct.value()->is_hybrid_v1_return, true);
+        }
+        callback_invoked.Notify();
+      };
+
+  // Assert that the mocked fetcher will have the method FetchUrlWithMetadata
+  // called on it, with the URL being expected_url.
+  EXPECT_CALL(*mock_http_fetcher_async_, FetchUrlWithMetadata)
+      // If and when that happens: DEFINE that the FetchUrlWithMetadata function
+      // SHALL do the following:
+      //  (This part is NOT an assertion of expected behavior but rather a mock
+      //  defining what it shall be)
+      .WillOnce([actual_response_body_json_string =
+                     expected_response_body_json_string,
+                 &expected_urls](
+                    const HTTPRequest& request, int timeout_ms,
+                    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>)&&>
+                        done_callback) {
+        EXPECT_TRUE(expected_urls.contains(request.url));
+        HTTPResponse actual_http_response;
+        actual_http_response.body = actual_response_body_json_string;
+        // Add a valid header.
+        absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
+        headers[kDataVersionResponseHeaderName] = absl::StatusOr<std::string>(
+            absl::StrFormat("%d", kDataVersionHeaderValue));
+        headers[kHybridV1OnlyResponseHeaderName] =
+            absl::StatusOr<std::string>("true");
         actual_http_response.headers = std::move(headers);
         // Now, call the callback (Note: we defined it above!) with the
         // 'response' from the 'server'

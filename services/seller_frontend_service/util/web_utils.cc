@@ -449,24 +449,54 @@ absl::Status CborSerializekAnonGhostWinnerForTopLevelAuction(
   return absl::OkStatus();
 }
 
+absl::Status CborSerializekAnonGhostWinnerPrivateAggSignal(
+    const GhostWinnerPrivateAggregationSignals& signal,
+    ErrorHandler error_handler, cbor_item_t& root) {
+  ScopedCbor serialized_private_agg_signal(
+      cbor_new_definite_map(kNumGhostWinnerPrivateAggregationSignalsKeys));
+  PS_RETURN_IF_ERROR(CborSerializeInt(kValue, signal.value(), error_handler,
+                                      **serialized_private_agg_signal));
+  PS_RETURN_IF_ERROR(CborSerializeByteString(kBucket, signal.bucket(),
+                                             error_handler,
+                                             **serialized_private_agg_signal));
+
+  if (!cbor_array_push(&root, *serialized_private_agg_signal)) {
+    error_handler(
+        grpc::Status(grpc::INTERNAL,
+                     "Failed to serialize a "
+                     "GhostWinnerPrivateAggregationSignals object to CBOR"));
+    return absl::InternalError("");
+  }
+  return absl::OkStatus();
+}
+
 absl::Status CborSerializekAnonGhostWinnerPrivateAggSignals(
     absl::string_view key,
-    const GhostWinnerPrivateAggregationSignals& private_agg_signals,
+    const google::protobuf::RepeatedPtrField<
+        GhostWinnerPrivateAggregationSignals>& private_agg_signals,
     ErrorHandler error_handler, cbor_item_t& root) {
   ScopedCbor serialized_private_agg_signals(
-      cbor_new_definite_map(kNumGhostWinnerPrivateAggregationSignalsKeys));
-  PS_RETURN_IF_ERROR(CborSerializeInt(kValue, private_agg_signals.value(),
-                                      error_handler,
-                                      **serialized_private_agg_signals));
-  PS_RETURN_IF_ERROR(CborSerializeString(kBucket, private_agg_signals.bucket(),
-                                         error_handler,
-                                         **serialized_private_agg_signals));
+      cbor_new_definite_array(private_agg_signals.size()));
+  for (const auto& signal : private_agg_signals) {
+    if (auto status = CborSerializekAnonGhostWinnerPrivateAggSignal(
+            signal, error_handler, **serialized_private_agg_signals);
+        !status.ok()) {
+      error_handler(
+          grpc::Status(grpc::INTERNAL,
+                       "Failed to serialize an array of "
+                       "GhostWinnerPrivateAggregationSignals to CBOR"));
+      return absl::InternalError("");
+    }
+  }
   struct cbor_pair kv = {
-      .key = cbor_move(cbor_build_stringn(key.data(), key.size())),
+      .key = cbor_move(cbor_build_stringn(
+          kGhostWinnerPrivateAggregationSignals,
+          sizeof(kGhostWinnerPrivateAggregationSignals) - 1)),
       .value = *serialized_private_agg_signals};
   if (!cbor_map_add(&root, kv)) {
-    error_handler(grpc::Status(
-        grpc::INTERNAL, "Failed to serialize kAnonJoinCandidate to CBOR"));
+    error_handler(grpc::Status(grpc::INTERNAL,
+                               "Failed to serialize an array of "
+                               "GhostWinnerPrivateAggregationSignals to CBOR"));
     return absl::InternalError("");
   }
   return absl::OkStatus();
@@ -495,7 +525,7 @@ absl::Status CborSerializeKAnonGhostWinner(
         kanon_ghost_winner.ghost_winner_for_top_level_auction(), error_handler,
         **serialized_kanon_ghost_winner));
   }
-  if (kanon_ghost_winner.has_ghost_winner_private_aggregation_signals()) {
+  if (!kanon_ghost_winner.ghost_winner_private_aggregation_signals().empty()) {
     PS_RETURN_IF_ERROR(CborSerializekAnonGhostWinnerPrivateAggSignals(
         kGhostWinnerPrivateAggregationSignals,
         kanon_ghost_winner.ghost_winner_private_aggregation_signals(),
@@ -1190,14 +1220,13 @@ absl::Status CborDecodeGhostWinnerForTopLevelAuctionToProto(
   return absl::OkStatus();
 }
 
-absl::Status CborDecodePrivateAggregateSignalsToProto(
-    cbor_item_t* serialized_signals,
-    AuctionResult::KAnonGhostWinner::GhostWinnerPrivateAggregationSignals&
-        signals) {
+absl::StatusOr<GhostWinnerPrivateAggregationSignals>
+CborDecodePrivateAggregateSignalToProto(cbor_item_t* serialized_signals) {
   if (!cbor_isa_map(serialized_signals)) {
     return absl::InvalidArgumentError(
-        "Expected private aggregate signals to be a map");
+        "Expected each private aggregate signals entry to be a map");
   }
+  GhostWinnerPrivateAggregationSignals signal;
   absl::Span<struct cbor_pair> entries(cbor_map_handle(serialized_signals),
                                        cbor_map_size(serialized_signals));
   for (const auto& kv : entries) {
@@ -1209,16 +1238,30 @@ absl::Status CborDecodePrivateAggregateSignalsToProto(
     switch (FindKeyIndex<kNumGhostWinnerPrivateAggregationSignalsKeys>(
         kGhostWinnerPrivateAggregationSignalsKeys, key)) {
       case 0:  // kBucket
-        signals.set_bucket(CborDecodeString(kv.value));
+        signal.set_bucket(CborDecodeByteString(kv.value));
         break;
       case 1:  // kValue
-        signals.set_value(cbor_get_int(kv.value));
+        signal.set_value(cbor_get_int(kv.value));
         break;
       default:
         PS_VLOG(5)
             << "Unhandled key in ghost winner private aggregation signals: "
             << key;
     }
+  }
+  return signal;
+}
+
+absl::Status CborDecodePrivateAggregateSignalsToProto(
+    cbor_item_t* serialized_signals_arr,
+    google::protobuf::RepeatedPtrField<GhostWinnerPrivateAggregationSignals>&
+        signals) {
+  absl::Span<cbor_item_t*> entries(cbor_array_handle(serialized_signals_arr),
+                                   cbor_array_size(serialized_signals_arr));
+  for (cbor_item_t* entry : entries) {
+    PS_ASSIGN_OR_RETURN(auto decoded_private_agg_signal,
+                        CborDecodePrivateAggregateSignalToProto(entry));
+    *signals.Add() = std::move(decoded_private_agg_signal);
   }
   return absl::OkStatus();
 }
@@ -1881,6 +1924,7 @@ BuyerInputForBidding DecodeBuyerInput(absl::string_view owner,
                                    buyer_input_for_bidding);
           RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
                                 buyer_input_for_bidding);
+          break;
         }
         default:
           PS_VLOG(5) << "Serialized CBOR IG has an unexpected key: "
