@@ -36,6 +36,7 @@ module "networking" {
   operator       = var.operator
   environment    = var.environment
   vpc_cidr_block = var.vpc_cidr_block
+  forced_availability_zones = var.forced_availability_zones
 }
 
 module "security_groups" {
@@ -189,7 +190,7 @@ module "autoscaling_bidding" {
   operator                        = var.operator
   enclave_debug_mode              = var.enclave_debug_mode
   service                         = "bidding"
-  autoscaling_subnet_ids          = module.networking.private_subnet_ids
+  autoscaling_subnet_ids          = var.auto_scaling_use_first_zone ? [module.networking.private_subnet_ids[0]] : module.networking.private_subnet_ids
   instance_ami_id                 = coalesce(var.bidding_instance_ami_id, data.aws_ami_ids.bidding_amis.ids...)
   instance_security_group_id      = module.security_groups.instance_security_group_id
   instance_type                   = var.bidding_instance_type
@@ -280,7 +281,7 @@ module "autoscaling_bfe" {
   operator                        = var.operator
   enclave_debug_mode              = var.enclave_debug_mode
   service                         = "bfe"
-  autoscaling_subnet_ids          = module.networking.private_subnet_ids
+  autoscaling_subnet_ids          = var.auto_scaling_use_first_zone ? [module.networking.private_subnet_ids[0]] : module.networking.private_subnet_ids
   instance_ami_id                 = coalesce(var.bfe_instance_ami_id, data.aws_ami_ids.buyer_frontend_amis.ids...)
   instance_security_group_id      = module.security_groups.instance_security_group_id
   instance_type                   = var.bfe_instance_type
