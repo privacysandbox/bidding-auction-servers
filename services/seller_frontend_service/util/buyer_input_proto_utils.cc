@@ -17,22 +17,24 @@
 #include <string>
 
 #include "rapidjson/document.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/util/json_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 absl::StatusOr<std::string> ToPrevWinsMs(absl::string_view prev_wins) {
   absl::StatusOr<rapidjson::Document> document = ParseJsonString(prev_wins);
-
-  if (!document->IsArray()) {
-    return absl::InvalidArgumentError("");
+  if (!document.ok() || !document->IsArray()) {
+    return absl::InvalidArgumentError(
+        "Could not parse array from prev_wins field");
   }
 
   for (rapidjson::SizeType i = 0; i < document->Size(); i++) {
     rapidjson::Value& innerArray = (*document)[i];
     if (!(innerArray.IsArray() && innerArray.Size() == 2 &&
           innerArray[0].IsInt() && innerArray[1].IsString())) {
-      return absl::InvalidArgumentError("");
+      return absl::InvalidArgumentError(
+          "prev_wins supplied in an unexpected format");
     }
 
     int firstValue = innerArray[0].GetInt() * 1000;
@@ -56,10 +58,12 @@ BrowserSignalsForBidding ToBrowserSignalsForBidding(
 
   absl::StatusOr<std::string> prev_wins_ms =
       ToPrevWinsMs(signals_for_bidding.prev_wins());
-  if (prev_wins_ms.ok()) {
-    signals_for_bidding.set_prev_wins_ms(*prev_wins_ms);
+  if (!prev_wins_ms.ok()) {
+    PS_VLOG(8) << prev_wins_ms.status();
+    return signals_for_bidding;
   }
 
+  signals_for_bidding.set_prev_wins_ms(*prev_wins_ms);
   return signals_for_bidding;
 }
 

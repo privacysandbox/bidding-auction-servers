@@ -358,6 +358,7 @@ cc_library(
     ],
     deps = [
         "//api:bidding_auction_servers_cc_proto",
+        "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
         "@rapidjson",
     ],

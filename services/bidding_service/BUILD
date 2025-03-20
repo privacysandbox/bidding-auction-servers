@@ -19,7 +19,7 @@ load(
     "pkg_files",
 )
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES", "IS_PROD_BUILD_DEFINES")
 
 cc_library(
     name = "runtime_flags",
@@ -318,7 +318,7 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
-    local_defines = ENABLE_CORE_DUMPS_DEFINES,
+    local_defines = ENABLE_CORE_DUMPS_DEFINES + IS_PROD_BUILD_DEFINES,
     malloc = "@com_google_tcmalloc//tcmalloc",
     visibility = ["//visibility:public"],
     deps = [

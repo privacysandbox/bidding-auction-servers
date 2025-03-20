@@ -403,6 +403,8 @@ absl::Status RunServer() {
       protected_app_signals_generate_bids_reactor_factory;
 
   if (UdfConfigHasByob(udf_config)) {
+    CHECK(!PS_IS_PROD_BUILD)
+        << "BYOB is not available in prod builds right now";
     CHECK(enable_protected_audience) << kProtectedAudienceMustBeEnabled;
     CHECK(!enable_protected_app_signals) << kProtectedAppSignalsMustBeDisabled;
 
