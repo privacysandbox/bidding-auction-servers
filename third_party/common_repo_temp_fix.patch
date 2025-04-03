@@ -1,0 +1,19 @@
+diff --git a/src/roma/roma_service/roma_service.h b/src/roma/roma_service/roma_service.h
+index 07b9af41..361d4420 100644
+--- a/src/roma/roma_service/roma_service.h
++++ b/src/roma/roma_service/roma_service.h
+@@ -361,8 +361,12 @@ class RomaService {
+ 
+     PS_RETURN_IF_ERROR(
+         StoreMetadata(uuid_str, std::move(invocation_req->metadata)));
+-    PS_RETURN_IF_ERROR(dispatcher_->Invoke(std::move(*invocation_req),
+-                                           std::move(callback_wrapper)));
++    auto status = dispatcher_->Invoke(std::move(*invocation_req),
++                                      std::move(callback_wrapper));
++    if (!status.ok()) {
++      DeleteMetadata(uuid_str);
++      return status;
++    }
+     return ExecutionToken{std::move(uuid_str)};
+   }
+ 

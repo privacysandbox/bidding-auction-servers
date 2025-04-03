@@ -228,7 +228,6 @@ void RunInference(
   std::unique_ptr<InferenceService::StubInterface> stub =
       InferenceService::NewStub(InferenceChannel(executor));
 
-  PS_VLOG(kNoisyInfo) << "RunInference input: " << payload;
   PredictRequest predict_request;
   predict_request.set_input(payload);
 
@@ -237,6 +236,12 @@ void RunInference(
 
   if (roma_request_context.ok()) {
     predict_request.set_is_consented((*roma_request_context)->IsConsented());
+    RequestLogContext& log_context = (*roma_request_context)->GetLogContext();
+    PS_VLOG(kNoisyInfo, log_context)
+        << "PredictRequest: " << predict_request.DebugString();
+  } else {
+    PS_VLOG(kNoisyInfo) << "No Roma context. PredictRequest: "
+                        << predict_request.DebugString();
   }
 
   grpc::ClientContext context;
@@ -245,13 +250,11 @@ void RunInference(
       stub->Predict(&context, predict_request, &predict_response);
   if (rpc_status.ok()) {
     wrapper.io_proto.set_output_string(predict_response.output());
-    PS_VLOG(10) << "Inference response received: "
-                << predict_response.DebugString();
     if (roma_request_context.ok()) {
       RequestLogContext& log_context = (*roma_request_context)->GetLogContext();
-      PS_VLOG(kNoisyInfo, log_context)
-          << "Inference sidecar consented debugging log: "
-          << predict_response.debug_info();
+
+      PS_VLOG(kNoisyInfo, log_context) << "PredictResponse with debugging log: "
+                                       << predict_response.DebugString();
 
       if (auto inference_metric_context =
               (*roma_request_context)->GetMetricContext();
@@ -266,6 +269,9 @@ void RunInference(
             context->AccumulateMetric<metric::kBiddingInferenceRequestDuration>(
                 inference_execution_time_ms));
       }
+    } else {
+      PS_VLOG(kNoisyInfo) << "No Roma context. PredictResponse: "
+                          << predict_response.DebugString();
     }
     return;
   }
@@ -275,8 +281,8 @@ void RunInference(
        .description = absl::StrCat("Code: ", status.code(),
                                    ", Message: ", status.message())}));
   if (roma_request_context.ok()) {
-    PS_LOG(ERROR, (*roma_request_context)->GetLogContext())
-        << "Response error: " << status.message();
+    RequestLogContext& log_context = (*roma_request_context)->GetLogContext();
+    PS_LOG(ERROR, log_context) << "PredictResponse error: " << status.message();
 
     if (auto inference_metric_context =
             (*roma_request_context)->GetMetricContext();

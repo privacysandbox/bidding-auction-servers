@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.8.2 (2025-04-03)
+
+
+### Bug Fixes
+
+* Fixes unbound memory growth when Roma queue is full
+
 ## 4.8.1 (2025-03-19)
 
 

@@ -15,6 +15,8 @@ python_register_toolchains("//builders/bazel")
 
 http_archive(
     name = "google_privacysandbox_servers_common",
+    patch_args = ["-p1"],
+    patches = ["//third_party:common_repo_temp_fix.patch"],
     # 2025-02-11
     sha256 = "96ad94b628d009e229e2fd58d6cb117e29331e1e5bccc19fccf9634eb5943fe6",
     strip_prefix = "data-plane-shared-libraries-b442136d9cbe2872d8d55da95d176fd9a2d77b68",
