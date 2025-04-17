@@ -109,8 +109,8 @@ absl::Status BuyerFrontEndAsyncClientStub::ExecuteInternal(
   auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
   switch (buyer_mock_type_) {
     case BuyerMockType::DEBUG_REPORTING: {
-      AdWithBid bid = BuildNewAdWithBid(
-          ad_render_url_, {.enable_event_level_debug_reporting = true});
+      AdWithBid bid =
+          BuildNewAdWithBid(ad_render_url_, {.enable_debug_reporting = true});
       auto* debug_report_urls = bid.mutable_debug_report_urls();
       *debug_report_urls->mutable_auction_debug_loss_url() =
           std::string(kDebugUrlLength, 'C');
@@ -351,6 +351,7 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
       std::move(encryption_context));
   ScoringClientStub scoring_client;
   KVAsyncClient kv_async_client;
+  RandomNumberGeneratorFactory rng_factory;
 
   // Scoring signal provider
   ScoringSignalsProviderStub scoring_provider(request);
@@ -388,7 +389,7 @@ static void BM_PerformDebugReporting(benchmark::State& state) {
         ->Get(&request);
     SelectAdReactorForWeb reactor(&context, &request, &response, executor.get(),
                                   clients, config_client,
-                                  /*report_win_map=*/{});
+                                  /*report_win_map=*/{}, rng_factory);
     reactor.Execute();
   }
 }
@@ -438,6 +439,7 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
   config_proto.set_mode(server_common::telemetry::TelemetryConfig::OFF);
   auto executor = std::make_unique<server_common::EventEngineExecutor>(
       grpc_event_engine::experimental::CreateEventEngine());
+  RandomNumberGeneratorFactory rng_factory;
 
   for (auto _ : state) {
     // This code gets timed.
@@ -449,7 +451,7 @@ static void BM_PerformCurrencyCheckingAndFiltering(benchmark::State& state) {
         ->Get(&request);
     SelectAdReactorForWeb reactor(&context, &request, &response, executor.get(),
                                   clients, config_client,
-                                  /*report_win_map=*/{});
+                                  /*report_win_map=*/{}, rng_factory);
     reactor.Execute();
   }
 }

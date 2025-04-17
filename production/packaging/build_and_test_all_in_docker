@@ -39,6 +39,7 @@ function _print_runtime() {
 declare -a SERVICES
 declare INSTANCE
 declare -i E2E=0
+declare -i ENABLE_PARC=0
 declare BUILD_FLAVOR=prod
 declare PLATFORM
 declare -i VERBOSE=0
@@ -53,6 +54,9 @@ declare AWS_IMAGE_TAG
 declare GCP_IMAGE_TAG
 declare GCP_IMAGE_REPO
 declare -i GCP_SKIP_IMAGE_UPLOAD=0
+declare AZURE_IMAGE_TAG
+declare AZURE_IMAGE_REPO
+declare -i AZURE_SKIP_IMAGE_UPLOAD=0
 declare -a BUILD_TARGETS=(
   "//tools/secure_invoke/..."
 )
@@ -68,8 +72,8 @@ usage:
   $0 <options>
     --service-path               [REQUIRED] Recognized values: auction_service, bidding_service, buyer_frontend_service, seller_frontend_service.
                                    Use multiple times to specify more than one service.
-    --instance                   [REQUIRED] Recognized values: local, gcp, aws
-    --platform                   [REQUIRED] Recognized values: gcp, aws
+    --instance                   [REQUIRED] Recognized values: local, gcp, aws, azure
+    --platform                   [REQUIRED] Recognized values: gcp, aws, azure
     --e2e                        Run e2e mode
     --build-flavor               Recognized values: prod, non_prod. Default: prod
                                    Use non_prod to enable verbose logging.
@@ -79,12 +83,18 @@ usage:
     --no-platform-build          Skip platform-specific building and testing
     --verbose                    Enable verbose output
     --skip-rebuild-inference-sidecar  Skip rebuild all inference sidecar binary
+    --enable-parc                Uses PARC instead of CPIO where applicable. Mandatory for Azure, support coming for other platforms. See https://github.com/privacysandbox/protected-auction-services-docs/blob/main/parc_api_overview.md for details.
 
 If platform is aws:
     --with-ami                   AMI region in which to build and store AWS AMIs.
                                    Use multiple times to specify more than one region.
                                    If empty or not specified, none will be built.
     --aws-image-tag              Custom image tag for AMI image. Applied to AMI as tag value for key 'build_env'.
+
+If platform is azure:
+    --azure-skip-image-upload    Skip Azure image upload (and sha256 recording).
+    --azure-image-tag            [REQUIRED if no --azure-skip-image-upload] (All lowercase) Custom image tag for Azure image.
+    --azure-image-repo           [REQUIRED if no --azure-skip-image-upload] The target repo for TEE image upload. Ex: myregistry.azurecr.io/services
 
 If platform is gcp:
     --gcp-skip-image-upload       Skip GCP image upload (and sha256 recording).
@@ -114,8 +124,16 @@ while [[ $# -gt 0 ]]; do
       E2E=1
       shift
       ;;
+    --enable-parc)
+      ENABLE_PARC=1
+      shift
+      ;;
     --gcp-skip-image-upload)
       GCP_SKIP_IMAGE_UPLOAD=1
+      shift
+      ;;
+    --azure-skip-image-upload)
+      AZURE_SKIP_IMAGE_UPLOAD=1
       shift
       ;;
     --no-platform-build)
@@ -162,6 +180,14 @@ while [[ $# -gt 0 ]]; do
       GCP_IMAGE_REPO="$2"
       shift 2 || usage
       ;;
+    --azure-image-tag)
+      AZURE_IMAGE_TAG="$2"
+      shift 2 || usage
+      ;;
+    --azure-image-repo)
+      AZURE_IMAGE_REPO="$2"
+      shift 2 || usage
+      ;;
     --verbose)
       VERBOSE=1
       shift
@@ -191,6 +217,18 @@ if [[ ${PLATFORM} = gcp ]]; then
     fi
     if [[ -z ${GCP_IMAGE_REPO} ]]; then
       printf "Error: --gcp-image-repo must be specified\n" &>/dev/stderr
+      usage
+    fi
+  fi
+fi
+if [[ ${PLATFORM} = azure ]]; then
+  if [[ ${AZURE_SKIP_IMAGE_UPLOAD} -eq 0 ]]; then
+    if [[ -z ${AZURE_IMAGE_TAG} ]]; then
+      printf "Error: --azure-image-tag must be specified\n" &>/dev/stderr
+      usage
+    fi
+    if [[ -z ${AZURE_IMAGE_REPO} ]]; then
+      printf "Error: --azure-image-repo must be specified\n" &>/dev/stderr
       usage
     fi
   fi
@@ -237,8 +275,10 @@ BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --config=${INSTANCE}_${PLATFORM} --config=
 if [[ ${E2E} -eq 1 ]]; then
   BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --//:build_for_test=e2e"
 fi
+if [[ ${ENABLE_PARC} -eq 1 ]]; then
+  BAZEL_EXTRA_ARGS="${BAZEL_EXTRA_ARGS} --//:enable_parc=true"
+fi
 CBUILD_ARGS="${CBUILD_ARGS} --seccomp-unconfined"
-
 
 # shellcheck source=builders/tools/builder.sh
 source "${SCRIPT_DIR}"/../../builders/tools/builder.sh
@@ -320,11 +360,32 @@ function build_service_for_gcp() {
   if [[ ${GCP_SKIP_IMAGE_UPLOAD} -eq 1 ]]; then
     printf "==== Skipping default repo image upload. No image_digest will be recorded.  =====\n"
   else
-    upload_image_to_repo \
+    upload_image_to_gcp_repo \
     "${service}" \
     "${docker_image}" \
     "${GCP_IMAGE_REPO}" \
     "${GCP_IMAGE_TAG}" \
+    "${BUILD_FLAVOR}"
+  fi
+}
+
+function build_service_for_azure() {
+  declare -r service="$1"
+  # note: use relative path to dist
+  declare -r docker_image=dist/debian/${service}_image.tar
+  if ! [[ -s ${WORKSPACE}/${docker_image} ]]; then
+    printf "Error: docker image tar file not found: %s\n" "${docker_image}" &>/dev/stderr
+    exit 1
+  fi
+  create_azure_dist "${docker_image}"
+  if [[ ${AZURE_SKIP_IMAGE_UPLOAD} -eq 1 ]]; then
+    printf "==== Skipping default repo image upload. No image_digest will be recorded.  =====\n"
+  else
+    upload_image_to_azure_repo \
+    "${service}" \
+    "${docker_image}" \
+    "${AZURE_IMAGE_REPO}" \
+    "${AZURE_IMAGE_TAG}" \
     "${BUILD_FLAVOR}"
   fi
 }
@@ -362,7 +423,13 @@ if [[ ${NO_PLATFORM_BUILD} -eq 0 ]]; then
       for svc in "${SERVICES[@]}"; do
         build_service_for_gcp "${svc}"
       done
-    ;;
+      ;;
+    azure)
+      source "${SCRIPT_DIR}"/azure/lib_azure_artifacts.sh
+      for svc in "${SERVICES[@]}"; do
+        build_service_for_azure "${svc}"
+      done
+      ;;
     *)
       printf "Unsupported platform: %s\n" "${PLATFORM}" >/dev/stderr
       exit 1
@@ -376,8 +443,9 @@ fi
 
 declare -r DIST="${WORKSPACE}"/dist
 if [[ -d ${DIST} ]]; then
-  printf "build artifacts:\n"
-  ls -lhR "${DIST}"
+  log_file="${WORKSPACE}/dist/ls_dist_${BUILD_FLAVOR}.txt"
+  printf "build artifacts: ${log_file}\n"
+  ls -lhR "${DIST}" >>"${log_file}"
 else
   printf "dir not found: [%s]\n" "${DIST}"
 fi

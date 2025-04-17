@@ -28,6 +28,7 @@
 #include "include/gtest/gtest.h"
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 #include "services/common/test/constants.h"
+#include "src/concurrent/event_engine_executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {

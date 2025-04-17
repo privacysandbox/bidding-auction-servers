@@ -19,7 +19,6 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "reporting_response",
     hdrs = ["reporting_response.h"],
-    visibility = ["//visibility:public"],
     deps = [
         "//api:bidding_auction_servers_cc_proto",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -33,7 +32,6 @@ cc_library(
     name = "reporting_helper",
     srcs = ["reporting_helper.cc"],
     hdrs = ["reporting_helper.h"],
-    visibility = ["//visibility:public"],
     deps = [
         ":noiser_and_bucketer",
         ":reporting_response",
@@ -59,14 +57,11 @@ cc_library(
 
 cc_library(
     name = "reporting_test_util",
-    srcs = [
-        "reporting_test_util.cc",
-    ],
+    srcs = ["reporting_test_util.cc"],
     hdrs = [
         "reporting_test_util.cc",
         "reporting_test_util.h",
     ],
-    visibility = ["//visibility:public"],
     deps = [
         ":reporting_helper",
         ":reporting_response",
@@ -83,11 +78,9 @@ cc_library(
     name = "noiser_and_bucketer",
     srcs = ["noiser_and_bucketer.cc"],
     hdrs = ["noiser_and_bucketer.h"],
-    visibility = ["//visibility:public"],
     deps = [
-        "@boringssl//:crypto",
-        "@boringssl//:ssl",
-        "@com_google_absl//absl/random",
+        "//services/common/util:random_number_generator",
+        "@com_google_absl//absl/status:statusor",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
@@ -95,10 +88,7 @@ cc_library(
 cc_test(
     name = "reporting_helper_test",
     size = "small",
-    srcs = [
-        "reporting_helper_test.cc",
-    ],
-    visibility = ["//visibility:public"],
+    srcs = ["reporting_helper_test.cc"],
     deps = [
         ":reporting_helper",
         ":reporting_response",
@@ -120,17 +110,10 @@ cc_test(
 cc_test(
     name = "noiser_and_bucketer_test",
     size = "small",
-    srcs = [
-        "noiser_and_bucketer_test.cc",
-    ],
-    visibility = ["//visibility:public"],
+    srcs = ["noiser_and_bucketer_test.cc"],
     deps = [
         ":noiser_and_bucketer",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
-        "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
     ],
 )

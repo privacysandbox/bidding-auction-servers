@@ -54,12 +54,15 @@ USAGE
     --without-embedded-docker  Disable docker client within container
     --docker-network <value>   Specify docker network type or name, value passed to docker run --network. Default: ${DOCKER_NETWORK}
     --seccomp-unconfined       Run docker container without a seccomp profile
+    --privileged               Run in a privileged docker container
     --verbose                  Enable verbose output
 
   Profiler flags:
     --cmd-profiler                  enable profiler for the command
-    --cpu-profiler-signal <int>     unix signal to use to trigger profiler output. Default: ${CPU_PROFILER_SIGNAL}
+    --cpu-profiler-signal <int>     unix signal to use to trigger CPU profiler output. Default: ${CPU_PROFILER_SIGNAL}
     --cpu-profiler-filename <path>  path for the cpu profiler output. Default: ${CPU_PROFILER_FILENAME}
+    --heap-profiler-signal <int>     unix signal to use to trigger heap profiler output. Default: ${HEAP_PROFILER_SIGNAL}
+    --heap-profiler-filename <path>  path for the heap profiler output. Default: ${HEAP_PROFILER_FILENAME}
 
 Environment variables (all optional):
     WORKSPACE                  Full path to the workspace (repo root)
@@ -81,11 +84,17 @@ declare -i WITH_DOCKER_SOCK=1
 declare -i WITH_CMD_PROFILER=0
 DOCKER_NETWORK="${DOCKER_NETWORK:-bridge}"
 declare -i DOCKER_SECCOMP_UNCONFINED=0
+declare -i DOCKER_PRIVILEGED=0
 declare -i ONE_TIME_CONTAINER=0
 declare -i KEEP_CONTAINER_RUNNING=0
 declare LONG_RUNNING_CONTAINER_TIMEOUT=8h
-declare CPU_PROFILER_FILENAME=benchmark.prof
+declare CPU_PROFILER_FILENAME=cpu.prof
 declare -i CPU_PROFILER_SIGNAL=12
+
+# If heap profiler filename is set by the caller then heap profile
+# is enabled instead of CPU profile.
+declare HEAP_PROFILER_FILENAME=""
+declare -i HEAP_PROFILER_SIGNAL=27
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -107,6 +116,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --cpu-profiler-signal)
       CPU_PROFILER_SIGNAL=$2
+      shift 2 || usage
+      ;;
+    --heap-profiler-filename)
+      HEAP_PROFILER_FILENAME="$2"
+      shift 2 || usage
+      ;;
+    --heap-profiler-signal)
+      HEAP_PROFILER_SIGNAL=$2
       shift 2 || usage
       ;;
     --env)
@@ -131,6 +148,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --seccomp-unconfined)
       DOCKER_SECCOMP_UNCONFINED=1
+      shift
+      ;;
+    --privileged)
+      DOCKER_PRIVILEGED=1
       shift
       ;;
     --verbose)
@@ -211,16 +232,27 @@ if [[ ${DOCKER_SECCOMP_UNCONFINED} -eq 1 ]]; then
   DOCKER_RUN_ARGS+=("--security-opt=seccomp=unconfined")
 fi
 
+if [[ ${DOCKER_PRIVILEGED} -eq 1 ]]; then
+  DOCKER_RUN_ARGS+=("--privileged")
+fi
+
 if [[ ${WITH_CMD_PROFILER} -eq 1 ]]; then
   if [[ ${IMAGE} != build-debian ]]; then
     printf "error: --cmd-profiler is only compatible with build-debian\n" &>/dev/stderr
     usage 1
   fi
+  if [[ -z ${HEAP_PROFILER_FILENAME} ]]; then
   DOCKER_RUN_ARGS+=(
     "--env=CMD_PROFILER=LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libprofiler.so"
     "--env=CPUPROFILE=${CPU_PROFILER_FILENAME}"
     "--env=CPUPROFILESIGNAL=${CPU_PROFILER_SIGNAL}"
   )
+  else
+  DOCKER_RUN_ARGS+=(
+    "--env=HEAPPROFILE=${HEAP_PROFILER_FILENAME}"
+    "--env=HEAPPROFILESIGNAL=${HEAP_PROFILER_SIGNAL}"
+  )
+  fi
 fi
 
 # inside the docker build images, /bazel_root is the bazel cache dir, per the system-wide bazelrc

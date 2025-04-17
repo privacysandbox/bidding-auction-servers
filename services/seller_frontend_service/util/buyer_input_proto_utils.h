@@ -31,9 +31,9 @@ BrowserSignalsForBidding ToBrowserSignalsForBidding(
     const BrowserSignals& signals);
 
 BuyerInputForBidding::InterestGroupForBidding ToInterestGroupForBidding(
-    const BuyerInput::InterestGroup& interest_group);
+    BuyerInput::InterestGroup&& interest_group);
 
-BuyerInputForBidding ToBuyerInputForBidding(const BuyerInput& buyer_input);
+BuyerInputForBidding ToBuyerInputForBidding(BuyerInput&& buyer_input);
 
 BuyerInput ToBuyerInput(const BuyerInputForBidding& buyer_input_for_bidding);
 

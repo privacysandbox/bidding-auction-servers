@@ -22,7 +22,7 @@ cc_library(
         "aliases.h",
     ],
     deps = [
-        "//services/seller_frontend_service/cache",
+        "//services/common/cache",
         "//services/seller_frontend_service/util:chaffing_utils",
     ],
 )

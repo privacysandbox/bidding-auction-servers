@@ -18,7 +18,18 @@
       "type": "string",
       "format": "uuid"
     },
-    "enableDebugReporting": { "type": "boolean" },
+    "enableDebugReporting": {
+      "type": "boolean",
+      "description": "Indicates whether the request allows forDebuggingOnly API."
+    },
+    "enableSampledDebugReporting": {
+      "type": "boolean",
+      "description": "Indicates whether the request requires downsampling for forDebuggingOnly API."
+    },
+    "inCooldownOrLockout": {
+      "type": "boolean",
+      "description": "Indicates whether the seller is in cooldown period or the device is in lockout for downsampled forDebuggingOnly API."
+    },
     "requestTimestampMs": { "type": "number" },
     "enforceKAnon": { "type": "boolean" }
   },

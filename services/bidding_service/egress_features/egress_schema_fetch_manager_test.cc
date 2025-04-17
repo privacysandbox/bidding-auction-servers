@@ -36,8 +36,10 @@
 #include "absl/strings/string_view.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "services/bidding_service/constants.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/egress_schema_fetch_config.pb.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
+#include "services/common/blob_storage_client/blob_storage_client_cpio.h"
 #include "services/common/data_fetch/version_util.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
@@ -91,6 +93,7 @@ class EgressSchemaFetchManagerTest : public ::testing::Test {
             [](absl::Duration duration, absl::AnyInvocable<void()> closure) {
               return server_common::TaskId{};
             });
+    ON_CALL(*executor_, Cancel).WillByDefault(Return(true));
   }
 
   std::unique_ptr<MockExecutor> executor_;
@@ -137,6 +140,8 @@ TEST_F(EgressSchemaFetchManagerTest,
   EXPECT_CALL(*http_fetcher_, FetchUrls).Times(0);
   auto fetch_config =
       CreateEgressSchemaFetchConfig(blob_fetch::FETCH_MODE_BUCKET);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
   EgressSchemaFetchManager manager({
       .enable_protected_app_signals = false,
       .enable_temporary_unlimited_egress = true,
@@ -144,7 +149,7 @@ TEST_F(EgressSchemaFetchManagerTest,
       .fetch_config = fetch_config.json,
       .executor = executor_.get(),
       .http_fetcher_async = http_fetcher_.get(),
-      .blob_storage_client = std::move(blob_storage_client_),
+      .blob_storage_client = std::move(cpio_client),
       .temporary_unlimited_egress_cddl_cache = nullptr,
       .egress_cddl_cache = nullptr,
   });
@@ -176,7 +181,8 @@ TEST_F(EgressSchemaFetchManagerTest,
   EXPECT_CALL(*mock_cddl, Get).WillOnce([](absl::string_view version) {
     return "schema = {}";
   });
-
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
   EgressSchemaFetchManager manager({
       .enable_protected_app_signals = true,
       .enable_temporary_unlimited_egress = false,
@@ -184,7 +190,7 @@ TEST_F(EgressSchemaFetchManagerTest,
       .fetch_config = fetch_config.json,
       .executor = executor_.get(),
       .http_fetcher_async = http_fetcher_.get(),
-      .blob_storage_client = std::move(blob_storage_client_),
+      .blob_storage_client = std::move(cpio_client),
       .temporary_unlimited_egress_cddl_cache = nullptr,
       .egress_cddl_cache = std::move(mock_cddl),
   });
@@ -231,6 +237,8 @@ TEST_F(EgressSchemaFetchManagerTest, InitSucceedsWithAllEgressEnabled) {
         EXPECT_EQ(requests[0].url, config.egress_schema_url());
         std::move(done_callback)({kSchema});
       });
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
 
   EgressSchemaFetchManager manager({
       .enable_protected_app_signals = true,
@@ -239,7 +247,7 @@ TEST_F(EgressSchemaFetchManagerTest, InitSucceedsWithAllEgressEnabled) {
       .fetch_config = config.json,
       .executor = executor_.get(),
       .http_fetcher_async = http_fetcher_.get(),
-      .blob_storage_client = std::move(blob_storage_client_),
+      .blob_storage_client = std::move(cpio_client),
       .temporary_unlimited_egress_cddl_cache = std::move(unlimited_cddl),
       .egress_cddl_cache = std::move(limited_cddl),
   });
@@ -252,8 +260,12 @@ TEST_F(EgressSchemaFetchManagerTest, InitSucceedsWithAllEgressEnabled) {
 
 TEST_F(EgressSchemaFetchManagerTest,
        InitSucceedsAllEgressTypesEnabledForBucketFetch) {
-  EXPECT_CALL(*blob_storage_client_, Init()).WillOnce(Return(absl::OkStatus()));
-  EXPECT_CALL(*blob_storage_client_, Run()).WillOnce(Return(absl::OkStatus()));
+  std::unique_ptr<MockBlobStorageClient> local_blob_storage_client =
+      std::make_unique<MockBlobStorageClient>();
+  EXPECT_CALL(*local_blob_storage_client, Init())
+      .WillOnce(Return(absl::OkStatus()));
+  EXPECT_CALL(*local_blob_storage_client, Run())
+      .WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(*http_fetcher_, FetchUrls).Times(0);
 
   auto config = CreateEgressSchemaFetchConfig(blob_fetch::FETCH_MODE_BUCKET);
@@ -272,7 +284,7 @@ TEST_F(EgressSchemaFetchManagerTest,
     return "schema = {}";
   });
 
-  EXPECT_CALL(*blob_storage_client_, ListBlobsMetadata)
+  EXPECT_CALL(*local_blob_storage_client, ListBlobsMetadata)
       .WillOnce(
           [&config = config.pb](
               AsyncContext<ListBlobsMetadataRequest, ListBlobsMetadataResponse>
@@ -311,7 +323,7 @@ TEST_F(EgressSchemaFetchManagerTest,
             return absl::OkStatus();
           });
 
-  EXPECT_CALL(*blob_storage_client_, GetBlob)
+  EXPECT_CALL(*local_blob_storage_client, GetBlob)
       .Times(2)
       .WillRepeatedly(
           [](AsyncContext<GetBlobRequest, GetBlobResponse> async_context) {
@@ -321,6 +333,9 @@ TEST_F(EgressSchemaFetchManagerTest,
             async_context.Finish();
             return absl::OkStatus();
           });
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(
+          std::move(local_blob_storage_client));
 
   EgressSchemaFetchManager manager({
       .enable_protected_app_signals = true,
@@ -329,7 +344,7 @@ TEST_F(EgressSchemaFetchManagerTest,
       .fetch_config = config.json,
       .executor = executor_.get(),
       .http_fetcher_async = http_fetcher_.get(),
-      .blob_storage_client = std::move(blob_storage_client_),
+      .blob_storage_client = std::move(cpio_client),
       .temporary_unlimited_egress_cddl_cache = std::move(unlimited_cddl),
       .egress_cddl_cache = std::move(limited_cddl),
   });
@@ -407,6 +422,8 @@ TEST_F(EgressSchemaFetchManagerTest,
   const std::string bad_cache_msg = "Cache init failed.";
   EXPECT_CALL(*bad_cache, Init)
       .WillOnce(Return(absl::UnavailableError(bad_cache_msg)));
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
   EgressSchemaFetchManager manager({
       .enable_protected_app_signals = true,
       .enable_temporary_unlimited_egress = true,
@@ -414,7 +431,7 @@ TEST_F(EgressSchemaFetchManagerTest,
       .fetch_config = fetch_config.json,
       .executor = executor_.get(),
       .http_fetcher_async = http_fetcher_.get(),
-      .blob_storage_client = std::move(blob_storage_client_),
+      .blob_storage_client = std::move(cpio_client),
       .temporary_unlimited_egress_cddl_cache = std::move(bad_cache),
       .egress_cddl_cache = nullptr,
   });
@@ -432,7 +449,8 @@ TEST_F(EgressSchemaFetchManagerTest, ConfigureRuntimeDefaultsUsesBucketInfo) {
   const std::string init_error = "Skipping bucket fetch.";
   EXPECT_CALL(*blob_storage_client_, Init())
       .WillOnce(Return(absl::UnavailableError(init_error)));
-
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
   auto fetch_config =
       CreateEgressSchemaFetchConfig(blob_fetch::FETCH_MODE_BUCKET);
   EgressSchemaFetchManager manager({
@@ -442,7 +460,7 @@ TEST_F(EgressSchemaFetchManagerTest, ConfigureRuntimeDefaultsUsesBucketInfo) {
       .fetch_config = fetch_config.json,
       .executor = executor_.get(),
       .http_fetcher_async = http_fetcher_.get(),
-      .blob_storage_client = std::move(blob_storage_client_),
+      .blob_storage_client = std::move(cpio_client),
       .temporary_unlimited_egress_cddl_cache = nullptr,
       .egress_cddl_cache = nullptr,
   });
@@ -505,6 +523,8 @@ TEST_F(EgressSchemaFetchManagerTest,
   EXPECT_THAT(result.status().message(),
               testing::HasSubstr(kNoLimitedSchemaVersion));
 }
+
+// TODO Add Parc approach test.
 
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

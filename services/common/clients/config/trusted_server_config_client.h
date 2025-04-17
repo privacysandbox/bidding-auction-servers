@@ -30,6 +30,8 @@
 #include "src/public/cpio/interface/parameter_client/parameter_client_interface.h"
 #include "src/telemetry/flag/telemetry_flag.h"
 
+#include "parc_parameter_client.h"
+
 namespace privacy_sandbox::bidding_auction_servers {
 
 // Sentinel value to be used as the corresponding value for keys in
@@ -55,20 +57,17 @@ class TrustedServersConfigClient {
   // This further enables the cloud metadata to only contain the values that
   // are mandatory or need to be overridden.
   explicit TrustedServersConfigClient(
-      absl::Span<const absl::string_view> all_flags,
-      absl::AnyInvocable<
-          std::unique_ptr<google::scp::cpio::ParameterClientInterface>(
-              google::scp::cpio::ParameterClientOptions) &&>
-          config_client_provider_fn =
-              [](const google::scp::cpio::ParameterClientOptions&
-                     parameter_client_options) {
-                return google::scp::cpio::ParameterClientFactory::Create(
-                    parameter_client_options);
-              });
+      absl::Span<const absl::string_view> all_flags);
+
+  absl::Status Init(
+      std::string_view config_param_prefix,
+      std::unique_ptr<ParcParameterClient> parc_parameter_client) noexcept;
 
   // Creates and initializes the config client to fetch config values
   // from the cloud metadata store.
-  absl::Status Init(std::string_view config_param_prefix) noexcept;
+  absl::Status Init(std::string_view config_param_prefix,
+                    std::unique_ptr<google::scp::cpio::ParameterClientInterface>
+                        parameter_client) noexcept;
 
   // Checks if a parameter is present in the config client.
   bool HasParameter(absl::string_view name) const noexcept;
@@ -87,6 +86,9 @@ class TrustedServersConfigClient {
 
   // Fetches the double value for the specified config parameter.
   double GetDoubleParameter(absl::string_view name) const noexcept;
+
+  // Fetches the float value for the specified config parameter.
+  float GetFloatParameter(absl::string_view name) const noexcept;
 
   // Fetches custom flag value for the specified config parameter.
   template <typename T>
@@ -143,15 +145,36 @@ class TrustedServersConfigClient {
   }
 
  private:
-  std::unique_ptr<google::scp::cpio::ParameterClientInterface> config_client_;
-  absl::btree_map<std::string, std::string> config_entries_map_;
-  absl::AnyInvocable<
-      std::unique_ptr<google::scp::cpio::ParameterClientInterface>(
-          google::scp::cpio::ParameterClientOptions) &&>
-      config_client_provider_fn_;
+  std::unique_ptr<google::scp::cpio::ParameterClientInterface>
+      cpio_parameter_client_;
+  std::unique_ptr<ParcParameterClient> parc_parameter_client_;
 
+  absl::btree_map<std::string, std::string> config_entries_map_;
   absl::Status InitAndRunConfigClient() noexcept;
 };
+
+// Attempts to initialize the configuration client.
+//
+// This function conditionally initializes the configuration client based on the
+// `try_init` flag. If `try_init` is false, it does nothing and returns
+// absl::OkStatus(). If `try_init` is true, it attempts to initialize the
+// configuration client using either ParcParameterClient (if enable_parc=true)
+// or CPIO's ParameterClient.
+//
+// Args:
+//   try_init: A boolean indicating whether to attempt initialization.
+//   config_client: The TrustedServersConfigClient instance to initialize.
+//   config_param_prefix: A string prefix to prepend to all parameter names
+//     when fetching from the parameter store.
+//
+// Returns:
+//   absl::OkStatus() if initialization is successful or if `try_init` is
+//   false. Otherwise, returns an error status indicating the reason for
+//   initialization failure.
+absl::Status MaybeInitConfigClient(bool try_init,
+                                   TrustedServersConfigClient& config_client,
+                                   absl::string_view config_param_prefix);
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_COMMON_CLIENTS_CONFIG_TRUSTED_SERVER_CONFIG_CLIENT_H_

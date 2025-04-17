@@ -62,8 +62,17 @@ template <class AsyncGrpcClientType>
 class AsyncGrpcClientStubTest : public ::testing::Test {
   void SetUp() override { CommonTestInit(); }
 };
-
 TYPED_TEST_SUITE_P(AsyncGrpcClientStubTest);
+
+// Class/Test suite for services that don't use a special request/response
+// encoding. Most services' request/response payloads are just proto
+// bytestrings, but the BFE follows a special encoding format. See
+// EncodeAndCompressGetBidsPayload() in transcoding_utils.h for details.
+template <class AsyncGrpcClientType>
+class UnencodedAsyncGrpcClientStubTest : public ::testing::Test {
+  void SetUp() override { CommonTestInit(); }
+};
+TYPED_TEST_SUITE_P(UnencodedAsyncGrpcClientStubTest);
 
 template <typename T>
 void SetupMockCryptoClientError(T request,
@@ -363,7 +372,7 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, CallsServerWithTimeout) {
   EXPECT_NEAR(0, time_difference_ms, 200);
 }
 
-TYPED_TEST_P(AsyncGrpcClientStubTest, PassesResponseToCallback) {
+TYPED_TEST_P(UnencodedAsyncGrpcClientStubTest, PassesResponseToCallback) {
   using ServiceThread = typename TypeParam::ServiceThreadType;
   using Request = typename TypeParam::RequestType;
   using RawRequest = typename TypeParam::RawRequestType;
@@ -516,10 +525,12 @@ TYPED_TEST_P(AsyncGrpcClientStubTest, ExecutesCallbackOnTimeout) {
   notification.WaitForNotification();
 }
 
+REGISTER_TYPED_TEST_SUITE_P(UnencodedAsyncGrpcClientStubTest,
+                            PassesResponseToCallback);
+
 REGISTER_TYPED_TEST_SUITE_P(AsyncGrpcClientStubTest, CallsServerWithRequest,
                             PassesStatusToCallback, CallsServerWithTimeout,
-                            PassesResponseToCallback, CallsServerWithMetadata,
-                            ExecutesCallbackOnTimeout,
+                            CallsServerWithMetadata, ExecutesCallbackOnTimeout,
                             DoesNotExecuteCallbackOnSyncError);
 
 }  // namespace privacy_sandbox::bidding_auction_servers

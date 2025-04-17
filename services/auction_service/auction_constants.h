@@ -51,6 +51,8 @@ constexpr char kBuyerAndSellerReportingIdForScoreAd[] =
     "buyerAndSellerReportingId";
 constexpr char kSelectedBuyerAndSellerReportingIdForScoreAd[] =
     "selectedBuyerAndSellerReportingId";
+constexpr char kForDebuggingOnlyInCooldownOrLockout[] =
+    "forDebuggingOnlyInCooldownOrLockout";
 
 // TODO(b/306257710): Update to differentiate from kScoreAdBlobVersion.
 constexpr char kReportingBlobVersion[] = "v1";

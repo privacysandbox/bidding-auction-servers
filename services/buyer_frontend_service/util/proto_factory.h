@@ -24,6 +24,7 @@
 #include "rapidjson/document.h"
 #include "services/buyer_frontend_service/data/bidding_signals.h"
 #include "services/common/loggers/request_log_context.h"
+#include "src/concurrent/executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -58,10 +59,11 @@ std::unique_ptr<GetBidsResponse::GetBidsRawResponse> CreateGetBidsRawResponse(
 
 // Creates Bidding Request from GetBidsRawRequest, Bidding Signals.
 PrepareGenerateBidsRequestResult PrepareGenerateBidsRequest(
-    const GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
-    std::unique_ptr<rapidjson::Value> bidding_signals_obj,
+    GetBidsRequest::GetBidsRawRequest& get_bids_raw_request,
+    const absl::flat_hash_map<std::string, std::string>& bidding_signals_obj,
     const size_t signal_size, uint32_t data_version,
     const PriorityVectorConfig& priority_vector_config,
+    server_common::Executor& executor,
     const PrepareGenerateBidsRequestOptions& options = {});
 
 // Creates a request to generate bid for protected app signals.

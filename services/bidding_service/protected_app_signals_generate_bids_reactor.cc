@@ -26,8 +26,8 @@
 #include "absl/strings/numbers.h"
 #include "public/applications/pas/retrieval_request_builder.h"
 #include "public/applications/pas/retrieval_response_parser.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
-#include "services/bidding_service/constants.h"
 #include "services/bidding_service/utils/egress.h"
 #include "services/bidding_service/utils/validation.h"
 #include "services/common/feature_flags.h"
@@ -204,16 +204,20 @@ ProtectedAppSignalsGenerateBidsReactor::ProtectedAppSignalsGenerateBidsReactor(
               // PAS Auctions.
               : AuctionScope::AUCTION_SCOPE_SERVER_COMPONENT_MULTI_SELLER) {
   DCHECK(ad_retrieval_async_client_) << "Missing: KV server Async GRPC client";
-  CHECK_OK([this]() {
-    PS_ASSIGN_OR_RETURN(metric_context_,
-                        metric::BiddingContextMap()->Remove(request_));
-    if (log_context_.is_consented()) {
-      metric_context_->SetConsented(raw_request_.log_context().generation_id());
-    } else if (log_context_.is_prod_debug()) {
-      metric_context_->SetConsented(kProdDebug.data());
-    }
-    return absl::OkStatus();
-  }()) << "BiddingContextMap()->Get(request) should have been called";
+  PS_CHECK_OK(
+      [this]() {
+        PS_ASSIGN_OR_RETURN(metric_context_,
+                            metric::BiddingContextMap()->Remove(request_));
+        if (log_context_.is_consented()) {
+          metric_context_->SetConsented(
+              raw_request_.log_context().generation_id());
+        } else if (log_context_.is_prod_debug()) {
+          metric_context_->SetConsented(kProdDebug.data());
+        }
+        return absl::OkStatus();
+      }(),
+      log_context_)
+      << "BiddingContextMap()->Get(request) should have been called";
 
   if (runtime_config.use_per_request_udf_versioning) {
     protected_app_signals_generate_bid_version_ =
@@ -336,17 +340,22 @@ ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
     std::unique_ptr<kv_server::v2::GetValuesResponse> result,
     absl::string_view prepare_data_for_ads_retrieval_response) {
   std::vector<std::shared_ptr<std::string>> input(
-      kNumGenerateBidsUdfArgs, std::make_shared<std::string>());
-  PopulateArgInRomaRequest(result->single_partition().string_output(),
-                           ArgIndex(GenerateBidsUdfArgs::kAds), input);
-  PopulateArgInRomaRequest(raw_request_.auction_signals(),
-                           ArgIndex(GenerateBidsUdfArgs::kAuctionSignals),
-                           input);
-  PopulateArgInRomaRequest(raw_request_.buyer_signals(),
-                           ArgIndex(GenerateBidsUdfArgs::kBuyerSignals), input);
+      kNumGenerateProtectedAppSignalsBidUdfArgs,
+      std::make_shared<std::string>());
+  PopulateArgInRomaRequest(
+      result->single_partition().string_output(),
+      ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kAds), input);
+  PopulateArgInRomaRequest(
+      raw_request_.auction_signals(),
+      ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kAuctionSignals), input);
+  PopulateArgInRomaRequest(
+      raw_request_.buyer_signals(),
+      ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kBuyerSignals), input);
   PopulateArgInRomaRequest(
       prepare_data_for_ads_retrieval_response,
-      ArgIndex(GenerateBidsUdfArgs::kPreProcessedDataForRetrieval), input);
+      ArgIndex(
+          GenerateProtectedAppSignalsBidUdfArgs::kPreProcessedDataForRetrieval),
+      input);
   if (prepare_data_for_ads_retrieval_response.empty() &&
       IsContextualRetrievalRequest()) {
     // If prepareDataForAdRetrieval was not run then we relay the PAS as well
@@ -357,36 +366,42 @@ ProtectedAppSignalsGenerateBidsReactor::CreateGenerateBidsRequest(
             absl::BytesToHexString(
                 raw_request_.protected_app_signals().app_install_signals()),
             "\""),
-        ArgIndex(GenerateBidsUdfArgs::kProtectedAppSignals), input);
+        ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kProtectedAppSignals),
+        input);
     PopulateArgInRomaRequest(
         absl::StrCat(raw_request_.protected_app_signals().encoding_version()),
-        ArgIndex(GenerateBidsUdfArgs::kProtectedAppSignalsVersion), input);
+        ArgIndex(
+            GenerateProtectedAppSignalsBidUdfArgs::kProtectedAppSignalsVersion),
+        input);
   }
 
   if (!raw_request_.top_level_seller().empty()) {
     PopulateArgInRomaRequest(
         absl::StrCat("{\"topLevelSeller\":\"", raw_request_.top_level_seller(),
                      "\"}"),
-        ArgIndex(GenerateBidsUdfArgs::kAuctionMetadata), input);
+        ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kAuctionMetadata),
+        input);
   } else {
     PopulateArgInRomaRequest(
-        "{}", ArgIndex(GenerateBidsUdfArgs::kAuctionMetadata), input);
+        "{}", ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kAuctionMetadata),
+        input);
   }
   PopulateArgInRomaRequest(
       GetFeatureFlagJson(enable_adtech_code_logging_,
                          enable_buyer_debug_url_generation_ &&
                              raw_request_.enable_debug_reporting()),
-      ArgIndex(GenerateBidsUdfArgs::kFeatureFlags), input);
-  PopulateArgInRomaRequest(absl::StrCat(raw_request_.multi_bid_limit()),
-                           ArgIndex(GenerateBidsUdfArgs::kMultiBidLimit),
-                           input);
+      ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kFeatureFlags), input);
+  PopulateArgInRomaRequest(
+      absl::StrCat(raw_request_.multi_bid_limit()),
+      ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kMultiBidLimit), input);
   DispatchRequest request = {
       .id = raw_request_.log_context().generation_id(),
       .version_string =
           std::string(protected_app_signals_generate_bid_version_),
       .handler_name = kDispatchHandlerFunctionNameWithCodeWrapper,
       .input = std::move(input),
-      .metadata = roma_request_context_factory_.Create(),
+      .metadata = RomaSharedContextWithMetric<google::protobuf::Message>(
+          request_, roma_request_context_factory_.Create(), log_context_),
   };
   request.tags[kRomaTimeoutTag] = roma_timeout_ms_;
   return request;

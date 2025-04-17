@@ -25,48 +25,67 @@
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/loggers/request_log_context.h"
+#include "services/common/reporters/async_reporter.h"
 #include "services/common/util/post_auction_signals.h"
+#include "services/common/util/random_number_generator.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-constexpr absl::string_view kWinningBidPlaceholder = "${winningBid}";
-constexpr absl::string_view kWinningBidCurrencyPlaceholder =
+inline constexpr absl::string_view kWinningBidPlaceholder = "${winningBid}";
+inline constexpr absl::string_view kWinningBidCurrencyPlaceholder =
     "${winningBidCurrency}";
-constexpr absl::string_view kMadeWinningBidPlaceholder = "${madeWinningBid}";
-constexpr absl::string_view kHighestScoringOtherBidPlaceholder =
+inline constexpr absl::string_view kMadeWinningBidPlaceholder =
+    "${madeWinningBid}";
+inline constexpr absl::string_view kHighestScoringOtherBidPlaceholder =
     "${highestScoringOtherBid}";
-constexpr absl::string_view kHighestScoringOtherBidCurrencyPlaceholder =
+inline constexpr absl::string_view kHighestScoringOtherBidCurrencyPlaceholder =
     "${highestScoringOtherBidCurrency}";
-constexpr absl::string_view kMadeHighestScoringOtherBidPlaceholder =
+inline constexpr absl::string_view kMadeHighestScoringOtherBidPlaceholder =
     "${madeHighestScoringOtherBid}";
-constexpr absl::string_view kRejectReasonPlaceholder = "${rejectReason}";
+inline constexpr absl::string_view kRejectReasonPlaceholder = "${rejectReason}";
+
+// Update server_definition.h  - kBuyerDebugUrlStatus[] and/or
+// kSellerDebugUrlStatus[] if any other reason to drop a debug URL is added.
+inline constexpr absl::string_view kDebugUrlRejectedDuringSampling =
+    "[Rejected] Not selected during 1/1000 sampling";
+inline constexpr absl::string_view kDebugUrlRejectedForExceedingSize =
+    "[Rejected] Size exceeded max allowed size per URL";
+inline constexpr absl::string_view kDebugUrlRejectedForExceedingTotalSize =
+    "[Rejected] Total size of received URLs exceeded max allowed total size "
+    "across all URLs";
+inline constexpr absl::string_view kBuyerDebugUrlSentToSeller =
+    "[Validated] Sent to seller";
 
 // Update server_definition.h  - kSellerRejectReasons[] if any change is made to
 // SellerRejectionReason Enum.
-constexpr absl::string_view kRejectionReasonNotAvailable = "not-available";
-constexpr absl::string_view kRejectionReasonInvalidBid = "invalid-bid";
-constexpr absl::string_view kRejectionReasonBidBelowAuctionFloor =
+inline constexpr absl::string_view kRejectionReasonNotAvailable =
+    "not-available";
+inline constexpr absl::string_view kRejectionReasonInvalidBid = "invalid-bid";
+inline constexpr absl::string_view kRejectionReasonBidBelowAuctionFloor =
     "bid-below-auction-floor";
-constexpr absl::string_view kRejectionReasonPendingApprovalByExchange =
+inline constexpr absl::string_view kRejectionReasonPendingApprovalByExchange =
     "pending-approval-by-exchange";
-constexpr absl::string_view kRejectionReasonDisapprovedByExchange =
+inline constexpr absl::string_view kRejectionReasonDisapprovedByExchange =
     "disapproved-by-exchange";
-constexpr absl::string_view kRejectionReasonBlockedByPublisher =
+inline constexpr absl::string_view kRejectionReasonBlockedByPublisher =
     "blocked-by-publisher";
-constexpr absl::string_view kRejectionReasonLanguageExclusions =
+inline constexpr absl::string_view kRejectionReasonLanguageExclusions =
     "language-exclusions";
-constexpr absl::string_view kRejectionReasonCategoryExclusions =
+inline constexpr absl::string_view kRejectionReasonCategoryExclusions =
     "category-exclusions";
-constexpr absl::string_view kRejectionReasonBidFromGenBidFailedCurrencyCheck =
-    "bid-from-gen-bid-failed-currency-check";
-constexpr absl::string_view kRejectionReasonBidFromScoreAdFailedCurrencyCheck =
-    "bid-from-score-ad-failed-currency-check";
-constexpr absl::string_view kRejectionReasonDidNotMeetTheKAnonymityThreshold =
-    "did-not-meet-the-kanonymity-threshold";
+inline constexpr absl::string_view
+    kRejectionReasonBidFromGenBidFailedCurrencyCheck =
+        "bid-from-gen-bid-failed-currency-check";
+inline constexpr absl::string_view
+    kRejectionReasonBidFromScoreAdFailedCurrencyCheck =
+        "bid-from-score-ad-failed-currency-check";
+inline constexpr absl::string_view
+    kRejectionReasonDidNotMeetTheKAnonymityThreshold =
+        "did-not-meet-the-kanonymity-threshold";
 
-constexpr float kDefaultWinningBid = 0.0;
-constexpr char kUnknownBidCurrencyCode[] = "???";
-constexpr float kDefaultWinningScore = 0.0;
+inline constexpr float kDefaultWinningBid = 0.0;
+inline constexpr char kUnknownBidCurrencyCode[] = "???";
+inline constexpr float kDefaultWinningScore = 0.0;
 inline constexpr char kDefaultWinningAdRenderUrl[] = "";
 inline constexpr char kDefaultWinningInterestGroupName[] = "";
 inline constexpr char kDefaultWinningInterestGroupOwner[] = "";
@@ -96,6 +115,67 @@ struct DebugReportingPlaceholder {
   SellerRejectionReason rejection_reason;
 };
 
+struct DebugReportsInResponseCounts {
+  int allowed_win_report_count = 0;
+  int allowed_loss_report_count = 0;
+  int allowed_report_count = 0;
+
+  // Factory method to create limits based on debug reporting mode.
+  static DebugReportsInResponseCounts Create(bool enable_sampled_reporting,
+                                             bool is_component_auction) {
+    DebugReportsInResponseCounts limits;
+    if (enable_sampled_reporting) {
+      // Sampled component auction: 1 win + 1 loss.
+      // Sampled single-seller auction: 1 win or 1 loss.
+      limits.allowed_win_report_count = 1;
+      limits.allowed_loss_report_count = 1;
+      limits.allowed_report_count = is_component_auction ? 2 : 1;
+    } else {
+      // Unsampled component auction: 2 buyer win & loss + 2 seller win & loss.
+      limits.allowed_win_report_count = 2;
+      limits.allowed_loss_report_count = 2;
+      limits.allowed_report_count = 4;
+    }
+    return limits;
+  }
+
+  // Check if a non-empty debug report can be added within limits.
+  bool CanAddDebugReport(const DebugReports::DebugReport& debug_report) const {
+    if (debug_report.url().empty()) {
+      return true;
+    }
+    if (allowed_report_count <= 0) {
+      return false;
+    }
+    return debug_report.is_win_report() ? (allowed_win_report_count > 0)
+                                        : (allowed_loss_report_count > 0);
+  }
+
+  // Decrement limits for a new non-empty debug report.
+  void DecrementCountsForDebugReport(
+      const DebugReports::DebugReport& debug_report) {
+    if (debug_report.url().empty()) {
+      return;
+    }
+    allowed_report_count -= 1;
+    if (debug_report.is_win_report()) {
+      allowed_win_report_count -= 1;
+    } else {
+      allowed_loss_report_count -= 1;
+    }
+  }
+};
+
+// Returns true with 1/sampling_upper_bound probability and false otherwise.
+// This determines if a debug report url is selected during random sampling.
+inline bool DebugUrlPassesSampling(int sampling_upper_bound) {
+  if (absl::StatusOr<int> random_number = RandInt(1, sampling_upper_bound);
+      random_number.ok()) {
+    return *random_number == 1;
+  }
+  return false;
+}
+
 // Returns post auction signals from winning ad score.
 // If there is no winning ad, default values are returned.
 PostAuctionSignals GeneratePostAuctionSignals(
@@ -106,6 +186,13 @@ PostAuctionSignals GeneratePostAuctionSignals(
 // top level seller.
 PostAuctionSignals GeneratePostAuctionSignalsForTopLevelSeller(
     const std::optional<ScoreAdsResponse::AdScore>& winning_ad_score);
+
+// Sends a debug reporting ping to the specified debug url.
+void SendDebugReportingPing(const AsyncReporter& async_reporter,
+                            absl::string_view debug_url,
+                            absl::string_view ig_owner,
+                            absl::string_view ig_name, bool is_winning_ig,
+                            const PostAuctionSignals& post_auction_signals);
 
 // Returns a http request object for debug reporting after replacing placeholder
 // data in the url.

@@ -14,6 +14,7 @@
 
 #include "services/common/test/utils/test_utils.h"
 
+#include "services/common/chaffing/transcoding_utils.h"
 #include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -60,14 +61,18 @@ GetBidsRequest::GetBidsRawRequest CreateGetBidsRawRequest(
   return raw_request;
 }
 
-GetBidsRequest CreateGetBidsRequest(bool add_protected_signals_input,
-                                    bool add_protected_audience_input,
-                                    ClientType client_type) {
+absl::StatusOr<GetBidsRequest> CreateGetBidsRequest(
+    bool add_protected_signals_input, bool add_protected_audience_input,
+    ClientType client_type) {
   GetBidsRequest get_bids_request;
   auto raw_request = CreateGetBidsRawRequest(
       add_protected_signals_input, add_protected_audience_input, client_type);
   raw_request.PrintDebugString();
-  get_bids_request.set_request_ciphertext(raw_request.SerializeAsString());
+
+  PS_ASSIGN_OR_RETURN(
+      std::string payload,
+      EncodeAndCompressGetBidsPayload(raw_request, CompressionType::kGzip));
+  get_bids_request.set_request_ciphertext(payload);
   get_bids_request.set_key_id(kTestKeyId);
   return get_bids_request;
 }

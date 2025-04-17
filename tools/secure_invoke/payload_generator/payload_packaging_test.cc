@@ -263,7 +263,7 @@ TEST(PaylodPackagingTest,
             EncryptionCloudPlatform::ENCRYPTION_CLOUD_PLATFORM_GCP);
 }
 
-TEST(PaylodPackagingTest, SetsTheCorrectClientType) {
+TEST(PaylodPackagingTest, SetsCorrectClientType) {
   auto protected_audience_input =
       MakeARandomProtectedAuctionInput<ProtectedAuctionInput>();
   SelectAdRequest expected =
@@ -280,15 +280,17 @@ TEST(PaylodPackagingTest, SetsTheCorrectClientType) {
   EXPECT_EQ(actual.client_type(), ClientType::CLIENT_TYPE_BROWSER);
 }
 
-TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
+TEST(PaylodPackagingTest, SetsCorrectDebugReportingFlags) {
   bool enable_debug_reporting = true;
+  bool enable_sampled_debug_reporting = true;
   auto input =
       R"JSON({"auction_config":{"sellerSignals":"{\"seller_signal\": \"1698245045006099572\"}","auctionSignals":"{\"auction_signal\": \"1698245045006100642\"}","buyerList":["1698245045005905922"],"seller":"seller.com","perBuyerConfig":{"1698245045005905922":{"buyerSignals":"1698245045006101412"}},"buyerTimeoutMs":1000},"raw_protected_audience_input":{"raw_buyer_input":{"ad_tech_A.com":{"interestGroups":[{"name":"1698245045006110232","biddingSignalsKeys":["1698245045006110482","1698245045006110862"],"adRenderIds":["ad_render_id_1698245045006122582","ad_render_id_1698245045006123002","ad_render_id_1698245045006123242","ad_render_id_1698245045006123472","ad_render_id_1698245045006123772","ad_render_id_1698245045006124002","ad_render_id_1698245045006124212","ad_render_id_1698245045006124412","ad_render_id_1698245045006124672"],"userBiddingSignals":"{\"1698245045006112422\":\"1698245045006112622\",\"1698245045006113232\":\"1698245045006113422\",\"1698245045006111322\":\"1698245045006111702\",\"1698245045006112802\":\"1698245045006112972\",\"1698245045006112032\":\"1698245045006112252\"}","browserSignals":{"joinCount":"8","bidCount":"41","recency":"1698245045","prevWins":"[[1698245045,\"ad_render_id_1698245045006122582\"],[1698245045,\"ad_render_id_1698245045006123002\"],[1698245045,\"ad_render_id_1698245045006123242\"],[1698245045,\"ad_render_id_1698245045006123472\"],[1698245045,\"ad_render_id_1698245045006123772\"],[1698245045,\"ad_render_id_1698245045006124002\"],[1698245045,\"ad_render_id_1698245045006124212\"],[1698245045,\"ad_render_id_1698245045006124412\"],[1698245045,\"ad_render_id_1698245045006124672\"]]"}}]}}}})JSON";
 
   HpkeKeyset keyset;
   auto select_ad_reqcurrent_all_debug_urls_chars =
       std::move(PackagePlainTextSelectAdRequest(input, CLIENT_TYPE_BROWSER,
-                                                keyset, enable_debug_reporting))
+                                                keyset, enable_debug_reporting,
+                                                enable_sampled_debug_reporting))
           .first;
 
   absl::StatusOr<server_common::EncapsulatedRequest>
@@ -318,9 +320,10 @@ TEST(PaylodPackagingTest, SetsTheCorrectDebugReportingFlag) {
   ASSERT_TRUE(actual.ok()) << actual.status();
 
   EXPECT_TRUE(actual.value().enable_debug_reporting());
+  EXPECT_TRUE(actual.value().fdo_flags().enable_sampled_debug_reporting());
 }
 
-TEST(PaylodPackagingTest, SetsTheCorrectEnforceKAnonFlag) {
+TEST(PaylodPackagingTest, SetsCorrectEnforceKAnonFlag) {
   const bool enforce_kanon = true;
   auto input =
       R"JSON({"auction_config":{"sellerSignals":"{\"seller_signal\": \"1698245045006099572\"}","auctionSignals":"{\"auction_signal\": \"1698245045006100642\"}","buyerList":["1698245045005905922"],"seller":"seller.com","perBuyerConfig":{"1698245045005905922":{"buyerSignals":"1698245045006101412"}},"buyerTimeoutMs":1000},"raw_protected_audience_input":{"raw_buyer_input":{"ad_tech_A.com":{"interestGroups":[{"name":"1698245045006110232","biddingSignalsKeys":["1698245045006110482","1698245045006110862"],"adRenderIds":["ad_render_id_1698245045006122582","ad_render_id_1698245045006123002","ad_render_id_1698245045006123242","ad_render_id_1698245045006123472","ad_render_id_1698245045006123772","ad_render_id_1698245045006124002","ad_render_id_1698245045006124212","ad_render_id_1698245045006124412","ad_render_id_1698245045006124672"],"userBiddingSignals":"{\"1698245045006112422\":\"1698245045006112622\",\"1698245045006113232\":\"1698245045006113422\",\"1698245045006111322\":\"1698245045006111702\",\"1698245045006112802\":\"1698245045006112972\",\"1698245045006112032\":\"1698245045006112252\"}","browserSignals":{"joinCount":"8","bidCount":"41","recency":"1698245045","prevWins":"[[1698245045,\"ad_render_id_1698245045006122582\"],[1698245045,\"ad_render_id_1698245045006123002\"],[1698245045,\"ad_render_id_1698245045006123242\"],[1698245045,\"ad_render_id_1698245045006123472\"],[1698245045,\"ad_render_id_1698245045006123772\"],[1698245045,\"ad_render_id_1698245045006124002\"],[1698245045,\"ad_render_id_1698245045006124212\"],[1698245045,\"ad_render_id_1698245045006124412\"],[1698245045,\"ad_render_id_1698245045006124672\"]]"}}]}}}})JSON";
@@ -330,6 +333,7 @@ TEST(PaylodPackagingTest, SetsTheCorrectEnforceKAnonFlag) {
       std::move(PackagePlainTextSelectAdRequest(
                     input, CLIENT_TYPE_BROWSER, keyset,
                     /*enable_debug_reporting=*/true,
+                    /*enable_sampled_debug_reporting=*/false,
                     /*enable_debug_info=*/false,
                     /*protected_app_signals_json=*/"",
                     /*enable_unlimited_egress=*/false, enforce_kanon))
@@ -364,7 +368,7 @@ TEST(PaylodPackagingTest, SetsTheCorrectEnforceKAnonFlag) {
   EXPECT_TRUE(actual->enforce_kanon());
 }
 
-TEST(PaylodPackagingTest, SetEnableDebugInfo) {
+TEST(PaylodPackagingTest, SetsEnableDebugInfo) {
   server_common::log::SetGlobalPSVLogLevel(10);
 
   auto test_debug_info_value_in_output =
@@ -411,8 +415,8 @@ TEST(PaylodPackagingTest, SetEnableDebugInfo) {
                           absl::Substitute(input, consent_config),
                           CLIENT_TYPE_ANDROID, keyset,
                           /*enable_debug_reporting=*/true,
-                          /*enable_debug_info=*/enable_debug_info,
-                          kTestProtectedAppSignals)
+                          /*enable_sampled_debug_reporting=*/false,
+                          enable_debug_info, kTestProtectedAppSignals)
                           .first);
 
         auto parsed_encapsulated_request =
@@ -529,6 +533,7 @@ TEST(PaylodPackagingTest, HandlesProtectedAppSignals) {
   auto select_ad_req = std::move(
       PackagePlainTextSelectAdRequest(input, CLIENT_TYPE_ANDROID, keyset,
                                       /*enable_debug_reporting=*/true,
+                                      /*enable_sampled_debug_reporting=*/false,
                                       /*enable_debug_info=*/std::nullopt,
                                       kTestProtectedAppSignals)
           .first);
@@ -678,7 +683,7 @@ TEST(PaylodPackagingTest,
   EXPECT_EQ(actual.component_auction_results_size(), 0);
 }
 
-TEST(PaylodPackagingTest, SetsTheEnableUnlimitedEgressFlag) {
+TEST(PaylodPackagingTest, SetsEnableUnlimitedEgressFlag) {
   auto input = R"JSON(
   {
      "auction_config" : {
@@ -725,6 +730,7 @@ TEST(PaylodPackagingTest, SetsTheEnableUnlimitedEgressFlag) {
   auto select_ad_req = std::move(PackagePlainTextSelectAdRequest(
                                      input, CLIENT_TYPE_ANDROID, keyset,
                                      /*enable_debug_reporting=*/false,
+                                     /*enable_sampled_debug_reporting=*/false,
                                      /*enable_debug_info=*/std::nullopt,
                                      /*protected_app_signals_json=*/"",
                                      /*enable_unlimited_egress=*/true))

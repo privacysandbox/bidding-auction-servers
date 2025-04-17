@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -28,6 +29,7 @@
 #include "rapidjson/error/en.h"
 #include "rapidjson/pointer.h"
 #include "rapidjson/writer.h"
+#include "services/common/loggers/request_log_context.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -283,6 +285,22 @@ inline absl::StatusOr<bool> GetBoolMember(const T& document,
   }
 
   return it->value.GetBool();
+}
+
+// Converts JSON signals to a map from trusted signal key to signal string.
+inline absl::flat_hash_map<std::string, std::string> BiddingSignalsToMap(
+    const rapidjson::Value& signals) {
+  absl::flat_hash_map<std::string, std::string> key_signals;
+  for (auto it = signals.MemberBegin(); it != signals.MemberEnd(); ++it) {
+    std::string key = std::string(it->name.GetString());
+    auto serialized_signal = SerializeJsonDoc(it->value);
+    if (!serialized_signal.ok()) {
+      PS_VLOG(5) << "Unable to serialize signals for key: " << key;
+      continue;
+    }
+    key_signals[key] = *std::move(serialized_signal);
+  }
+  return key_signals;
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

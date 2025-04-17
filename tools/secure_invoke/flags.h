@@ -38,6 +38,7 @@ ABSL_DECLARE_FLAG(std::string, public_key);
 ABSL_DECLARE_FLAG(std::string, private_key);
 ABSL_DECLARE_FLAG(std::string, key_id);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_debug_reporting);
+ABSL_DECLARE_FLAG(std::optional<bool>, enable_sampled_debug_reporting);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_debug_info);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_unlimited_egress);
 ABSL_DECLARE_FLAG(std::optional<bool>, enforce_kanon);

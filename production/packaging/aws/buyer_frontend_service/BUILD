@@ -30,6 +30,7 @@ load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 pkg_files(
     name = "server_executables",
     srcs = [
+        "//production/packaging/aws/common/ami:configure_and_start_files",
         "//services/buyer_frontend_service:server",
     ],
     attributes = pkg_attributes(mode = "0555"),
@@ -105,12 +106,7 @@ container_image(
         "@platforms//cpu:arm64": "@runtime-cc-debian-arm64//image",
         "@platforms//cpu:x86_64": "@runtime-cc-debian-amd64//image",
     }),
-    cmd = [
-        "/proxify",
-        "--",
-        "/server/bin/server",
-        "--init_config_client=true",
-    ],
+    cmd = "/server/bin/configure_and_start",
     entrypoint = [
         "/busybox/sh",
     ],

@@ -41,6 +41,8 @@ namespace privacy_sandbox::bidding_auction_servers {
 // Marker to set state of request in metric context.
 inline constexpr absl::string_view kWinningAuctionAd = "winning_auction_ad";
 
+inline constexpr int kNumAllowedChromeGhostWinners = 1;
+
 // This is a gRPC reactor that serves a single SelectAdRequest for a top
 // level auction, which involves AuctionResults from other sellers.
 // It stores state relevant to the request and after the
@@ -52,6 +54,7 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
       grpc::CallbackServerContext* context, const SelectAdRequest* request,
       SelectAdResponse* response, const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
+      const RandomNumberGeneratorFactory& rng_factory,
       bool enable_cancellation = false,
       bool enable_buyer_private_aggregate_reporting = false,
       int per_adtech_paapi_contributions_limit = 100,
@@ -88,11 +91,11 @@ class SelectAuctionResultReactor : public grpc::ServerUnaryReactor {
   UpdateGroupMap component_auction_update_groups_;
   const ClientRegistry& clients_;
   const TrustedServersConfigClient& config_client_;
+  const RandomNumberGeneratorFactory& rng_factory_;
 
   RequestLogContext log_context_;
 
-  std::optional<std::mt19937> generator_;
-
+  std::unique_ptr<RandomNumberGenerator> rng_;
   // if SFE sampled an eligible request to debug
   bool is_sampled_for_debug_;
 

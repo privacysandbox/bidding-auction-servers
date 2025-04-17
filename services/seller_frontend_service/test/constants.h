@@ -46,6 +46,8 @@ inline constexpr char kSampleGenerationId[] =
     "6fa459ea-ee8a-3ca4-894e-db77e160355e";
 inline constexpr int kSampleRequestMs = 99999;
 inline constexpr bool kSampleEnforceKAnon = true;
+inline constexpr bool kSampleEnableSampledDebugReporting = true;
+inline constexpr bool kSampleInCooldownOrLockout = true;
 inline constexpr char kSampleErrorMessage[] = "BadError";
 inline constexpr int32_t kSampleErrorCode = 400;
 inline constexpr char kTestEvent1[] = "click";

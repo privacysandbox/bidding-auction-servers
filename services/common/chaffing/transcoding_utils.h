@@ -56,7 +56,7 @@ struct DecodedGetBidsPayload {
 template <typename GetBidsProto>
 absl::StatusOr<std::string> EncodeAndCompressGetBidsPayload(
     const GetBidsProto& raw_proto, CompressionType compression_type,
-    size_t padded_request_size = 0) {
+    size_t minimum_payload_size = 0) {
   const bool is_get_bids_proto =
       std::is_base_of<GetBidsRequest::GetBidsRawRequest, GetBidsProto>::value ||
       std::is_base_of<GetBidsResponse::GetBidsRawResponse, GetBidsProto>::value;
@@ -68,7 +68,7 @@ absl::StatusOr<std::string> EncodeAndCompressGetBidsPayload(
   PS_ASSIGN_OR_RETURN(
       std::string compressed_payload,
       Compress(raw_proto.SerializeAsString(), compression_type));
-  payload_size += std::max(compressed_payload.length(), padded_request_size);
+  payload_size += std::max(compressed_payload.length(), minimum_payload_size);
 
   // Create backing array for QuicheDataWriter and initialize the writer with
   // it.

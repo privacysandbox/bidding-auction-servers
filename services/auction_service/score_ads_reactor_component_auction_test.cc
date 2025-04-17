@@ -15,6 +15,7 @@
 #include "absl/synchronization/notification.h"
 #include "api/bidding_auction_servers_cc_proto_builder.h"
 #include "gmock/gmock.h"
+#include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
 #include "services/auction_service/reporting/reporting_test_util.h"
@@ -23,9 +24,21 @@
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/test_init.h"
+#include "src/core/test/utils/proto_test_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
+
+using ::google::protobuf::TextFormat;
+using ::google::scp::core::test::EqualsProto;
+using ::testing::AnyOf;
+using ::testing::UnorderedPointwise;
+
+using RawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
+using AdWithBidMetadata =
+    ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
+using ProtectedAppSignalsAdWithBidMetadata =
+    ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
 
 // Reporting URLs
 constexpr char kTestComponentReportingWinResponseJson[] =
@@ -106,16 +119,6 @@ constexpr char kComponentWithCurrencyAndIncomingAndRejectReasAdScore[] = R"(
 )";
 constexpr char kSterlingIsoCode[] = "GBP";
 
-// Debug reporting
-constexpr absl::string_view kDebugLossUrlForFirstIg =
-    "https://example-ssp.com/debugLoss/1";
-
-using RawRequest = ScoreAdsRequest::ScoreAdsRawRequest;
-using AdWithBidMetadata =
-    ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
-using ProtectedAppSignalsAdWithBidMetadata =
-    ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
-
 AdWithBidMetadata GetTestAdWithBidBoots() {
   std::string render_url = "bootScootin.com/render_ad?id=cowboy_boots";
   AdWithBidMetadata ad_with_bid = BuildTestAdWithBidMetadata(
@@ -166,8 +169,7 @@ class ScoreAdsReactorComponentAuctionTest : public ::testing::Test {
   AuctionServiceRuntimeConfig runtime_config_;
 };
 
-TEST_F(ScoreAdsReactorComponentAuctionTest,
-       PassesTopLevelSellerToComponentAuction) {
+TEST_F(ScoreAdsReactorComponentAuctionTest, PassesTopLevelSeller) {
   MockV8DispatchClient dispatcher;
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillOnce([](std::vector<DispatchRequest>& batch,
@@ -176,7 +178,7 @@ TEST_F(ScoreAdsReactorComponentAuctionTest,
           const auto& input = request.input;
           EXPECT_EQ(
               *input[4],
-              R"JSON({"interestGroupOwner":"barStandardAds.com","topWindowHostname":"publisherName","adComponents":["barStandardAds.com/ad_components/id=0"],"bidCurrency":"???","dataVersion":1989,"topLevelSeller":"testTopLevelSeller","renderUrl":"barStandardAds.com/render_ad?id=barbecue2"})JSON");
+              R"JSON({"interestGroupOwner":"barStandardAds.com","topWindowHostname":"publisherName","adComponents":["barStandardAds.com/ad_components/id=0"],"bidCurrency":"???","dataVersion":1989,"forDebuggingOnlyInCooldownOrLockout":false,"topLevelSeller":"testTopLevelSeller","renderUrl":"barStandardAds.com/render_ad?id=barbecue2"})JSON");
         }
         return absl::OkStatus();
       });
@@ -213,8 +215,7 @@ TEST_F(ScoreAdsReactorComponentAuctionTest,
   ASSERT_TRUE(finished.HasBeenNotified());
 }
 
-TEST_F(ScoreAdsReactorComponentAuctionTest,
-       CreatesScoresForAllAdsRequestedWithComponentAuction) {
+TEST_F(ScoreAdsReactorComponentAuctionTest, CreatesScoresForAllAdsRequested) {
   MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = true;
@@ -327,7 +328,7 @@ TEST_F(ScoreAdsReactorComponentAuctionTest, CreatesScoresForPASCandidates) {
 }
 
 TEST_F(ScoreAdsReactorComponentAuctionTest,
-       SetsCurrencyOnAdScorefromAdWithBidForComponentAuctionAndNoModifiedBid) {
+       SetsCurrencyOnAdScoreFromAdWithBidAndNoModifiedBid) {
   MockV8DispatchClient dispatcher;
   // Desirability must be greater than 0 to count a winner.
   // Initialize to 1 so first bit could win if it's the only bid.
@@ -411,38 +412,25 @@ TEST_F(ScoreAdsReactorComponentAuctionTest,
   EXPECT_EQ(scored_ad.bid(), bar.bid());
 }
 
-TEST_F(ScoreAdsReactorComponentAuctionTest,
-       SendsOnlyLossDebugPingsAndPopulatesDebugUrlsForComponentAuction) {
+TEST_F(
+    ScoreAdsReactorComponentAuctionTest,
+    SendsDebugPingsToLosersAndReturnsDebugReportsForWinnerWhenSamplingDisabled) {  // NOLINT
   MockV8DispatchClient dispatcher;
-  // Setting seller currency will not trigger currency checking as the AdScores
-  // have no currency.
   RawRequest raw_request =
       BuildRawRequest({BuildTestAdWithBidMetadata(), GetTestAdWithBidBar()},
                       {.enable_debug_reporting = true,
-                       .top_level_seller = kTestTopLevelSeller,
-                       .seller_currency = kUsdIsoCode});
+                       .top_level_seller = kTestTopLevelSeller});
 
   EXPECT_CALL(dispatcher, BatchExecute)
       .WillRepeatedly([](std::vector<DispatchRequest>& batch,
                          BatchDispatchDoneCallback done_callback) {
-        // Each original ad request (AdWithBidMetadata) is stored by its
-        // expected score and later compared to the output AdScore with the
-        // matching score.
         std::vector<std::string> score_logic;
         score_logic.reserve(batch.size());
         for (int current_score = 0; current_score < batch.size();
              ++current_score) {
-          score_logic.push_back(absl::StrCat(
-              "{\"response\":"
-              "{\"desirability\": ",
-              current_score, ", \"bid\": ", current_score,
-              ", \"allowComponentAuction\": true", ", \"debugReportUrls\": {",
-              "    \"auctionDebugLossUrl\" : "
-              "\"https://example-ssp.com/debugLoss/",
-              current_score, "\",",
-              "    \"auctionDebugWinUrl\" : "
-              "\"https://example-ssp.com/debugWin/",
-              current_score, "\"", "}}, \"logs\":[]}"));
+          // Last IG wins auction.
+          score_logic.push_back(
+              absl::Substitute(kAdScoreWithDebugUrlsTemplate, current_score));
         }
         return FakeExecute(batch, std::move(done_callback),
                            std::move(score_logic), true, true);
@@ -454,9 +442,9 @@ TEST_F(ScoreAdsReactorComponentAuctionTest,
       .WillOnce([](const HTTPRequest& reporting_request,
                    absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)&&>
                        done_callback) {
-        // Debug pings should be sent from the server for the losing
-        // interest groups in component auction.
-        EXPECT_EQ(reporting_request.url, kDebugLossUrlForZeroethIg);
+        // Debug pings should be sent from the server for the losing ads in
+        // a component auction.
+        EXPECT_EQ(reporting_request.url, kDebugLossUrlForLosingIg);
       });
   auto response =
       test_helper.ExecuteScoreAds(raw_request, dispatcher, runtime_config);
@@ -466,19 +454,237 @@ TEST_F(ScoreAdsReactorComponentAuctionTest,
   const auto& scored_ad = raw_response.ad_score();
   // Desirability must be present but was determined by the scoring code.
   EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
-  // Debug ping should not be sent from the server for the winning interest
-  // group in a component auction. Debug report urls should be present in the
-  // response so that the client can send the correct debug ping depending on
-  // whether this interest group wins or loses the top level auction.
-  ASSERT_TRUE(scored_ad.has_debug_report_urls());
-  EXPECT_EQ(scored_ad.debug_report_urls().auction_debug_loss_url(),
-            kDebugLossUrlForFirstIg);
-  EXPECT_EQ(scored_ad.debug_report_urls().auction_debug_win_url(),
-            kDebugWinUrlForFirstIg);
+  // Debug urls should not be present in scored ad.
+  EXPECT_FALSE(scored_ad.has_debug_report_urls());
+  // Debug ping should not be sent from the server for the winning ad in a
+  // component auction. Debug reports should be present in the response so that
+  // the client can send the correct debug ping depending on whether this ad
+  // wins or loses the top level auction.
+  DebugReports expected_debug_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(
+          R"pb(
+            reports {
+              url: "$0"
+              is_win_report: true
+              is_seller_report: true
+              is_component_win: true
+            }
+            reports {
+              url: "$1"
+              is_win_report: false
+              is_seller_report: true
+              is_component_win: true
+            }
+          )pb",
+          kDebugWinUrlForWinningIg, kDebugLossUrlForWinningIg),
+      &expected_debug_reports));
+  EXPECT_THAT(
+      raw_response.seller_debug_reports().reports(),
+      UnorderedPointwise(EqualsProto(), expected_debug_reports.reports()));
+}
+
+ScoreAdsResponse::ScoreAdsRawResponse GetResponseForSampledDebugReportingTest(
+    const std::vector<std::string>& scoring_reponses,
+    int debug_reporting_sampling_upper_bound = 1) {
+  MockV8DispatchClient dispatcher;
+  RawRequest raw_request =
+      BuildRawRequest({BuildTestAdWithBidMetadata(), GetTestAdWithBidBar()},
+                      {.enable_debug_reporting = true,
+                       .enable_sampled_debug_reporting = true,
+                       .top_level_seller = kTestTopLevelSeller});
+
+  EXPECT_CALL(dispatcher, BatchExecute)
+      .WillRepeatedly(
+          [&scoring_reponses](std::vector<DispatchRequest>& batch,
+                              BatchDispatchDoneCallback done_callback) {
+            return FakeExecute(batch, std::move(done_callback),
+                               scoring_reponses, true, true);
+          });
+
+  ScoreAdsReactorTestHelper test_helper;
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*test_helper.async_reporter, DoReport).Times(0);
+  auto response =
+      test_helper.ExecuteScoreAds(raw_request, dispatcher,
+                                  {.enable_seller_debug_url_generation = true,
+                                   .debug_reporting_sampling_upper_bound =
+                                       debug_reporting_sampling_upper_bound});
+
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
+  EXPECT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
+  const auto& scored_ad = raw_response.ad_score();
+  // Desirability must be present but was determined by the scoring code.
+  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
+  // Debug urls should not be present in scored ad.
+  EXPECT_FALSE(scored_ad.has_debug_report_urls());
+  return raw_response;
 }
 
 TEST_F(ScoreAdsReactorComponentAuctionTest,
-       SuccessfullyExecutesReportResultAndReportWinForComponentAuctions) {
+       ReturnsSampledDebugWinAndLossReportsForWinner) {
+  // Loser: Win url is ignored. Has no loss url.
+  // Winner: Win and loss urls are sampled and added to response.
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response =
+      GetResponseForSampledDebugReportingTest(
+          {absl::Substitute(kAdScoreWithOnlyDebugWinUrlTemplate, 0),
+           absl::Substitute(kAdScoreWithDebugUrlsTemplate, 1)});
+
+  DebugReports expected_debug_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(
+          R"pb(
+            reports {
+              url: "$0"
+              is_win_report: true
+              is_seller_report: true
+              is_component_win: true
+            }
+            reports {
+              url: "$1"
+              is_win_report: false
+              is_seller_report: true
+              is_component_win: true
+            }
+          )pb",
+          kDebugWinUrlForWinningIg, kDebugLossUrlForWinningIg),
+      &expected_debug_reports));
+  EXPECT_THAT(
+      raw_response.seller_debug_reports().reports(),
+      UnorderedPointwise(EqualsProto(), expected_debug_reports.reports()));
+}
+
+TEST_F(ScoreAdsReactorComponentAuctionTest,
+       ReturnsSampledDebugWinReportForWinnerAndSampledDebugLossReportForLoser) {
+  // Loser: Win url is ignored. Loss url is sampled and added to response.
+  // Winner: Win url is sampled and added to response. Has no loss url.
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response =
+      GetResponseForSampledDebugReportingTest(
+          {absl::Substitute(kAdScoreWithDebugUrlsTemplate, 0),
+           absl::Substitute(kAdScoreWithOnlyDebugWinUrlTemplate, 1)});
+
+  DebugReports expected_debug_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(
+          R"pb(
+            reports {
+              url: "$0"
+              is_win_report: true
+              is_seller_report: true
+              is_component_win: true
+            }
+            reports {
+              url: "$1"
+              is_win_report: false
+              is_seller_report: true
+              is_component_win: false
+            }
+          )pb",
+          kDebugWinUrlForWinningIg, kDebugLossUrlForLosingIg),
+      &expected_debug_reports));
+  EXPECT_THAT(
+      raw_response.seller_debug_reports().reports(),
+      UnorderedPointwise(EqualsProto(), expected_debug_reports.reports()));
+}
+
+TEST_F(ScoreAdsReactorComponentAuctionTest,
+       ReturnsSampledDebugLossReportForWinnerAndEmptyDebugLossReportForLoser) {
+  // Winner has no win url and loser's win url is ignored. Both have loss url
+  // Depending on which ad_score is processed first, either one of them is
+  // sampled and added to response.
+  // The other one is not considered for sampling since there is a limit of one
+  // sampled loss url per adtech. A corresponding debug report with empty url is
+  // added to response.
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response =
+      GetResponseForSampledDebugReportingTest(
+          {absl::Substitute(kAdScoreWithDebugUrlsTemplate, 0),
+           absl::Substitute(kAdScoreWithOnlyDebugLossUrlTemplate, 1)});
+
+  DebugReports expected_debug_reports_if_winner_is_first;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(
+          R"pb(
+            reports {
+              url: "$0"
+              is_win_report: false
+              is_seller_report: true
+              is_component_win: true
+            }
+            reports {
+              url: ""
+              is_win_report: false
+              is_seller_report: true
+              is_component_win: false
+            }
+          )pb",
+          kDebugLossUrlForWinningIg),
+      &expected_debug_reports_if_winner_is_first));
+  DebugReports expected_debug_reports_if_loser_is_first;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(
+          R"pb(
+            reports {
+              url: "$0"
+              is_win_report: false
+              is_seller_report: true
+              is_component_win: false
+            }
+            reports {
+              url: ""
+              is_win_report: false
+              is_seller_report: true
+              is_component_win: true
+            }
+          )pb",
+          kDebugLossUrlForLosingIg),
+      &expected_debug_reports_if_loser_is_first));
+  EXPECT_THAT(raw_response.seller_debug_reports(),
+              AnyOf(EqualsProto(expected_debug_reports_if_winner_is_first),
+                    EqualsProto(expected_debug_reports_if_loser_is_first)));
+}
+
+TEST_F(ScoreAdsReactorComponentAuctionTest,
+       ReturnsEmptyDebugReportsWhenUrlsFailSampling) {
+  // Loser: Win url is ignored. Loss url fails sampling and corresponding
+  // debug report with empty url is added to response.
+  // Winner: Win and loss urls fail sampling and corresponding debug reports
+  // with empty urls are added to response.
+  ScoreAdsResponse::ScoreAdsRawResponse raw_response =
+      GetResponseForSampledDebugReportingTest(
+          {absl::Substitute(kAdScoreWithDebugUrlsTemplate, 0),
+           absl::Substitute(kAdScoreWithDebugUrlsTemplate, 1)},
+          /*debug_reporting_sampling_upper_bound=*/0);
+
+  DebugReports expected_debug_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        reports {
+          url: ""
+          is_win_report: true
+          is_seller_report: true
+          is_component_win: true
+        }
+        reports {
+          url: ""
+          is_win_report: false
+          is_seller_report: true
+          is_component_win: true
+        }
+        reports {
+          url: ""
+          is_win_report: false
+          is_seller_report: true
+          is_component_win: false
+        }
+      )pb",
+      &expected_debug_reports));
+  EXPECT_THAT(
+      raw_response.seller_debug_reports().reports(),
+      UnorderedPointwise(EqualsProto(), expected_debug_reports.reports()));
+}
+
+TEST_F(ScoreAdsReactorComponentAuctionTest,
+       SuccessfullyExecutesReportResultAndReportWin) {
   MockV8DispatchClient dispatcher;
   int current_score = 0;
   bool allowComponentAuction = true;
@@ -581,8 +787,7 @@ TEST_F(ScoreAdsReactorComponentAuctionTest,
             kTestInteractionUrl);
 }
 
-TEST_F(ScoreAdsReactorComponentAuctionTest,
-       ParsesJsonAdMetadataInComponentAuction) {
+TEST_F(ScoreAdsReactorComponentAuctionTest, ParsesJsonAdMetadata) {
   MockV8DispatchClient dispatcher;
   RawRequest raw_request =
       BuildRawRequest({BuildTestAdWithBidMetadata(), GetTestAdWithBidBar()},
@@ -952,60 +1157,6 @@ TEST_F(ScoreAdsReactorComponentAuctionTest,
   ScoreAdsResponse::ScoreAdsRawResponse raw_response;
   raw_response.ParseFromString(response.response_ciphertext());
   EXPECT_FALSE(raw_response.has_ad_score());
-}
-
-TEST_F(ScoreAdsReactorComponentAuctionTest, RespectConfiguredDebugUrlLimits) {
-  server_common::log::SetGlobalPSVLogLevel(10);
-  MockV8DispatchClient dispatcher;
-  RawRequest raw_request =
-      BuildRawRequest({BuildTestAdWithBidMetadata(), GetTestAdWithBidBar()},
-                      {.enable_debug_reporting = true,
-                       .top_level_seller = kTestTopLevelSeller});
-  std::string long_win_url(1024, 'A');
-  std::string long_loss_url(1025, 'B');
-
-  EXPECT_CALL(dispatcher, BatchExecute)
-      .WillRepeatedly([long_win_url, long_loss_url](
-                          std::vector<DispatchRequest>& batch,
-                          BatchDispatchDoneCallback done_callback) {
-        std::vector<std::string> score_logic;
-        score_logic.reserve(batch.size());
-        for (int i = 0; i < batch.size(); ++i) {
-          score_logic.emplace_back(absl::Substitute(
-              R"JSON(
-                  {
-                  "response" : {
-                    "desirability" : $0,
-                    "bid" : 1,
-                    "allowComponentAuction" : true,
-                    "debugReportUrls": {
-                      "auctionDebugLossUrl": "$1",
-                      "auctionDebugWinUrl": "$2"
-                    }
-                  },
-                  "logs":[]
-                  }
-                )JSON",
-              batch.size() - i, long_loss_url, long_win_url));
-        }
-        return FakeExecute(batch, std::move(done_callback),
-                           std::move(score_logic));
-      });
-  AuctionServiceRuntimeConfig runtime_config = {
-      .enable_seller_debug_url_generation = true,
-      .max_allowed_size_all_debug_urls_kb = 1};
-  auto response = ExecuteScoreAds(raw_request, dispatcher, runtime_config);
-
-  ScoreAdsResponse::ScoreAdsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response.response_ciphertext()));
-  const auto& scored_ad = raw_response.ad_score();
-  PS_VLOG(5) << "Response:\n" << scored_ad.DebugString();
-  // Desirability must be present but was determined by the scoring code.
-  EXPECT_GT(scored_ad.desirability(), std::numeric_limits<float>::min());
-  ASSERT_TRUE(scored_ad.has_debug_report_urls());
-  EXPECT_FALSE(scored_ad.debug_report_urls().auction_debug_win_url().empty());
-  EXPECT_EQ(scored_ad.debug_report_urls().auction_debug_win_url().size(), 1024);
-  EXPECT_TRUE(scored_ad.debug_report_urls().auction_debug_loss_url().empty());
 }
 
 // This test case validates that reject reason is returned in response of

@@ -25,6 +25,7 @@
 #include "absl/container/btree_map.h"
 #include "absl/flags/flag.h"
 #include "quiche/oblivious_http/oblivious_http_client.h"
+#include "services/common/chaffing/transcoding_utils.h"
 #include "services/common/clients/async_grpc/grpc_client_utils.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/seller_frontend_server/seller_frontend_async_client.h"
@@ -134,6 +135,7 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
     absl::string_view raw_select_ad_request_json,
     const RequestOptions& request_options, ClientType client_type,
     const HpkeKeyset& keyset, std::optional<bool> enable_debug_reporting,
+    std::optional<bool> enable_sampled_debug_reporting,
     std::optional<bool> enable_debug_info,
     std::optional<bool> enable_unlimited_egress,
     std::optional<bool> enforce_kanon,
@@ -160,9 +162,9 @@ absl::Status InvokeSellerFrontEndWithRawRequest(
             quiche::ObliviousHttpRequest::Context>
       request_context_pair = PackagePlainTextSelectAdRequest(
           raw_select_ad_request_json, client_type, keyset,
-          enable_debug_reporting, enable_debug_info,
-          absl::GetFlag(FLAGS_pas_buyer_input_json), enable_unlimited_egress,
-          enforce_kanon);
+          enable_debug_reporting, enable_sampled_debug_reporting,
+          enable_debug_info, absl::GetFlag(FLAGS_pas_buyer_input_json),
+          enable_unlimited_egress, enforce_kanon);
 
   // Add request headers.
   RequestMetadata request_metadata;
@@ -240,6 +242,7 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
     context.AddMetadata(it.first, it.second);
   }
 
+  RequestConfig request_config = {.compression_type = CompressionType::kGzip};
   auto call_status = bfe_client.ExecuteInternal(
       std::make_unique<GetBidsRequest::GetBidsRawRequest>(get_bids_raw_request),
       &context,
@@ -264,7 +267,7 @@ absl::Status InvokeBuyerFrontEndWithRawRequest(
         }
         notification.Notify();
       },
-      absl::Duration(timeout));
+      absl::Duration(timeout), request_config);
   CHECK(call_status.ok()) << call_status;
   notification.WaitForNotification();
   return call_status;
@@ -276,11 +279,13 @@ std::string LoadFile(absl::string_view file_path) {
                      (std::istreambuf_iterator<char>()));
 }
 
-absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
-                              std::optional<bool> enable_debug_reporting,
-                              std::optional<bool> enable_debug_info,
-                              std::optional<bool> enable_unlimited_egress,
-                              std::optional<bool> enforce_kanon) {
+absl::Status SendRequestToSfe(
+    ClientType client_type, const HpkeKeyset& keyset,
+    std::optional<bool> enable_debug_reporting,
+    std::optional<bool> enable_sampled_debug_reporting,
+    std::optional<bool> enable_debug_info,
+    std::optional<bool> enable_unlimited_egress,
+    std::optional<bool> enforce_kanon) {
   std::string raw_select_ad_request_json = absl::GetFlag(FLAGS_json_input_str);
   if (raw_select_ad_request_json.empty()) {
     raw_select_ad_request_json = LoadFile(absl::GetFlag(FLAGS_input_file));
@@ -295,8 +300,9 @@ absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
   absl::Status status = privacy_sandbox::bidding_auction_servers::
       InvokeSellerFrontEndWithRawRequest(
           raw_select_ad_request_json, options, client_type, keyset,
-          enable_debug_reporting, enable_debug_info, enable_unlimited_egress,
-          enforce_kanon, [&notification](absl::StatusOr<std::string> output) {
+          enable_debug_reporting, enable_sampled_debug_reporting,
+          enable_debug_info, enable_unlimited_egress, enforce_kanon,
+          [&notification](absl::StatusOr<std::string> output) {
             if (output.ok()) {
               // Standard output to compare response
               // programatically by utilities.
@@ -313,6 +319,7 @@ absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
 
 GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
     std::optional<bool> enable_debug_reporting,
+    std::optional<bool> enable_sampled_debug_reporting,
     std::optional<bool> enable_unlimited_egress) {
   std::string raw_get_bids_request_str = absl::GetFlag(FLAGS_json_input_str);
   const bool is_json = (!raw_get_bids_request_str.empty() ||
@@ -320,6 +327,10 @@ GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request;
   if (enable_debug_reporting) {
     get_bids_raw_request.set_enable_debug_reporting(*enable_debug_reporting);
+  }
+  if (enable_sampled_debug_reporting) {
+    get_bids_raw_request.set_enable_sampled_debug_reporting(
+        *enable_sampled_debug_reporting);
   }
   if (enable_unlimited_egress) {
     get_bids_raw_request.set_enable_unlimited_egress(*enable_unlimited_egress);
@@ -346,17 +357,23 @@ GetBidsRequest::GetBidsRawRequest GetBidsRawRequestFromInput(
 
 std::string PackagePlainTextGetBidsRequestToJson(
     const HpkeKeyset& keyset, std::optional<bool> enable_debug_reporting,
+    std::optional<bool> enable_sampled_debug_reporting,
     std::optional<bool> enable_unlimited_egress) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
       GetBidsRawRequestFromInput(enable_debug_reporting,
+                                 enable_sampled_debug_reporting,
                                  enable_unlimited_egress);
   auto key_fetcher_manager =
       std::make_unique<server_common::FakeKeyFetcherManager>(
           keyset.public_key, "unused", std::to_string(keyset.key_id));
   auto crypto_client = CreateCryptoClient();
+  absl::StatusOr<std::string> encoded_payload = EncodeAndCompressGetBidsPayload(
+      get_bids_raw_request, CompressionType::kGzip);
+  CHECK(encoded_payload.ok())
+      << "Failed to encode/compress request: " << encoded_payload.status();
   auto secret_request = EncryptRequestWithHpke<GetBidsRequest>(
-      get_bids_raw_request.SerializeAsString(), *crypto_client,
-      *key_fetcher_manager, server_common::CloudPlatform::kGcp);
+      *encoded_payload, *crypto_client, *key_fetcher_manager,
+      server_common::CloudPlatform::kGcp);
   CHECK(secret_request.ok()) << secret_request.status();
   std::string get_bids_request_json;
   auto get_bids_request_json_status =
@@ -367,11 +384,14 @@ std::string PackagePlainTextGetBidsRequestToJson(
 }
 
 absl::Status SendRequestToBfe(
-    const HpkeKeyset& keyset, std::optional<bool> enable_debug_reporting,
+    const HpkeKeyset& keyset,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub,
+    std::optional<bool> enable_debug_reporting,
+    std::optional<bool> enable_sampled_debug_reporting,
     std::optional<bool> enable_unlimited_egress) {
   GetBidsRequest::GetBidsRawRequest get_bids_raw_request =
       GetBidsRawRequestFromInput(enable_debug_reporting,
+                                 enable_sampled_debug_reporting,
                                  enable_unlimited_egress);
   privacy_sandbox::bidding_auction_servers::RequestOptions request_options;
   request_options.host_addr = absl::GetFlag(FLAGS_host_addr);

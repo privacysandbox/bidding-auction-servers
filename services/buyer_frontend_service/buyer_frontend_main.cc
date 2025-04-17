@@ -15,6 +15,7 @@
 #include <memory>
 #include <string>
 
+#include <apis/privacysandbox/apis/parc/v0/parc_service.grpc.pb.h>
 #include <aws/core/Aws.h>
 
 #include "absl/debugging/failure_signal_handler.h"
@@ -109,6 +110,14 @@ ABSL_FLAG(
     std::optional<std::string>, bidding_signals_fetch_mode, std::nullopt,
     "Specifies whether KV lookup for bidding signals is made or not, and if "
     "so, whether bidding signals are required for generating bids or not.");
+ABSL_FLAG(std::optional<int>, curl_bfe_num_workers, 4,
+          "Number of threads to use to run transfers over curl handles");
+ABSL_FLAG(std::optional<int>, curl_bfe_queue_max_wait_ms, 1000,
+          "Maximum amount of time (in milliseconds) to wait for curl request "
+          "processing");
+ABSL_FLAG(std::optional<int>, curl_bfe_work_queue_length, 5000,
+          "Maximum number of outstanding curl requests that are allowed to "
+          "wait for processing");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -201,11 +210,17 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
                         CURLMOPT_MAX_TOTAL_CONNECTIONS);
   config_client.SetFlag(FLAGS_curlmopt_max_host_connections,
                         CURLMOPT_MAX_HOST_CONNECTIONS);
+  config_client.SetFlag(FLAGS_parc_addr, PARC_ADDR);
+  config_client.SetFlag(FLAGS_curl_bfe_num_workers, CURL_BFE_NUM_WORKERS);
+  config_client.SetFlag(FLAGS_curl_bfe_queue_max_wait_ms,
+                        CURL_BFE_QUEUE_MAX_WAIT_MS);
+  config_client.SetFlag(FLAGS_curl_bfe_work_queue_length,
+                        CURL_BFE_WORK_QUEUE_LENGTH);
 
-  if (absl::GetFlag(FLAGS_init_config_client)) {
-    PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
-        << "Config client failed to initialize.";
-  }
+  PS_RETURN_IF_ERROR(
+      MaybeInitConfigClient(absl::GetFlag(FLAGS_init_config_client),
+                            config_client, config_param_prefix));
+
   // Set verbosity
   server_common::log::SetGlobalPSVLogLevel(
       config_client.GetIntParameter(PS_VERBOSITY));
@@ -214,7 +229,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   const bool enable_protected_audience =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
-  CHECK(enable_protected_audience || enable_protected_app_signals)
+  PS_CHECK(enable_protected_audience || enable_protected_app_signals)
       << "Neither Protected Audience nor Protected App Signals support "
          "enabled.";
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
@@ -301,6 +316,7 @@ absl::Status RunServer() {
       config_client.GetBooleanParameter(CREATE_NEW_EVENT_ENGINE)
           ? grpc_event_engine::experimental::CreateEventEngine()
           : grpc_event_engine::experimental::GetDefaultEventEngine());
+  ScheduleTcmallocProcessBackgroundAction(executor.get());
   std::unique_ptr<AsyncClient<GetBuyerValuesInput, GetBuyerValuesOutput>>
       buyer_kv_async_http_client;
   // we're moving away from the async providers and
@@ -322,6 +338,11 @@ absl::Status RunServer() {
         std::make_unique<HttpBiddingSignalsAsyncProvider>(
             std::move(buyer_kv_async_http_client));
   } else if (!use_tkv_v2_browser) {
+    int num_curl_workers = config_client.GetIntParameter(CURL_BFE_NUM_WORKERS);
+    int curl_max_wait_time_ms =
+        config_client.GetIntParameter(CURL_BFE_QUEUE_MAX_WAIT_MS);
+    int curl_queue_length =
+        config_client.GetIntParameter(CURL_BFE_WORK_QUEUE_LENGTH);
     buyer_kv_async_http_client = std::make_unique<BuyerKeyValueAsyncHttpClient>(
         buyer_kv_server_addr,
         std::make_unique<MultiCurlHttpFetcherAsync>(
@@ -332,7 +353,18 @@ absl::Status RunServer() {
                 .curlmopt_max_total_connections = config_client.GetIntParameter(
                     CURLMOPT_MAX_TOTAL_CONNECTIONS),
                 .curlmopt_max_host_connections = config_client.GetIntParameter(
-                    CURLMOPT_MAX_HOST_CONNECTIONS)}),
+                    CURLMOPT_MAX_HOST_CONNECTIONS),
+                .num_curl_workers = num_curl_workers > 0
+                                        ? num_curl_workers
+                                        : kDefaultNumCurlWorkers,
+                .curl_max_wait_time_ms =
+                    curl_max_wait_time_ms > 0
+                        ? absl::Milliseconds(curl_max_wait_time_ms)
+                        : kDefaultMaxRequestWaitTime,
+                .curl_queue_length = curl_queue_length > 0
+                                         ? curl_queue_length
+                                         : kDefaultMaxCurlPendingRequests,
+            }),
         true);
     bidding_signals_async_providers =
         std::make_unique<HttpBiddingSignalsAsyncProvider>(
@@ -421,8 +453,9 @@ absl::Status RunServer() {
 
   if (config_client.HasParameter(HEALTHCHECK_PORT) &&
       !config_client.GetStringParameter(HEALTHCHECK_PORT).empty()) {
-    CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
-          config_client.GetStringParameter(PORT))
+    PS_CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
+                 config_client.GetStringParameter(PORT),
+             SystemLogContext())
         << "Healthcheck port must be unique.";
     builder.AddListeningPort(
         absl::StrCat("0.0.0.0:",
@@ -456,7 +489,12 @@ int main(int argc, char** argv) {
   privacysandbox::server_common::SetRLimits({
       .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
   });
-  absl::FailureSignalHandlerOptions options = {.call_previous_handler = true};
+  absl::FailureSignalHandlerOptions options = {
+      .call_previous_handler = true,
+      .writerfn =
+          privacy_sandbox::bidding_auction_servers::WriteFailureMessage};
+  privacy_sandbox::bidding_auction_servers::extra_signal_writerfn =
+      options.writerfn;
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();
@@ -467,11 +505,12 @@ int main(int argc, char** argv) {
   bool init_config_client = absl::GetFlag(FLAGS_init_config_client);
   if (init_config_client) {
     cpio_options.log_option = google::scp::cpio::LogOption::kConsoleLog;
-    CHECK(google::scp::cpio::Cpio::InitCpio(cpio_options).Successful())
+    PS_CHECK(google::scp::cpio::Cpio::InitCpio(cpio_options).Successful())
         << "Failed to initialize CPIO library";
   }
 
-  CHECK_OK(privacy_sandbox::bidding_auction_servers::RunServer())
+  PS_CHECK_OK(privacy_sandbox::bidding_auction_servers::RunServer(),
+              privacy_sandbox::bidding_auction_servers::SystemLogContext())
       << "Failed to run server ";
 
   if (init_config_client) {

@@ -42,7 +42,7 @@ function create_gcp_dist() {
 #   WORKSPACE
 #   KOKORO_ENV_NAME (optional) name of Kokoro environment (dev or staging)
 #######################################
-function upload_image_to_repo() {
+function upload_image_to_gcp_repo() {
   local -r service="$1"
   local -r server_image="$2"
   local -r gcp_image_repo="$3"

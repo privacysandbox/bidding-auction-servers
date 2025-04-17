@@ -55,7 +55,8 @@ std::string MakeBidMetadata(
         ad_component_render_urls,
     absl::string_view top_level_seller, absl::string_view bid_currency,
     const uint32_t seller_data_version,
-    ReportingIdsParamForBidMetadata reporting_ids = {});
+    ReportingIdsParamForBidMetadata reporting_ids = {},
+    std::optional<ForDebuggingOnlyFlags> fdo_flags = std::nullopt);
 
 std::string MakeBidMetadataForTopLevelAuction(
     absl::string_view publisher_hostname,
@@ -100,9 +101,7 @@ ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
 
 absl::StatusOr<ScoreAdsResponse::AdScore> ScoreAdResponseJsonToProto(
     const rapidjson::Document& score_ad_resp,
-    int max_allowed_size_debug_url_chars,
-    int64_t max_allowed_size_all_debug_urls_chars,
-    bool device_component_auction, int64_t& current_all_debug_urls_chars);
+    int max_allowed_size_debug_url_chars, bool device_component_auction);
 
 constexpr int ScoreArgIndex(ScoreAdArgs arg) {
   return static_cast<std::underlying_type_t<ScoreAdArgs>>(arg);
@@ -117,6 +116,20 @@ constexpr int ScoreArgIndex(ScoreAdArgs arg) {
 std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>
 MapKAnonGhostWinnerToAdWithBidMetadata(
     absl::string_view owner, absl::string_view ig_name,
+    AuctionResult::KAnonGhostWinner::GhostWinnerForTopLevelAuction&
+        ghost_winner);
+
+/**
+ * Maps GhostWinnerForTopLevelAuction object to
+ * ProtectedAppSignalsAdWithBidMetadata object for creating dispatch requests
+ * and performing post auction operations. The fields related to bid in this
+ * object are invalidated after this method is called since this method will try
+ * to move values rather than copy.
+ */
+std::unique_ptr<
+    ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata>
+MapKAnonGhostWinnerToProtectedAppSignalsAdWithBidMetadata(
+    absl::string_view owner,
     AuctionResult::KAnonGhostWinner::GhostWinnerForTopLevelAuction&
         ghost_winner);
 

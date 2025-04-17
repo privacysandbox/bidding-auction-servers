@@ -17,7 +17,9 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 EventBase::EventBase(bool use_pthreads, int num_priorities) {
-  evthread_use_pthreads();
+  if (use_pthreads) {
+    evthread_use_pthreads();
+  }
   event_base_ = event_base_new();
   event_base_priority_init(event_base_, num_priorities);
   if (server_common::log::PS_VLOG_IS_ON(10)) {

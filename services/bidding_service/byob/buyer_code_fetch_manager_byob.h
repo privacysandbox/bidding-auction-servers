@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "services/bidding_service/buyer_code_fetch_manager.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -43,8 +44,7 @@ class BuyerCodeFetchManagerByob : public BuyerCodeFetchManager {
   explicit BuyerCodeFetchManagerByob(
       server_common::Executor* executor, HttpFetcherAsync* http_fetcher,
       UdfCodeLoaderInterface* loader,
-      std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-          blob_storage_client,
+      std::unique_ptr<BlobStorageClient> blob_storage_client,
       const bidding_service::BuyerCodeFetchConfig& udf_config)
       : BuyerCodeFetchManager(executor, http_fetcher, loader,
                               std::move(blob_storage_client), udf_config,

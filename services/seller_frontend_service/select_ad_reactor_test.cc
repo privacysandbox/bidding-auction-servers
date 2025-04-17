@@ -43,10 +43,12 @@
 #include "google/protobuf/text_format.h"
 #include "gtest/gtest.h"
 #include "include/gmock/gmock.h"
+#include "services/common/chaffing/mock_moving_median_manager.h"
 #include "services/common/feature_flags.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/private_aggregation/private_aggregation_post_auction_util.h"
 #include "services/common/private_aggregation/private_aggregation_test_util.h"
+#include "services/common/random/mock_rng.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/random.h"
 #include "services/common/test/utils/test_init.h"
@@ -67,10 +69,12 @@ inline constexpr int kTestHighestScoringOtherBid = 20;
 using ::google::protobuf::TextFormat;
 using ::google::scp::core::test::EqualsProto;
 using ::testing::_;
+using ::testing::AnyOf;
 using ::testing::Eq;
 using ::testing::Pointee;
 using ::testing::Property;
 using ::testing::Return;
+using ::testing::UnorderedPointwise;
 
 using Request = SelectAdRequest;
 using Response = SelectAdResponse;
@@ -118,6 +122,8 @@ class SellerFrontEndServiceTest : public ::testing::Test {
       config_.SetOverride(kTrue, ENABLE_TKV_V2_BROWSER);
     }
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING_V2);
+    config_.SetOverride(kFalse, ENABLE_BUYER_CACHING);
     config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
     config_.SetOverride("", K_ANON_API_KEY);
@@ -151,17 +157,40 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     const int num_k_anon_ghost_winners = 1;
     const bool enforce_kanon = false;
     const bool enable_debug_reporting = true;
+    const bool enable_sampled_debug_reporting = false;
+    const bool seller_in_cooldown_or_lockout = false;
     absl::string_view top_level_seller = "";
+    const bool seller_adtech_is_also_a_buyer = false;
   };
 
   void SetupRequest(
       const SetupRequestOptions& options = SetupRequestOptions{}) {
     protected_auction_input_ =
         MakeARandomProtectedAuctionInput<typename T::InputType>(
-            options.num_buyers, options.enable_debug_reporting);
+            options.num_buyers);
+    protected_auction_input_.set_enable_debug_reporting(
+        options.enable_debug_reporting);
+    protected_auction_input_.mutable_fdo_flags()
+        ->set_enable_sampled_debug_reporting(
+            options.enable_sampled_debug_reporting);
+    protected_auction_input_.mutable_fdo_flags()->set_in_cooldown_or_lockout(
+        options.seller_in_cooldown_or_lockout);
     protected_auction_input_.set_num_k_anon_ghost_winners(
         options.num_k_anon_ghost_winners);
     protected_auction_input_.set_enforce_kanon(options.enforce_kanon);
+    if (options.seller_adtech_is_also_a_buyer) {
+      // We want the seller adtech to also be a buyer in the auction.
+      // protected_auction_input_.buyer_input is a <adtech origin, BuyerInput>
+      // map. We can replace the adtech origin in the first entry in buyer_input
+      // with the seller's origin.
+      auto* buyer_input = protected_auction_input_.mutable_buyer_input();
+      if (!buyer_input->empty()) {
+        auto it = buyer_input->begin();
+        std::string value = it->second;
+        buyer_input->erase(it);
+        (*buyer_input)[kSellerOriginDomain] = std::move(value);
+      }
+    }
 
     request_ = MakeARandomSelectAdRequest(
         kSellerOriginDomain, protected_auction_input_, options.set_buyer_egid,
@@ -271,7 +300,7 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesBidsFromAllBuyers) {
           EXPECT_FALSE(this->request_.auction_config().seller().empty());
           EXPECT_EQ(this->request_.auction_config().seller(),
                     get_bids_request->seller());
-          EXPECT_EQ(request_config.chaff_request_size, 0);
+          EXPECT_EQ(request_config.minimum_request_size, 0);
           std::move(on_done)(
               std::make_unique<GetBidsResponse::GetBidsRawResponse>(), {});
           return absl::OkStatus();
@@ -388,7 +417,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                         .buyer_signals());
           EXPECT_EQ(this->request_.auction_config().seller(),
                     get_bids_request->seller());
-          EXPECT_EQ(request_config.chaff_request_size, 0);
+          EXPECT_EQ(request_config.minimum_request_size, 0);
           std::move(on_done)(
               std::make_unique<GetBidsResponse::GetBidsRawResponse>(), {});
           return absl::OkStatus();
@@ -489,7 +518,7 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
           EXPECT_FALSE(this->request_.auction_config().seller().empty());
           EXPECT_EQ(this->request_.auction_config().seller(),
                     get_values_request->seller());
-          EXPECT_EQ(request_config.chaff_request_size, 0);
+          EXPECT_EQ(request_config.minimum_request_size, 0);
           std::move(on_done)(
               std::make_unique<GetBidsResponse::GetBidsRawResponse>(), {});
           return absl::OkStatus();
@@ -545,10 +574,9 @@ TYPED_TEST(SellerFrontEndServiceTest, FetchesTwoBidsGivenThreeBuyers) {
 
 TYPED_TEST(SellerFrontEndServiceTest,
            FetchesBidsFromAllBuyersWithDebugReportingEnabled) {
-  this->SetupRequest();
+  this->SetupRequest(
+      {.enable_debug_reporting = true, .enable_sampled_debug_reporting = true});
 
-  // Enable debug reporting for this request_.
-  this->protected_auction_input_.set_enable_debug_reporting(true);
   // Scoring Client
   ScoringAsyncClientMock scoring_client;
 
@@ -582,7 +610,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
               buyer_input, get_values_request->buyer_input_for_bidding()));
           EXPECT_EQ(this->protected_auction_input_.enable_debug_reporting(),
                     get_values_request->enable_debug_reporting());
-          EXPECT_EQ(request_config.chaff_request_size, 0);
+          EXPECT_EQ(this->protected_auction_input_.fdo_flags()
+                        .enable_sampled_debug_reporting(),
+                    get_values_request->enable_sampled_debug_reporting());
+          EXPECT_EQ(request_config.minimum_request_size, 0);
           std::move(on_done)(
               std::make_unique<GetBidsResponse::GetBidsRawResponse>(), {});
           return absl::OkStatus();
@@ -656,8 +687,8 @@ TYPED_TEST(SellerFrontEndServiceTest,
   for (const auto& [buyer, unused] :
        this->protected_auction_input_.buyer_input()) {
     absl::string_view url = buyer_to_ad_url.at(buyer);
-    auto get_bids_response = BuildGetBidsResponseWithSingleAd(
-        url, {.enable_event_level_debug_reporting = true});
+    auto get_bids_response =
+        BuildGetBidsResponseWithSingleAd(url, {.enable_debug_reporting = true});
     SetupBuyerClientMock(buyer, buyer_clients, get_bids_response);
     expected_buyer_bids.try_emplace(
         buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
@@ -681,9 +712,9 @@ TYPED_TEST(SellerFrontEndServiceTest,
   } else {
     SetupScoringProviderMock(
         scoring_signals_provider, expected_buyer_bids,
-        {.scoring_signals_value = "",
-         .seller_egid = seller_egid});  // Reporting Client.
+        {.scoring_signals_value = "", .seller_egid = seller_egid});
   }
+  // Reporting Client.
   std::unique_ptr<MockAsyncReporter> async_reporter =
       std::make_unique<MockAsyncReporter>(
           std::make_unique<MockHttpFetcherAsync>());
@@ -706,7 +737,11 @@ TYPED_TEST(SellerFrontEndServiceTest,
  * buyer or seller currency is specified, breaks nothing.
  */
 TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
-  this->SetupRequest({.num_k_anon_ghost_winners = 10, .enforce_kanon = true});
+  this->SetupRequest({.num_k_anon_ghost_winners = 10,
+                      .enforce_kanon = true,
+                      .enable_debug_reporting = true,
+                      .enable_sampled_debug_reporting = true,
+                      .seller_in_cooldown_or_lockout = true});
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(this->request_);
 
@@ -797,11 +832,16 @@ TYPED_TEST(SellerFrontEndServiceTest, ScoresAdsAfterGettingSignals) {
           // k-anon status is not implemented yet and if k-anon is enabled and
           // enforced, we default the k-anon status to false for the bid.
           EXPECT_FALSE(actual_ad_with_bid_metadata.k_anon_status());
+          EXPECT_TRUE(score_ads_raw_request->enable_debug_reporting());
+          EXPECT_TRUE(score_ads_raw_request->fdo_flags()
+                          .enable_sampled_debug_reporting());
+          EXPECT_TRUE(
+              score_ads_raw_request->fdo_flags().in_cooldown_or_lockout());
         }
         EXPECT_EQ(diff_output, "");
         EXPECT_EQ(score_ads_raw_request->seller(),
                   select_ad_req.auction_config().seller());
-        EXPECT_EQ(request_config.chaff_request_size, 0);
+        EXPECT_EQ(request_config.minimum_request_size, 0);
         std::move(on_done)(
             std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(), {});
         return absl::OkStatus();
@@ -969,7 +1009,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
         EXPECT_EQ(diff_output, "");
         EXPECT_EQ(score_ads_raw_request->seller(),
                   select_ad_req.auction_config().seller());
-        EXPECT_EQ(request_config.chaff_request_size, 0);
+        EXPECT_EQ(request_config.minimum_request_size, 0);
         std::move(on_done)(
             std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(), {});
         return absl::OkStatus();
@@ -1156,7 +1196,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsWinningAdAfterScoring) {
                             60000));  // recency in minutes
             }
           }
-          EXPECT_EQ(request_config.chaff_request_size, 0);
+          EXPECT_EQ(request_config.minimum_request_size, 0);
 
           EXPECT_EQ(bid.modeling_signals(), kModelingSignals);
           AdScore score;
@@ -1470,7 +1510,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
             }
           }
           EXPECT_EQ(ad_with_bid_metadata.modeling_signals(), kModelingSignals);
-          EXPECT_EQ(request_config.chaff_request_size, 0);
+          EXPECT_EQ(request_config.minimum_request_size, 0);
 
           AdScore score;
           score.set_render(ad_with_bid_metadata.render());
@@ -1621,7 +1661,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ReturnsBiddingGroups) {
             request->seller_data_version(),
             TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
         EXPECT_EQ(request->ad_bids_size(), 3);
-        EXPECT_EQ(request_config.chaff_request_size, 0);
+        EXPECT_EQ(request_config.minimum_request_size, 0);
         // We can return only one score as a winner, so we arbitrarily
         // choose the first.
         const auto& winning_ad_with_bid = request->ad_bids(0);
@@ -1739,7 +1779,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
         EXPECT_EQ(
             score_ads_request->seller_data_version(),
             TypeParam::kUseKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
-        EXPECT_EQ(request_config.chaff_request_size, 0);
+        EXPECT_EQ(request_config.minimum_request_size, 0);
         EXPECT_EQ(score_ads_request->top_level_seller(),
                   kTestTopLevelSellerOriginDomain);
         std::move(on_done)(
@@ -1819,7 +1859,7 @@ TYPED_TEST(SellerFrontEndServiceTest, PassesFieldsForServerComponentAuction) {
                                     : kValidScoringSignalsJson);
         EXPECT_EQ(score_ads_request->seller_data_version(),
                   useKvV2ForBrowser ? 0 : kDefaultSellerDataVersion);
-        EXPECT_EQ(request_config.chaff_request_size, 0);
+        EXPECT_EQ(request_config.minimum_request_size, 0);
         EXPECT_EQ(score_ads_request->top_level_seller(),
                   kTestTopLevelSellerOriginDomain);
         std::move(on_done)(
@@ -1859,7 +1899,7 @@ TYPED_TEST(SellerFrontEndServiceTest, PassesFieldsForServerComponentAuction) {
 }
 
 TYPED_TEST(SellerFrontEndServiceTest,
-           SendsDebugPingsAndDoesNotReturnDebugReportsForSingleSellerAuction) {
+           SendsDebugPingsForSingleSellerAuctionWhenSamplingDisabled) {
   this->SetupRequest();
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(this->request_);
@@ -1872,8 +1912,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   for (const auto& [buyer, unused] :
        this->protected_auction_input_.buyer_input()) {
     auto get_bid_response = BuildGetBidsResponseWithSingleAd(
-        buyer_to_ad_url.at(buyer),
-        {.enable_event_level_debug_reporting = true});
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true});
     SetupBuyerClientMock(buyer, buyer_clients, get_bid_response);
     expected_buyer_bids.try_emplace(
         buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
@@ -1978,14 +2017,14 @@ TYPED_TEST(SellerFrontEndServiceTest,
   // Debug reports should not be present in auction result since it is not a
   // component auction.
   EXPECT_TRUE(auction_result.adtech_origin_debug_urls_map().empty());
-  // Debug pings should be sent from the server for both losing and winning
-  // interest groups.
+  // Debug pings should be sent from the server for both losing and winning ads.
   EXPECT_TRUE(debug_loss_url_pinged);
   EXPECT_TRUE(debug_win_url_pinged);
 }
 
-TYPED_TEST(SellerFrontEndServiceTest,
-           SendsOnlyLossDebugPingsAndReturnsDebugReportsForComponentAuction) {
+TYPED_TEST(
+    SellerFrontEndServiceTest,
+    SendsDebugPingsToLosersAndReturnsDebugReportsForComponentWinnerWhenSamplingDisabled) {  // NOLINT
   this->SetupRequest({.top_level_seller = kTestTopLevelSellerOriginDomain});
   absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
       BuildBuyerWinningAdUrlMap(this->request_);
@@ -1998,8 +2037,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
   for (const auto& [buyer, unused] :
        this->protected_auction_input_.buyer_input()) {
     auto get_bid_response = BuildGetBidsResponseWithSingleAd(
-        buyer_to_ad_url.at(buyer),
-        {.enable_event_level_debug_reporting = true});
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true});
     SetupBuyerClientMock(buyer, buyer_clients, get_bid_response,
                          {.top_level_seller = kTestTopLevelSellerOriginDomain});
     expected_buyer_bids.try_emplace(
@@ -2021,10 +2059,13 @@ TYPED_TEST(SellerFrontEndServiceTest,
   absl::Notification scoring_done;
   absl::Notification reporting_done;
   AdScore winner, loser;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugReportsForComponentWinner, &seller_reports));
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .Times(1)
       .WillOnce(
-          [&scoring_done, &winner, &loser](
+          [&scoring_done, &winner, &loser, &seller_reports](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
               grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
@@ -2043,10 +2084,6 @@ TYPED_TEST(SellerFrontEndServiceTest,
               score.set_ad_metadata(kTestAdMetadata);
               score.set_allow_component_auction(true);
               score.set_bid(i + 1);
-              score.mutable_debug_report_urls()->set_auction_debug_win_url(
-                  absl::StrCat(kTestSellerDebugWinUrlPrefix, bid.render()));
-              score.mutable_debug_report_urls()->set_auction_debug_loss_url(
-                  absl::StrCat(kTestSellerDebugLossUrlPrefix, bid.render()));
               *response.mutable_ad_score() = score;
               if (i < request->ad_bids().size() - 1) {
                 loser = score;
@@ -2054,6 +2091,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                 winner = score;
               }
             }
+            *response.mutable_seller_debug_reports() = seller_reports;
             std::move(on_done)(
                 std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
                     response),
@@ -2073,7 +2111,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
               absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)&&>
                   done_callback) {
             // Debug pings should be sent from the server only for the losing
-            // interest groups in component auction.
+            // ads in component auction.
             EXPECT_EQ(
                 reporting_request.url,
                 absl::StrCat(kTestBuyerDebugLossUrlPrefix, loser.render()));
@@ -2103,10 +2141,10 @@ TYPED_TEST(SellerFrontEndServiceTest,
           *response.mutable_auction_result_ciphertext(), *this->context_)
           .first;
 
-  // Debug pings should not be sent from the server for the winning interest
-  // group in a component auction. Debug reports should be present in the
-  // response so that the client can send the correct debug pings depending on
-  // whether this interest group wins or loses the top level auction.
+  // Debug pings should not be sent from the server for the winning ad in a
+  // component auction. Debug reports should be present in the response so that
+  // the client can send the correct debug pings depending on whether this ad
+  // wins or loses the top level auction.
   auto debug_urls_map = auction_result.adtech_origin_debug_urls_map();
 
   // Verify buyer debug reports.
@@ -2114,44 +2152,135 @@ TYPED_TEST(SellerFrontEndServiceTest,
   DebugReports expected_buyer_reports;
   ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
       absl::Substitute(
-          R"pb(
-            reports {
-              url: "https://buyer.com/debugWin?render=$0"
-              is_win_report: true
-              is_component_win: true
-            }
-            reports {
-              url: "https://buyer.com/debugLoss?render=$0"
-              is_component_win: true
-            }
-          )pb",
+          absl::StrCat(kTestBuyerDebugWinReportForComponentWinnerTemplate,
+                       kTestBuyerDebugLossReportForComponentWinnerTemplate),
           winner.render()),
       &expected_buyer_reports));
-  EXPECT_THAT(debug_urls_map.at(winner.interest_group_owner()),
-              EqualsProto(expected_buyer_reports));
+  EXPECT_THAT(
+      debug_urls_map.at(winner.interest_group_owner()).reports(),
+      UnorderedPointwise(EqualsProto(), expected_buyer_reports.reports()));
 
   // Verify seller debug reports.
   ASSERT_TRUE(debug_urls_map.contains(kSellerOriginDomain));
-  DebugReports expected_seller_reports;
-  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
-      absl::Substitute(
-          R"pb(
-            reports {
-              url: "https://seller.com/debugWin?render=$0"
-              is_win_report: true
-              is_seller_report: true
-              is_component_win: true
-            }
-            reports {
-              url: "https://seller.com/debugLoss?render=$0"
-              is_seller_report: true
-              is_component_win: true
-            }
-          )pb",
-          winner.render()),
-      &expected_seller_reports));
   EXPECT_THAT(debug_urls_map.at(kSellerOriginDomain),
-              EqualsProto(expected_seller_reports));
+              EqualsProto(seller_reports));
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           MergesBuyerAndSellerDebugReportsOfSameAdtechWhenSamplingDisabled) {
+  this->SetupRequest({.num_buyers = 1,
+                      .top_level_seller = kTestTopLevelSellerOriginDomain,
+                      .seller_adtech_is_also_a_buyer = true});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true});
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response,
+                         {.top_level_seller = kTestTopLevelSellerOriginDomain});
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  std::string winner_render;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugReportsForComponentWinner, &seller_reports));
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner_render, &seller_reports](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // The bid by the seller adtech (also a buyer in the auction) wins.
+            AdScore score;
+            const auto& bid = request->ad_bids(0);
+            if (bid.interest_group_owner() == kSellerOriginDomain) {
+              winner_render = bid.render();
+              score.set_desirability(1);
+              score.set_buyer_bid(1);
+              score.set_bid(1);
+            }
+            score.set_render(bid.render());
+            score.mutable_component_renders()->CopyFrom(bid.ad_components());
+            score.set_interest_group_name(bid.interest_group_name());
+            score.set_interest_group_owner(bid.interest_group_owner());
+            // Fields for component auction.
+            score.set_ad_metadata(kTestAdMetadata);
+            score.set_allow_component_auction(true);
+            *response.mutable_ad_score() = score;
+            *response.mutable_seller_debug_reports() = seller_reports;
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Verify debug reports for the adtech that is both the seller adtech and a
+  // buyer in the auction. All debug reports for the component winner should be
+  // present.
+  auto& debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+  ASSERT_TRUE(debug_urls_map.contains(kSellerOriginDomain));
+  DebugReports expected_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::StrCat(
+          absl::Substitute(
+              absl::StrCat(kTestBuyerDebugWinReportForComponentWinnerTemplate,
+                           kTestBuyerDebugLossReportForComponentWinnerTemplate),
+              winner_render),
+          kTestSellerDebugReportsForComponentWinner),
+      &expected_reports));
+  EXPECT_THAT(debug_urls_map.at(kSellerOriginDomain),
+              EqualsProto(expected_reports));
 }
 
 TYPED_TEST(
@@ -2191,10 +2320,13 @@ TYPED_TEST(
   ScoringAsyncClientMock scoring_client;
   absl::Notification scoring_done;
   absl::Notification reporting_done;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugReportsForComponentWinner, &seller_reports));
   EXPECT_CALL(scoring_client, ExecuteInternal)
       .Times(1)
       .WillOnce(
-          [&scoring_done](
+          [&scoring_done, &seller_reports](
               std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
               grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
               absl::Duration timeout, RequestConfig request_config) {
@@ -2213,11 +2345,8 @@ TYPED_TEST(
               score.set_ad_metadata(kTestAdMetadata);
               score.set_allow_component_auction(true);
               score.set_bid(i + 1);
-              score.mutable_debug_report_urls()->set_auction_debug_win_url(
-                  absl::StrCat(kTestSellerDebugWinUrlPrefix, bid.render()));
-              score.mutable_debug_report_urls()->set_auction_debug_loss_url(
-                  absl::StrCat(kTestSellerDebugLossUrlPrefix, bid.render()));
               *response.mutable_ad_score() = score;
+              *response.mutable_seller_debug_reports() = seller_reports;
             }
             std::move(on_done)(
                 std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
@@ -2342,6 +2471,1347 @@ TYPED_TEST(SellerFrontEndServiceTest,
   EXPECT_TRUE(auction_result.adtech_origin_debug_urls_map().empty());
 }
 
+TYPED_TEST(SellerFrontEndServiceTest,
+           DoesNotSendSampledDebugPingsOrReturnDebugReportsWhenScoringFails) {
+  this->SetupRequest({.enable_sampled_debug_reporting = true});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  absl::flat_hash_map<std::string, AdWithBid> bids;
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    absl::string_view url = buyer_to_ad_url.at(buyer);
+    GetBidsResponse::GetBidsRawResponse response =
+        BuildGetBidsResponseWithSingleAd(url);
+    bids.insert_or_assign(url, response.bids().at(0));
+    SetupBuyerClientMock(buyer, buyer_clients, response);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            std::move(on_done)(
+                absl::Status(absl::StatusCode::kInternal, "No Ads found"),
+                /*response_metadata=*/{});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server since ad scoring failed.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Debug reports should not be present in the response since scoring failed.
+  EXPECT_TRUE(auction_result.adtech_origin_debug_urls_map().empty());
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsMaxOneSampledDebugReportPerAdtechForSingleSellerAuction) {
+  this->SetupRequest({.num_buyers = 1, .enable_sampled_debug_reporting = true});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 1);
+  BuyerBidsResponseMap expected_buyer_bids;
+  // Single buyer has two ads: one wins and one loses.
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        absl::StrCat(buyer_to_ad_url.at(buyer), "_0"),
+        {.interest_group_name = "ig_0", .enable_debug_reporting = true});
+    get_bid_response.mutable_bids()->Add(BuildNewAdWithBid(
+        absl::StrCat(buyer_to_ad_url.at(buyer), "_1"),
+        {.interest_group_name = "ig_1", .enable_debug_reporting = true}));
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  AdScore winner, loser;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugWinReport, &seller_reports));
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner, &loser, &seller_reports](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // Last bid wins.
+            for (int i = 0; i < request->ad_bids_size(); ++i) {
+              const auto& bid = request->ad_bids(i);
+              AdScore score;
+              score.set_render(bid.render());
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              score.set_desirability(i + 1);
+              score.set_buyer_bid(i + 1);
+              score.set_interest_group_name(bid.interest_group_name());
+              score.set_interest_group_owner(bid.interest_group_owner());
+              *response.mutable_ad_score() = score;
+              if (i < request->ad_bids().size() - 1) {
+                loser = score;
+              } else if (i == request->ad_bids().size() - 1) {
+                winner = score;
+              }
+            }
+            *response.mutable_seller_debug_reports() = seller_reports;
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Sampled debug reports should be present in the response.
+  auto debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+
+  // Verify buyer debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(winner.interest_group_owner()));
+  DebugReports expected_buyer_win_report;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(kTestBuyerDebugWinReportTemplate, winner.render()),
+      &expected_buyer_win_report));
+  DebugReports expected_buyer_loss_report;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(kTestBuyerDebugLossReportTemplate, loser.render()),
+      &expected_buyer_loss_report));
+  // Even though both debug win url for winning ad and debug loss url for losing
+  // ad are valid, only one of them is sent back to the client since there is a
+  // limit of one debug report per adtech for single-seller auctions.
+  EXPECT_THAT(debug_urls_map.at(winner.interest_group_owner()),
+              AnyOf(EqualsProto(expected_buyer_win_report),
+                    EqualsProto(expected_buyer_loss_report)));
+
+  // Verify seller debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(kSellerOriginDomain));
+  EXPECT_THAT(debug_urls_map.at(kSellerOriginDomain),
+              EqualsProto(seller_reports));
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsSampledDebugReportsForAllBuyersInSingleSellerAuction) {
+  this->SetupRequest({.enable_sampled_debug_reporting = true});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 2);
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true});
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  AdScore winner, loser;
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner, &loser](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // Last bid wins.
+            for (int i = 0; i < request->ad_bids_size(); ++i) {
+              const auto& bid = request->ad_bids(i);
+              AdScore score;
+              score.set_render(bid.render());
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              score.set_desirability(i + 1);
+              score.set_buyer_bid(i + 1);
+              score.set_interest_group_name(bid.interest_group_name());
+              score.set_interest_group_owner(bid.interest_group_owner());
+              *response.mutable_ad_score() = score;
+              if (i < request->ad_bids().size() - 1) {
+                loser = score;
+              } else if (i == request->ad_bids().size() - 1) {
+                winner = score;
+              }
+            }
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Sampled debug reports should be present in the response.
+  auto debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+
+  // Verify buyer debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(winner.interest_group_owner()));
+  DebugReports expected_buyer_win_report;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(kTestBuyerDebugWinReportTemplate, winner.render()),
+      &expected_buyer_win_report));
+  // The buyer with the winning ad contributes its debug win report
+  // to the response.
+  EXPECT_THAT(debug_urls_map.at(winner.interest_group_owner()),
+              EqualsProto(expected_buyer_win_report));
+
+  ASSERT_TRUE(debug_urls_map.contains(loser.interest_group_owner()));
+  DebugReports expected_buyer_loss_report;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(kTestBuyerDebugLossReportTemplate, loser.render()),
+      &expected_buyer_loss_report));
+  // The buyer with the losing ad contributes its debug loss report
+  // to the response.
+  EXPECT_THAT(debug_urls_map.at(loser.interest_group_owner()),
+              EqualsProto(expected_buyer_loss_report));
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsEmptyDebugReportsToPutBuyersInSingleSellerAuctionToCooldown) {
+  this->SetupRequest({.enable_sampled_debug_reporting = true});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 2);
+  BuyerBidsResponseMap expected_buyer_bids;
+  // Both buyers have ads whose debug urls failed sampling.
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true,
+                                    .debug_win_url_failed_sampling = true,
+                                    .debug_loss_url_failed_sampling = true});
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  AdScore winner, loser;
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner, &loser](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // Last bid wins.
+            for (int i = 0; i < request->ad_bids_size(); ++i) {
+              const auto& bid = request->ad_bids(i);
+              AdScore score;
+              score.set_render(bid.render());
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              score.set_desirability(i + 1);
+              score.set_buyer_bid(i + 1);
+              score.set_interest_group_name(bid.interest_group_name());
+              score.set_interest_group_owner(bid.interest_group_owner());
+              *response.mutable_ad_score() = score;
+              if (i < request->ad_bids().size() - 1) {
+                loser = score;
+              } else if (i == request->ad_bids().size() - 1) {
+                winner = score;
+              }
+            }
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Sampled debug reports should be present in the response.
+  auto debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+
+  // Verify buyer debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(winner.interest_group_owner()));
+  DebugReports expected_buyer_empty_win_report;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        reports {
+          url: ""
+          is_win_report: true
+          is_seller_report: false
+          is_component_win: false
+        }
+      )pb",
+      &expected_buyer_empty_win_report));
+  // The buyer with the winning ad had its debug win url fail sampling. Thus, a
+  // debug win report was not sent, and instead the buyer adtech needs to be put
+  // in cooldown.
+  EXPECT_THAT(debug_urls_map.at(winner.interest_group_owner()),
+              EqualsProto(expected_buyer_empty_win_report));
+
+  ASSERT_TRUE(debug_urls_map.contains(loser.interest_group_owner()));
+  DebugReports expected_buyer_empty_loss_report;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        reports {
+          url: ""
+          is_win_report: false
+          is_seller_report: false
+          is_component_win: false
+        }
+      )pb",
+      &expected_buyer_empty_loss_report));
+  // The buyer with the losing ad had its debug loss url fail sampling. Thus, a
+  // debug loss report was not sent, and instead the buyer adtech needs to be
+  // put in cooldown.
+  EXPECT_THAT(debug_urls_map.at(loser.interest_group_owner()),
+              EqualsProto(expected_buyer_empty_loss_report));
+}
+
+TYPED_TEST(
+    SellerFrontEndServiceTest,
+    SkipsSampledSellerReportIfSameAdtechHasBuyerReportInSingleSellerAuction) {
+  this->SetupRequest({.num_buyers = 1,
+                      .enable_sampled_debug_reporting = true,
+                      .seller_adtech_is_also_a_buyer = true});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 1);
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true});
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response);
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  std::string winner_render;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugWinReport, &seller_reports));
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner_render, &seller_reports](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // The bid by the seller adtech (also a buyer in the auction) wins.
+            AdScore score;
+            const auto& bid = request->ad_bids(0);
+            if (bid.interest_group_owner() == kSellerOriginDomain) {
+              winner_render = bid.render();
+              score.set_desirability(1);
+              score.set_buyer_bid(1);
+            }
+            score.set_interest_group_name(bid.interest_group_name());
+            score.set_interest_group_owner(bid.interest_group_owner());
+            *response.mutable_ad_score() = score;
+            *response.mutable_seller_debug_reports() = seller_reports;
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Verify that there is only one debug report for the adtech that is both the
+  // seller and buyer in the single-seller auction.
+  auto& debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+  ASSERT_TRUE(debug_urls_map.contains(kSellerOriginDomain));
+  DebugReports expected_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(kTestBuyerDebugWinReportTemplate, winner_render),
+      &expected_reports));
+  EXPECT_THAT(debug_urls_map.at(kSellerOriginDomain),
+              EqualsProto(expected_reports));
+}
+
+TYPED_TEST(
+    SellerFrontEndServiceTest,
+    ReturnsMaxOneSampledDebugWinAndOneLossReportPerAdtechForComponentAuction) {
+  this->SetupRequest({.num_buyers = 1,
+                      .enable_sampled_debug_reporting = true,
+                      .top_level_seller = kTestTopLevelSellerOriginDomain});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 1);
+  BuyerBidsResponseMap expected_buyer_bids;
+  // Single buyer has two ads: one wins and one loses in the component auction.
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        absl::StrCat(buyer_to_ad_url.at(buyer), "_0"),
+        {.interest_group_name = "ig_0", .enable_debug_reporting = true});
+    get_bid_response.mutable_bids()->Add(BuildNewAdWithBid(
+        absl::StrCat(buyer_to_ad_url.at(buyer), "_1"),
+        {.interest_group_name = "ig_1", .enable_debug_reporting = true}));
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response,
+                         {.top_level_seller = kTestTopLevelSellerOriginDomain});
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  AdScore winner, loser;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugReportsForComponentWinner, &seller_reports));
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner, &loser, &seller_reports](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // Last bid wins.
+            for (int i = 0; i < request->ad_bids_size(); ++i) {
+              const auto& bid = request->ad_bids(i);
+              AdScore score;
+              score.set_render(bid.render());
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              score.set_desirability(i + 1);
+              score.set_buyer_bid(i + 1);
+              score.set_bid(1);
+              score.set_interest_group_name(bid.interest_group_name());
+              score.set_interest_group_owner(bid.interest_group_owner());
+              *response.mutable_ad_score() = score;
+              // Fields for component auction.
+              score.set_ad_metadata(kTestAdMetadata);
+              score.set_allow_component_auction(true);
+              *response.mutable_ad_score() = score;
+              if (i < request->ad_bids().size() - 1) {
+                loser = score;
+              } else if (i == request->ad_bids().size() - 1) {
+                winner = score;
+              }
+            }
+            *response.mutable_seller_debug_reports() = seller_reports;
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Sampled debug reports should be present in the response.
+  auto debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+
+  // Verify buyer debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(winner.interest_group_owner()));
+  DebugReports expected_buyer_reports_if_winner_is_first;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::StrCat(
+          absl::Substitute(kTestBuyerDebugWinReportForComponentWinnerTemplate,
+                           winner.render()),
+          absl::Substitute(kTestBuyerDebugLossReportForComponentWinnerTemplate,
+                           winner.render()),
+          R"pb(
+            reports {
+              url: ""
+              is_win_report: false
+              is_seller_report: false
+              is_component_win: false
+            }
+          )pb"),
+      &expected_buyer_reports_if_winner_is_first));
+  DebugReports expected_buyer_reports_if_loser_is_first;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::StrCat(
+          absl::Substitute(kTestBuyerDebugWinReportForComponentWinnerTemplate,
+                           winner.render()),
+          R"pb(
+            reports {
+              url: ""
+              is_win_report: false
+              is_seller_report: false
+              is_component_win: true
+            }
+          )pb",
+          absl::Substitute(kTestBuyerDebugLossReportTemplate, loser.render())),
+      &expected_buyer_reports_if_loser_is_first));
+  // The debug win url for the component auction winner is selected during
+  // sampling and added to the response.
+  // Depending on which ad is scored first, the debug loss url of either ad
+  // could be selected, but not both, since there is a limit of one debug loss
+  // url per adtech in component auctions.
+  EXPECT_THAT(debug_urls_map.at(winner.interest_group_owner()).reports(),
+              AnyOf(UnorderedPointwise(
+                        EqualsProto(),
+                        expected_buyer_reports_if_winner_is_first.reports()),
+                    UnorderedPointwise(
+                        EqualsProto(),
+                        expected_buyer_reports_if_loser_is_first.reports())));
+
+  // Verify seller debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(kSellerOriginDomain));
+  EXPECT_THAT(debug_urls_map.at(kSellerOriginDomain),
+              EqualsProto(seller_reports));
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsSampledDebugReportsForAllBuyersInComponentAuction) {
+  this->SetupRequest({.enable_sampled_debug_reporting = true,
+                      .top_level_seller = kTestTopLevelSellerOriginDomain});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 2);
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true});
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response,
+                         {.top_level_seller = kTestTopLevelSellerOriginDomain});
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  AdScore winner, loser;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugReportsForComponentWinner, &seller_reports));
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner, &loser, &seller_reports](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // Last bid wins.
+            for (int i = 0; i < request->ad_bids_size(); ++i) {
+              const auto& bid = request->ad_bids(i);
+              AdScore score;
+              score.set_render(bid.render());
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              score.set_desirability(i + 1);
+              score.set_buyer_bid(i + 1);
+              score.set_bid(1);
+              score.set_interest_group_name(bid.interest_group_name());
+              score.set_interest_group_owner(bid.interest_group_owner());
+              *response.mutable_ad_score() = score;
+              // Fields for component auction.
+              score.set_ad_metadata(kTestAdMetadata);
+              score.set_allow_component_auction(true);
+              *response.mutable_ad_score() = score;
+              if (i < request->ad_bids().size() - 1) {
+                loser = score;
+              } else if (i == request->ad_bids().size() - 1) {
+                winner = score;
+              }
+            }
+            *response.mutable_seller_debug_reports() = seller_reports;
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Sampled debug reports should be present in the response.
+  auto debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+
+  // Verify buyer debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(winner.interest_group_owner()));
+  DebugReports expected_winning_buyer_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(
+          absl::StrCat(kTestBuyerDebugWinReportForComponentWinnerTemplate,
+                       kTestBuyerDebugLossReportForComponentWinnerTemplate),
+          winner.render()),
+      &expected_winning_buyer_reports));
+  // The buyer with the component auction winning ad contributes both its
+  // debug win and loss urls to the response.
+  EXPECT_THAT(debug_urls_map.at(winner.interest_group_owner()).reports(),
+              UnorderedPointwise(EqualsProto(),
+                                 expected_winning_buyer_reports.reports()));
+
+  ASSERT_TRUE(debug_urls_map.contains(loser.interest_group_owner()));
+  DebugReports expected_losing_buyer_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::Substitute(kTestBuyerDebugLossReportTemplate, loser.render()),
+      &expected_losing_buyer_reports));
+  // The buyer with the component auction losing ad contributes its debug loss
+  // url to the response.
+  EXPECT_THAT(debug_urls_map.at(loser.interest_group_owner()),
+              EqualsProto(expected_losing_buyer_reports));
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsEachTypeOfEmptyDebugReportForBuyerInComponentAuction) {
+  this->SetupRequest({.num_buyers = 1,
+                      .enable_sampled_debug_reporting = true,
+                      .top_level_seller = kTestTopLevelSellerOriginDomain});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 1);
+  BuyerBidsResponseMap expected_buyer_bids;
+  // Single buyer has two ads: one wins and one loses in the component auction.
+  // Both ads had their debug urls fail sampling.
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        absl::StrCat(buyer_to_ad_url.at(buyer), "_0"),
+        {.interest_group_name = "ig_0",
+         .enable_debug_reporting = true,
+         .debug_win_url_failed_sampling = true,
+         .debug_loss_url_failed_sampling = true});
+    get_bid_response.mutable_bids()->Add(
+        BuildNewAdWithBid(absl::StrCat(buyer_to_ad_url.at(buyer), "_1"),
+                          {.interest_group_name = "ig_1",
+                           .enable_debug_reporting = true,
+                           .debug_win_url_failed_sampling = true,
+                           .debug_loss_url_failed_sampling = true}));
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response,
+                         {.top_level_seller = kTestTopLevelSellerOriginDomain});
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  AdScore winner;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugReportsForComponentWinner, &seller_reports));
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner, &seller_reports](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // Last bid wins.
+            for (int i = 0; i < request->ad_bids_size(); ++i) {
+              const auto& bid = request->ad_bids(i);
+              AdScore score;
+              score.set_render(bid.render());
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              score.set_desirability(i + 1);
+              score.set_buyer_bid(i + 1);
+              score.set_bid(1);
+              score.set_interest_group_name(bid.interest_group_name());
+              score.set_interest_group_owner(bid.interest_group_owner());
+              *response.mutable_ad_score() = score;
+              // Fields for component auction.
+              score.set_ad_metadata(kTestAdMetadata);
+              score.set_allow_component_auction(true);
+              *response.mutable_ad_score() = score;
+              if (i == request->ad_bids().size() - 1) {
+                winner = score;
+              }
+            }
+            *response.mutable_seller_debug_reports() = seller_reports;
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Sampled debug reports should be present in the response.
+  auto debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+
+  // Verify buyer debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(winner.interest_group_owner()));
+  DebugReports expected_buyer_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        reports {
+          url: ""
+          is_win_report: true
+          is_seller_report: false
+          is_component_win: true
+        }
+        reports {
+          url: ""
+          is_win_report: false
+          is_seller_report: false
+          is_component_win: true
+        }
+        reports {
+          url: ""
+          is_win_report: false
+          is_seller_report: false
+          is_component_win: false
+        }
+      )pb",
+      &expected_buyer_reports));
+  // Debug reports with empty url should be added to the response for each of
+  // the following urls that failed sampling: win url of component winner, loss
+  // url of component winner, loss url of loser.
+  EXPECT_THAT(
+      debug_urls_map.at(winner.interest_group_owner()).reports(),
+      UnorderedPointwise(EqualsProto(), expected_buyer_reports.reports()));
+
+  // Verify seller debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(kSellerOriginDomain));
+  EXPECT_THAT(debug_urls_map.at(kSellerOriginDomain),
+              EqualsProto(seller_reports));
+}
+
+TYPED_TEST(SellerFrontEndServiceTest,
+           ReturnsEmptyDebugReportsForAllBuyersInComponentAuction) {
+  this->SetupRequest({.enable_sampled_debug_reporting = true,
+                      .top_level_seller = kTestTopLevelSellerOriginDomain});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 2);
+  BuyerBidsResponseMap expected_buyer_bids;
+  // Both buyers have ads whose debug urls failed sampling.
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true,
+                                    .debug_win_url_failed_sampling = true,
+                                    .debug_loss_url_failed_sampling = true});
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response,
+                         {.top_level_seller = kTestTopLevelSellerOriginDomain});
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  AdScore winner, loser;
+  DebugReports seller_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugReportsForComponentWinner, &seller_reports));
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner, &loser, &seller_reports](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            // Last bid wins.
+            for (int i = 0; i < request->ad_bids_size(); ++i) {
+              const auto& bid = request->ad_bids(i);
+              AdScore score;
+              score.set_render(bid.render());
+              score.mutable_component_renders()->CopyFrom(bid.ad_components());
+              score.set_desirability(i + 1);
+              score.set_buyer_bid(i + 1);
+              score.set_bid(1);
+              score.set_interest_group_name(bid.interest_group_name());
+              score.set_interest_group_owner(bid.interest_group_owner());
+              *response.mutable_ad_score() = score;
+              // Fields for component auction.
+              score.set_ad_metadata(kTestAdMetadata);
+              score.set_allow_component_auction(true);
+              *response.mutable_ad_score() = score;
+              if (i < request->ad_bids().size() - 1) {
+                loser = score;
+              } else if (i == request->ad_bids().size() - 1) {
+                winner = score;
+              }
+            }
+            *response.mutable_seller_debug_reports() = seller_reports;
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // Sampled debug reports should be present in the response.
+  auto debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+
+  // Verify buyer debug reports.
+  ASSERT_TRUE(debug_urls_map.contains(winner.interest_group_owner()));
+  DebugReports expected_buyer_empty_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        reports {
+          url: ""
+          is_win_report: true
+          is_seller_report: false
+          is_component_win: true
+        }
+        reports {
+          url: ""
+          is_win_report: false
+          is_seller_report: false
+          is_component_win: true
+        }
+      )pb",
+      &expected_buyer_empty_reports));
+  // The component winner had its debug win and loss urls fail sampling. Both
+  // contribute a debug report with an empty url for the winning buyer.
+  EXPECT_THAT(debug_urls_map.at(winner.interest_group_owner()).reports(),
+              UnorderedPointwise(EqualsProto(),
+                                 expected_buyer_empty_reports.reports()));
+
+  ASSERT_TRUE(debug_urls_map.contains(loser.interest_group_owner()));
+  DebugReports expected_buyer_empty_loss_report;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      R"pb(
+        reports {
+          url: ""
+          is_win_report: false
+          is_seller_report: false
+          is_component_win: false
+        }
+      )pb",
+      &expected_buyer_empty_loss_report));
+  // The component loser had its debug loss url fail sampling, so a debug
+  // report with an empty url is added to the response for the losing buyer.
+  EXPECT_THAT(debug_urls_map.at(loser.interest_group_owner()),
+              EqualsProto(expected_buyer_empty_loss_report));
+}
+
+TYPED_TEST(
+    SellerFrontEndServiceTest,
+    MergesSampledBuyerAndSellerDebugReportsOfSameAdtechForComponentAuction) {
+  this->SetupRequest({.num_buyers = 1,
+                      .enable_sampled_debug_reporting = true,
+                      .top_level_seller = kTestTopLevelSellerOriginDomain,
+                      .seller_adtech_is_also_a_buyer = true});
+  absl::flat_hash_map<std::string, std::string> buyer_to_ad_url =
+      BuildBuyerWinningAdUrlMap(this->request_);
+
+  // Buyer Clients
+  BuyerFrontEndAsyncClientFactoryMock buyer_clients;
+  int client_count = this->protected_auction_input_.buyer_input_size();
+  EXPECT_EQ(client_count, 1);
+  BuyerBidsResponseMap expected_buyer_bids;
+  for (const auto& [buyer, unused] :
+       this->protected_auction_input_.buyer_input()) {
+    // Buyer has one ad. Its debug win url passed sampling, and debug loss url
+    // failed sampling.
+    auto get_bid_response = BuildGetBidsResponseWithSingleAd(
+        buyer_to_ad_url.at(buyer), {.enable_debug_reporting = true,
+                                    .debug_loss_url_failed_sampling = true});
+    SetupBuyerClientMock(buyer, buyer_clients, get_bid_response,
+                         {.top_level_seller = kTestTopLevelSellerOriginDomain});
+    expected_buyer_bids.try_emplace(
+        buyer, std::make_unique<GetBidsResponse::GetBidsRawResponse>(
+                   get_bid_response));
+  }
+
+  // Scoring signal provider
+  MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
+      scoring_signals_provider;
+  // KV V2 Client
+  KVAsyncClientMock kv_async_client;
+  SetupScoringSignalsClient<TypeParam::kUseKvV2ForBrowser>(
+      scoring_signals_provider, kv_async_client,
+      std::move(expected_buyer_bids));
+
+  // Scoring Client
+  ScoringAsyncClientMock scoring_client;
+  absl::Notification scoring_done;
+  std::string winner_render;
+  DebugReports seller_reports;
+  // Both seller debug win and loss urls passed sampling.
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      kTestSellerDebugReportsForComponentWinner, &seller_reports));
+  EXPECT_CALL(scoring_client, ExecuteInternal)
+      .Times(1)
+      .WillOnce(
+          [&scoring_done, &winner_render, &seller_reports](
+              std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
+              grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
+              absl::Duration timeout, RequestConfig request_config) {
+            // The bid by the seller adtech (also a buyer in the auction) wins.
+            ScoreAdsResponse::ScoreAdsRawResponse response;
+            AdScore score;
+            const auto& bid = request->ad_bids(0);
+            if (bid.interest_group_owner() == kSellerOriginDomain) {
+              winner_render = bid.render();
+              score.set_desirability(1);
+              score.set_buyer_bid(1);
+              score.set_bid(1);
+            }
+            score.set_render(bid.render());
+            score.mutable_component_renders()->CopyFrom(bid.ad_components());
+            score.set_interest_group_name(bid.interest_group_name());
+            score.set_interest_group_owner(bid.interest_group_owner());
+            // Fields for component auction.
+            score.set_ad_metadata(kTestAdMetadata);
+            score.set_allow_component_auction(true);
+            *response.mutable_ad_score() = score;
+            *response.mutable_seller_debug_reports() = seller_reports;
+            std::move(on_done)(
+                std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(
+                    response),
+                {});
+            scoring_done.Notify();
+            return absl::OkStatus();
+          });
+
+  // Reporting Client.
+  std::unique_ptr<MockAsyncReporter> async_reporter =
+      std::make_unique<MockAsyncReporter>(
+          std::make_unique<MockHttpFetcherAsync>());
+  // Debug pings should not be sent from the server if sampling is enabled.
+  EXPECT_CALL(*async_reporter, DoReport).Times(0);
+
+  MockEntriesCallOnBuyerFactory(this->protected_auction_input_.buyer_input(),
+                                buyer_clients);
+
+  // Client Registry
+  ClientRegistry clients{&scoring_signals_provider,
+                         scoring_client,
+                         buyer_clients,
+                         &kv_async_client,
+                         this->key_fetcher_manager_,
+                         /*crypto_client=*/nullptr,
+                         std::move(async_reporter)};
+
+  Response response = RunRequest<SelectAdReactorForWeb>(
+      this->config_, clients, this->request_, this->executor_.get(),
+      this->report_win_map_);
+  scoring_done.WaitForNotification();
+
+  AuctionResult auction_result =
+      DecryptBrowserAuctionResultAndNonce(
+          *response.mutable_auction_result_ciphertext(), *this->context_)
+          .first;
+
+  // The buyer debug urls are processed first. Buyer's debug win url is added to
+  // the response. Buyer's debug loss url failed sampling, so a corresponding
+  // debug report with an empty url is added next.
+  // Next, seller's debug win url is skipped since the adtech already has a
+  // sampled debug win url. Finally, seller's debug loss url is added to the
+  // response.
+  auto& debug_urls_map = auction_result.adtech_origin_debug_urls_map();
+  ASSERT_TRUE(debug_urls_map.contains(kSellerOriginDomain));
+  DebugReports expected_reports;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(
+      absl::StrCat(
+          absl::Substitute(kTestBuyerDebugWinReportForComponentWinnerTemplate,
+                           winner_render),
+          R"pb(
+            reports {
+              url: ""
+              is_win_report: false
+              is_seller_report: false
+              is_component_win: true
+            }
+            reports {
+              url: "https://seller.com/debugLoss"
+              is_win_report: false
+              is_seller_report: true
+              is_component_win: true
+            }
+          )pb"),
+      &expected_reports));
+  EXPECT_THAT(debug_urls_map.at(kSellerOriginDomain).reports(),
+              UnorderedPointwise(EqualsProto(), expected_reports.reports()));
+}
+
 auto EqGetBidsRawRequestKAnonFields(
     const GetBidsRequest::GetBidsRawRequest& raw_request) {
   return AllOf(Property(&GetBidsRequest::GetBidsRawRequest::enforce_kanon,
@@ -2394,7 +3864,7 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyKAnonFieldsPropagateToBuyers) {
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
          grpc::ClientContext* context, GetBidDoneCallback on_done,
          absl::Duration timeout, RequestConfig request_config) {
-        EXPECT_EQ(request_config.chaff_request_size, 0);
+        EXPECT_EQ(request_config.minimum_request_size, 0);
         auto get_bids_response =
             std::make_unique<GetBidsResponse::GetBidsRawResponse>();
         auto* bid = get_bids_response->mutable_bids()->Add();
@@ -2492,7 +3962,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
       [](std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
          grpc::ClientContext* context, GetBidDoneCallback on_done,
          absl::Duration timeout, RequestConfig request_config) {
-        EXPECT_EQ(request_config.chaff_request_size, 0);
+        EXPECT_EQ(request_config.minimum_request_size, 0);
         auto get_bids_response =
             std::make_unique<GetBidsResponse::GetBidsRawResponse>();
         auto* bid = get_bids_response->mutable_bids()->Add();
@@ -2547,7 +4017,7 @@ TYPED_TEST(SellerFrontEndServiceTest,
                                            /*enable_kanon=*/false);
 }
 
-TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
+TYPED_TEST(SellerFrontEndServiceTest, ChaffingV1Enabled_SendsChaffRequest) {
   this->config_.SetOverride(kTrue, ENABLE_CHAFFING);
 
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
@@ -2582,7 +4052,7 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
         // Verify this is a chaff request by validating the is_chaff and
         // generation_id fields.
         EXPECT_TRUE(get_bids_request->is_chaff());
-        EXPECT_GT(request_config.chaff_request_size, 0);
+        EXPECT_GT(request_config.minimum_request_size, 0);
         EXPECT_FALSE(get_bids_request->log_context().generation_id().empty());
         ABSL_LOG(INFO) << "Returning mock bids";
         std::move(on_done)(
@@ -2621,6 +4091,26 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
   EXPECT_CALL(buyer_front_end_async_client_factory_mock, Entries)
       .WillRepeatedly(Return(std::move(entries)));
 
+  auto mock_rng = std::make_unique<MockRandomNumberGenerator>();
+  // For the ShouldSkipChaffing() call - do not skip chaffing in this case.
+  EXPECT_CALL(*mock_rng, GetUniformReal(0, 1)).WillOnce(Return(1.0));
+  // For generating the number of chaff requests to send.
+  EXPECT_CALL(*mock_rng, GetUniformInt(1, 1)).WillOnce(Return(1));
+  // For generating the chaff request size.
+  EXPECT_CALL(*mock_rng, GetUniformInt(kMinChaffRequestSizeBytes,
+                                       kMaxChaffRequestSizeBytes))
+      .WillOnce(Return(kMaxChaffRequestSizeBytes));
+  // Verify chaff request candidates are being shuffled and the first 'n' buyers
+  // in the SFE config aren't chosen.
+  EXPECT_CALL(*mock_rng, Shuffle)
+      .WillOnce([](std::vector<absl::string_view>& vector) {
+        std::reverse(vector.begin(), vector.end());
+      });
+
+  MockRandomNumberGeneratorFactory mock_rng_factory;
+  EXPECT_CALL(mock_rng_factory, CreateRng)
+      .WillOnce(Return(std::move(mock_rng)));
+
   // Append the chaff buyer to the auction_config field in the SelectAd
   // request.
   SelectAdRequest select_ad_request =
@@ -2629,7 +4119,11 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
       chaff_buyer_name;
   SelectAdResponse encrypted_response =
       RunReactorRequest<SelectAdReactorForWeb>(
-          this->config_, clients, select_ad_request, this->executor_.get());
+          this->config_, clients, select_ad_request, this->executor_.get(),
+          /* enable_kanon */ false,
+          /* enable_buyer_private_aggregate_reporting */ false,
+          /* per_adtech_paapi_contributions_limit */ 100,
+          /* fail_fast */ false, /* report_win_map */ {}, mock_rng_factory);
   EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
   auto decrypted_response = FromObliviousHTTPResponse(
       *encrypted_response.mutable_auction_result_ciphertext(),
@@ -2648,19 +4142,14 @@ TYPED_TEST(SellerFrontEndServiceTest, ChaffingEnabled_SendsChaffRequest) {
   EXPECT_EQ(auction_result->bid(), winning_bid);
 }
 
-TYPED_TEST(SellerFrontEndServiceTest, VerifyChaffCandidatesAreRandomlyChosen) {
-  // For chaffing, it's expected that the chaff request candidates list is
-  // shuffled so the chaff buyer is chosen randomly. This test simulates 100
-  // SelectAd requests, each producing two chaff buyer candidates (A and B). The
-  // test confirms that both A and B are selected as the sole chaff buyer at
-  // least once, demonstrating that the chaff candidate list is shuffled before
-  // a buyer is chosen.
+TYPED_TEST(SellerFrontEndServiceTest,
+           ChaffingV2Enabled_MovingMedianUpdatedOnlyForNonChaff) {
   this->config_.SetOverride(kTrue, ENABLE_CHAFFING);
+  this->config_.SetOverride(kTrue, ENABLE_CHAFFING_V2);
 
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
   ScoringAsyncClientMock scoring_client;
-  // KV V2 Client
   KVAsyncClientMock kv_async_client;
   BuyerFrontEndAsyncClientFactoryMock buyer_front_end_async_client_factory_mock;
   BuyerBidsResponseMap expected_buyer_bids;
@@ -2670,120 +4159,122 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifyChaffCandidatesAreRandomlyChosen) {
       .WillRepeatedly(Return(GetPrivateKey()));
   const float winning_bid = 999.0F;
 
-  // Set up buyer calls for chaff buyer 1.
-  std::string chaff_buyer1_name = "chaff_buyer1";
-  GetBidsResponse::GetBidsRawResponse response;
-  absl::Time buyer1_invocation_time;
-  auto mock_get_bids1 =
-      [response, &buyer1_invocation_time](
+  std::string chaff_buyer_name = "chaff_buyer";
+
+  auto [request_with_context, clients] =
+      GetSelectAdRequestAndClientRegistryForTest<typename TypeParam::InputType,
+                                                 TypeParam::kUseKvV2ForBrowser>(
+          CLIENT_TYPE_BROWSER, winning_bid, &scoring_signals_provider,
+          scoring_client, buyer_front_end_async_client_factory_mock,
+          &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
+          kSellerOriginDomain, true);
+
+  // Set up buyer calls for the chaff buyer.
+  absl::Notification chaff_buyer_called_notif;
+  auto chaff_buyer_execute_mock_lambda =
+      [&chaff_buyer_called_notif](
           std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
           grpc::ClientContext* context, GetBidDoneCallback on_done,
           absl::Duration timeout, RequestConfig request_config) {
         EXPECT_TRUE(get_bids_request->is_chaff());
         std::move(on_done)(
-            std::make_unique<GetBidsResponse::GetBidsRawResponse>(response),
-            /*response_metadata=*/{});
-        buyer1_invocation_time = absl::Now();
+            std::make_unique<GetBidsResponse::GetBidsRawResponse>(),
+            /* response_metadata */ {});
+        chaff_buyer_called_notif.Notify();
         return absl::OkStatus();
       };
-  auto setup_mock_buyer1 =
-      [mock_get_bids1](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
-        EXPECT_CALL(*buyer, ExecuteInternal).WillRepeatedly(mock_get_bids1);
+  auto chaff_buyer_execute_mock =
+      [chaff_buyer_execute_mock_lambda](
+          std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
+        EXPECT_CALL(*buyer, ExecuteInternal)
+            .WillRepeatedly(chaff_buyer_execute_mock_lambda);
         return buyer;
       };
-  auto mock_buyer_Factory_call1 = [setup_mock_buyer1](
-                                      absl::string_view chaff_buyer_name) {
-    return setup_mock_buyer1(std::make_unique<BuyerFrontEndAsyncClientMock>());
-  };
-  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(chaff_buyer1_name))
-      .WillRepeatedly(mock_buyer_Factory_call1);
-
-  std::string chaff_buyer2_name = "chaff_buyer2";
-  absl::Time buyer2_invocation_time;
-  auto mock_get_bids2 =
-      [response, &buyer2_invocation_time](
-          std::unique_ptr<GetBidsRequest::GetBidsRawRequest> get_bids_request,
-          grpc::ClientContext* context, GetBidDoneCallback on_done,
-          absl::Duration timeout, RequestConfig request_config) {
-        EXPECT_TRUE(get_bids_request->is_chaff());
-        std::move(on_done)(
-            std::make_unique<GetBidsResponse::GetBidsRawResponse>(response),
-            /*response_metadata=*/{});
-        buyer2_invocation_time = absl::Now();
-        return absl::OkStatus();
+  auto chaff_buyer_client_mock =
+      [chaff_buyer_execute_mock](absl::string_view chaff_buyer_name) {
+        return chaff_buyer_execute_mock(
+            std::make_unique<BuyerFrontEndAsyncClientMock>());
       };
-  auto setup_mock_buyer2 =
-      [mock_get_bids2](std::unique_ptr<BuyerFrontEndAsyncClientMock> buyer) {
-        EXPECT_CALL(*buyer, ExecuteInternal).WillRepeatedly(mock_get_bids2);
-        return buyer;
-      };
-  auto mock_buyer_Factory_call2 = [setup_mock_buyer2](
-                                      absl::string_view chaff_buyer_name) {
-    return setup_mock_buyer2(std::make_unique<BuyerFrontEndAsyncClientMock>());
-  };
-  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(chaff_buyer2_name))
-      .WillRepeatedly(mock_buyer_Factory_call2);
+  EXPECT_CALL(buyer_front_end_async_client_factory_mock, Get(chaff_buyer_name))
+      .WillRepeatedly(chaff_buyer_client_mock);
 
-  // Mock Entries() on the buyer factory return the 'real' and chaff buyers.
   std::vector<
       std::pair<absl::string_view, std::shared_ptr<BuyerFrontEndAsyncClient>>>
       entries;
-  entries.emplace_back(kSampleBuyer,  // The non-chaff buyer.
-                       std::make_shared<BuyerFrontEndAsyncClientMock>());
-  entries.emplace_back(chaff_buyer1_name,
-                       std::make_shared<BuyerFrontEndAsyncClientMock>());
-  entries.emplace_back(chaff_buyer2_name,
+  for (const auto& [buyer, unused] :
+       request_with_context.protected_auction_input.buyer_input()) {
+    entries.emplace_back(buyer,
+                         std::make_shared<BuyerFrontEndAsyncClientMock>());
+  }
+  entries.emplace_back(chaff_buyer_name,
                        std::make_shared<BuyerFrontEndAsyncClientMock>());
   EXPECT_CALL(buyer_front_end_async_client_factory_mock, Entries)
       .WillRepeatedly(Return(std::move(entries)));
 
-  // Run the reactor 100 times and validate that, on separate runs, both chaff
-  // request candidates are chosen as the only chaff buyer.
-  bool buyer1_invoked_first = false, buyer2_invoked_first = false;
-  for (int i = 0; i < 100; i++) {
-    absl::Time test_start_time = absl::Now();
-    auto [request_with_context, clients] =
-        GetSelectAdRequestAndClientRegistryForTest<
-            typename TypeParam::InputType, TypeParam::kUseKvV2ForBrowser>(
-            CLIENT_TYPE_BROWSER, winning_bid, &scoring_signals_provider,
-            scoring_client, buyer_front_end_async_client_factory_mock,
-            &kv_async_client, key_fetcher_manager.get(), expected_buyer_bids,
-            kSellerOriginDomain, false, "", false, false, {}, false, {},
-            nullptr, MakeARandomString());
-    SelectAdRequest select_ad_request =
-        std::move(request_with_context.select_ad_request);
-    *select_ad_request.mutable_auction_config()->mutable_buyer_list()->Add() =
-        chaff_buyer1_name;
-    *select_ad_request.mutable_auction_config()->mutable_buyer_list()->Add() =
-        chaff_buyer2_name;
-    (void)RunReactorRequest<SelectAdReactorForWeb>(
-        this->config_, clients, select_ad_request, this->executor_.get());
+  auto mock_rng = std::make_unique<MockRandomNumberGenerator>();
+  // For the ShouldSkipChaffing() call - do not skip chaffing in this case.
+  EXPECT_CALL(*mock_rng, GetUniformReal(0, 1)).WillOnce(Return(1.0));
+  // For generating the number of chaff requests to send.
+  EXPECT_CALL(*mock_rng, GetUniformInt(1, 1)).WillOnce(Return(1));
 
-    // Both chaff buyers were invoked; ignore this run since the test needs to
-    // look at cases where only 1 chaff request was sent.
-    if (buyer1_invocation_time > test_start_time &&
-        buyer2_invocation_time > test_start_time) {
-      continue;
-    }
+  MockRandomNumberGeneratorFactory mock_rng_factory;
+  EXPECT_CALL(mock_rng_factory, CreateRng)
+      .WillOnce(Return(std::move(mock_rng)));
 
-    // Verify that in different runs, buyer1 and buyer2 were each invoked,
-    // implying the server randomly selects a chaff buyer from the list of
-    // candidates.
-    buyer1_invoked_first =
-        buyer1_invoked_first || (buyer1_invocation_time > test_start_time);
-    buyer2_invoked_first =
-        buyer2_invoked_first || (buyer2_invocation_time > test_start_time);
-    if (buyer1_invoked_first && buyer2_invoked_first) {
-      return;
-    }
-  }
+  auto mock_mmm = std::make_unique<MockMovingMedianManager>();
+  EXPECT_CALL(*mock_mmm, IsWindowFilled)
+      .Times(testing::Exactly(2))
+      .WillOnce([&](absl::string_view buyer) {
+        EXPECT_EQ(buyer, kSampleBuyer);
+        return true;  // Can be false too; doesn't matter for this test.
+      })
+      .WillOnce([&](absl::string_view buyer) {
+        EXPECT_EQ(buyer, chaff_buyer_name);
+        return true;  // Can be false too; doesn't matter for this test.
+      });
+  EXPECT_CALL(*mock_mmm, AddNumberToBuyerWindow)
+      .Times(testing::Exactly(1))
+      .WillOnce(
+          [&](absl::string_view buyer, RandomNumberGenerator& rng, int val) {
+            EXPECT_EQ(buyer, kSampleBuyer);
+            return absl::OkStatus();
+          });
+  clients.moving_median_manager = std::move(mock_mmm);
 
-  FAIL() << "Chaff request candidates are likely not being shuffled";
+  SelectAdRequest select_ad_request =
+      std::move(request_with_context.select_ad_request);
+  // Append the chaff buyer to the auction_config field in the SelectAd
+  // request.
+  *select_ad_request.mutable_auction_config()->mutable_buyer_list()->Add() =
+      chaff_buyer_name;
+  SelectAdResponse encrypted_response =
+      RunReactorRequest<SelectAdReactorForWeb>(
+          this->config_, clients, select_ad_request, this->executor_.get(),
+          /* enable_kanon */ false,
+          /* enable_buyer_private_aggregate_reporting */ false,
+          /* per_adtech_paapi_contributions_limit */ 100,
+          /* fail_fast */ false, /* report_win_map */ {}, mock_rng_factory);
+  EXPECT_FALSE(encrypted_response.auction_result_ciphertext().empty());
+  auto decrypted_response = FromObliviousHTTPResponse(
+      *encrypted_response.mutable_auction_result_ciphertext(),
+      request_with_context.context, kBiddingAuctionOhttpResponseLabel);
+  ASSERT_TRUE(decrypted_response.ok()) << decrypted_response.status();
+
+  absl::StatusOr<std::string> decompressed_response =
+      UnframeAndDecompressAuctionResult(*decrypted_response);
+  ASSERT_TRUE(decompressed_response.ok())
+      << decompressed_response.status().message();
+
+  absl::StatusOr<AuctionResult> auction_result =
+      CborDecodeAuctionResultToProto(*decompressed_response);
+  EXPECT_TRUE(auction_result.ok()) << auction_result.status();
+  EXPECT_FALSE(auction_result->is_chaff());
+  EXPECT_EQ(auction_result->bid(), winning_bid);
 }
 
 TYPED_TEST(SellerFrontEndServiceTest, VerifySameBuyersInvokedOnRequestReplay) {
-  server_common::log::SetGlobalPSVLogLevel(10);
   this->config_.SetOverride(kTrue, ENABLE_CHAFFING);
+  this->config_.SetOverride(kTrue, ENABLE_BUYER_CACHING);
 
   MockAsyncProvider<ScoringSignalsRequest, ScoringSignals>
       scoring_signals_provider;
@@ -2893,10 +4384,25 @@ TYPED_TEST(SellerFrontEndServiceTest, VerifySameBuyersInvokedOnRequestReplay) {
   EXPECT_CALL(buyer_front_end_async_client_factory_mock, Entries)
       .WillRepeatedly(Return(std::move(entries)));
 
+  auto mock_rng = std::make_unique<MockRandomNumberGenerator>();
+  // For generating the chaff request size.
+  EXPECT_CALL(*mock_rng, GetUniformInt(kMinChaffRequestSizeBytes,
+                                       kMaxChaffRequestSizeBytes))
+      .WillOnce(Return(kMaxChaffRequestSizeBytes));
+
+  MockRandomNumberGeneratorFactory mock_rng_factory;
+  EXPECT_CALL(mock_rng_factory, CreateRng)
+      .WillOnce(Return(std::move(mock_rng)));
+
   SelectAdRequest select_ad_request =
       std::move(request_with_context.select_ad_request);
+
   (void)RunReactorRequest<SelectAdReactorForWeb>(
-      this->config_, clients, select_ad_request, this->executor_.get());
+      this->config_, clients, select_ad_request, this->executor_.get(),
+      /* enable_kanon */ false,
+      /* enable_buyer_private_aggregate_reporting */ true,
+      /* per_adtech_paapi_contributions_limit */ 100,
+      /* fail_fast */ false, /* report_win_map */ {}, mock_rng_factory);
 
   non_chaff_buyer_called_notif.WaitForNotification();
   chaff_buyer_called_notif.WaitForNotification();

@@ -1,0 +1,1 @@
+../../gcp/seller_frontend_service/BUILD

@@ -20,8 +20,8 @@
 #include "absl/strings/str_replace.h"
 #include "gtest/gtest.h"
 #include "rapidjson/document.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper_test_constants.h"
-#include "services/bidding_service/constants.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/reporting_util.h"
 

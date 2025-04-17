@@ -12,5 +12,6 @@
       [-20, "<adRenderId>"],
       [-100, "<adRenderId>"]
     ]
-  }
+  },
+  "inCooldownOrLockout": true
 }

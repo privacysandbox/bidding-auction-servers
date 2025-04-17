@@ -11,56 +11,15 @@
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
 //  limitations under the License
+
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 
-#include <cmath>
-#include <cstdint>
 #include <limits>
 
-#include "absl/status/statusor.h"
-#include "openssl/rand.h"
+#include "services/common/util/random_number_generator.h"
 #include "src/util/status_macro/status_macros.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-
-// Uses OpenSSL's RAND_bytes to generate a 64 bit unsigned random integer.
-absl::StatusOr<uint64_t> RandUint64() {
-  uint64_t rand_64;
-  if (RAND_bytes(reinterpret_cast<uint8_t*>(&rand_64), sizeof(rand_64)) != 1) {
-    return absl::InternalError("Error generating number.");
-  }
-  return rand_64;
-}
-
-// Generates a 64 bit unsigned random integer within [0,range].
-absl::StatusOr<uint64_t> RandGenerator(uint64_t range) {
-  // We must discard random results above this number, as they would
-  // make the random generator non-uniform (consider e.g. if
-  // MAX_UINT64 was 7 and range was 5, then a result of 1 would be twice
-  // as likely as a result of 3 or 4).
-  uint64_t max_acceptable_value =
-      (std::numeric_limits<uint64_t>::max() / range) * range - 1;
-
-  uint64_t rand_unit64;
-  do {
-    PS_ASSIGN_OR_RETURN(rand_unit64, RandUint64());
-  } while (rand_unit64 > max_acceptable_value);
-
-  return rand_unit64 % range;
-}
-
-// Generates a random integer within the range of [min,max]
-absl::StatusOr<int> RandInt(int min, int max) {
-  if (min >= max) {
-    return absl::InternalError("Invalid range for random number generation.");
-  }
-  uint64_t range = static_cast<uint64_t>(max - min) + 1;
-  // |range| is at most UINT_MAX + 1, so the result of RandGenerator(range)
-  // is at most UINT_MAX.  Hence it's safe to cast it from uint64_t to int64_t.
-  int rand_unit64;
-  PS_ASSIGN_OR_RETURN(rand_unit64, RandGenerator(range));
-  return rand_unit64 + min;
-}
 
 uint8_t BucketJoinCount(int32_t join_count) {
   if (join_count < 1) {

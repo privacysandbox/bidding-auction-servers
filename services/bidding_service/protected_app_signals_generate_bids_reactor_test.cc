@@ -28,7 +28,7 @@
 #include "include/grpcpp/server_context.h"
 #include "public/query/v2/get_values_v2.pb.h"
 #include "services/bidding_service/base_generate_bids_reactor.h"
-#include "services/bidding_service/constants.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/egress_schema_cache.h"
 #include "services/bidding_service/generate_bids_reactor_test_utils.h"
 #include "services/common/clients/kv_server/kv_async_client.h"
@@ -378,24 +378,31 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputIsCorrect) {
           // Second dispatch happens for `generateBid` UDF.
           EXPECT_EQ(batch.size(), 1);
           const auto& inputs = batch[0].input;
-          EXPECT_EQ(inputs.size(), kNumGenerateBidsUdfArgs);
+          EXPECT_EQ(inputs.size(), kNumGenerateProtectedAppSignalsBidUdfArgs);
 
           // Verify ads match our expectations.
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kAds)],
-                    kTestAdsRetrievalAdsResponse);
+          EXPECT_EQ(
+              *inputs[ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kAds)],
+              kTestAdsRetrievalAdsResponse);
 
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kAuctionSignals)],
-                    kTestAuctionSignals);
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kBuyerSignals)],
+          EXPECT_EQ(
+              *inputs[ArgIndex(
+                  GenerateProtectedAppSignalsBidUdfArgs::kAuctionSignals)],
+              kTestAuctionSignals);
+          EXPECT_EQ(*inputs[ArgIndex(
+                        GenerateProtectedAppSignalsBidUdfArgs::kBuyerSignals)],
                     kTestBuyerSignals);
 
           // Verify Contextual Embeddings match our expectations.
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kAds)],
-                    kTestAdsRetrievalAdsResponse);
+          EXPECT_EQ(
+              *inputs[ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kAds)],
+              kTestAdsRetrievalAdsResponse);
 
           // Verify Auction Metadata is as expected.
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kAuctionMetadata)],
-                    kEmptyAuctionMetadata);
+          EXPECT_EQ(
+              *inputs[ArgIndex(
+                  GenerateProtectedAppSignalsBidUdfArgs::kAuctionMetadata)],
+              kEmptyAuctionMetadata);
 
           return MockRomaExecution(batch, std::move(batch_callback),
                                    kGenerateBidEntryFunction,
@@ -449,24 +456,31 @@ TEST_F(GenerateBidsReactorTest, GenerateBidsInputForComponentAuctionIsCorrect) {
           // Second dispatch happens for `generateBid` UDF.
           EXPECT_EQ(batch.size(), 1);
           const auto& inputs = batch[0].input;
-          EXPECT_EQ(inputs.size(), kNumGenerateBidsUdfArgs);
+          EXPECT_EQ(inputs.size(), kNumGenerateProtectedAppSignalsBidUdfArgs);
 
           // Verify ads match our expectations.
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kAds)],
-                    kTestAdsRetrievalAdsResponse);
+          EXPECT_EQ(
+              *inputs[ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kAds)],
+              kTestAdsRetrievalAdsResponse);
 
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kAuctionSignals)],
-                    kTestAuctionSignals);
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kBuyerSignals)],
+          EXPECT_EQ(
+              *inputs[ArgIndex(
+                  GenerateProtectedAppSignalsBidUdfArgs::kAuctionSignals)],
+              kTestAuctionSignals);
+          EXPECT_EQ(*inputs[ArgIndex(
+                        GenerateProtectedAppSignalsBidUdfArgs::kBuyerSignals)],
                     kTestBuyerSignals);
 
           // Verify Contextual Embeddings match our expectations.
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kAds)],
-                    kTestAdsRetrievalAdsResponse);
+          EXPECT_EQ(
+              *inputs[ArgIndex(GenerateProtectedAppSignalsBidUdfArgs::kAds)],
+              kTestAdsRetrievalAdsResponse);
 
           // Verify Auction Metadata is as expected.
-          EXPECT_EQ(*inputs[ArgIndex(GenerateBidsUdfArgs::kAuctionMetadata)],
-                    kTestAuctionMetadata);
+          EXPECT_EQ(
+              *inputs[ArgIndex(
+                  GenerateProtectedAppSignalsBidUdfArgs::kAuctionMetadata)],
+              kTestAuctionMetadata);
 
           return MockRomaExecution(batch, std::move(batch_callback),
                                    kGenerateBidEntryFunction,

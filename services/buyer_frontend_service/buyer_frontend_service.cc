@@ -96,7 +96,7 @@ grpc::ServerUnaryReactor* BuyerFrontEndService::GetBids(
       *bidding_async_client_, config_,
       protected_app_signals_bidding_async_client_.get(),
       key_fetcher_manager_.get(), crypto_client_.get(), kv_async_client_.get(),
-      executor_, enable_benchmarking_);
+      executor_, rng_factory_, enable_benchmarking_);
   reactor->Execute();
   return reactor.release();
 }

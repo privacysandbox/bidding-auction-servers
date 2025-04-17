@@ -18,12 +18,12 @@
 #include <string>
 #include <utility>
 
-#include "absl/log/absl_log.h"
 #include "absl/log/check.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/notification.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/public/core/interface/execution_result.h"
 #include "src/public/cpio/interface/instance_client/instance_client_interface.h"
 
@@ -45,10 +45,12 @@ using ::google::scp::cpio::InstanceClientInterface;
 
 namespace {
 
-// Keys for EC2 tags.
+// Keys for instance tags.
 inline constexpr char kOperatorTagName[] = "operator";
 inline constexpr char kEnvironmentTagName[] = "environment";
 inline constexpr char kServiceTagName[] = "service";
+inline constexpr char kComputeZone[] = "zone";
+inline constexpr char kRegion[] = "region";
 
 inline constexpr char kResourceNameFetchError[] =
     "Unable to fetch instance resource name: (status_code: %s)";
@@ -56,14 +58,13 @@ inline constexpr char kResourceTagFetchError[] =
     "Unable to fetch instance's tags: (status_code: %s)";
 
 absl::Status HandleFailure(absl::string_view error) noexcept {
-  ABSL_LOG(ERROR) << error;
+  PS_LOG(ERROR) << error;
   return absl::InternalError(error);
 }
 
 absl::StatusOr<std::string> GetResourceName(
     std::shared_ptr<InstanceClientInterface> client) {  // NOLINT
   std::string resource_name;
-
   absl::Notification done;
   absl::Status status = client->GetCurrentInstanceResourceName(
       GetCurrentInstanceResourceNameRequest(),
@@ -73,8 +74,8 @@ absl::StatusOr<std::string> GetResourceName(
         if (result.Successful()) {
           resource_name = std::string{response.instance_resource_name()};
         } else {
-          ABSL_LOG(ERROR) << absl::StrFormat(
-              kResourceNameFetchError, GetErrorMessage(result.status_code));
+          PS_LOG(ERROR) << absl::StrFormat(kResourceNameFetchError,
+                                           GetErrorMessage(result.status_code));
         }
 
         done.Notify();
@@ -99,39 +100,51 @@ absl::StatusOr<std::string> GetResourceName(
 TrustedServerConfigUtil::TrustedServerConfigUtil(bool init_config_client)
     : init_config_client_(init_config_client) {
   if (!init_config_client_) {
+    PS_LOG(INFO) << "Skipping instance metadata fetch...";
     return;
   }
-
+  PS_LOG(INFO) << "Starting instance metadata fetch...";
   std::shared_ptr<InstanceClientInterface> client =
       google::scp::cpio::InstanceClientFactory::Create();
   client->Init().IgnoreError();
+  PS_LOG(INFO) << "Fetching host instance name...";
   absl::StatusOr<std::string> resource_name = GetResourceName(client);
-  CHECK_OK(resource_name) << "Could not fetch host resource name.";
-  ComputeZone(resource_name.value());
-  absl::Notification done;
+  CHECK_OK(resource_name) << "Could not fetch host instance name.";
+  PS_LOG(INFO) << "Fetching instance details for: " << *resource_name;
+  ComputeZone(*resource_name);
   GetInstanceDetailsByResourceNameRequest request;
-  request.set_instance_resource_name(resource_name.value());
+  request.set_instance_resource_name(*resource_name);
 
+  absl::Notification done;
   absl::Status status = client->GetInstanceDetailsByResourceName(
       std::move(request),
       [this, &done](const ExecutionResult& result,
                     const GetInstanceDetailsByResourceNameResponse& response) {
         if (result.Successful()) {
-          ABSL_LOG(INFO) << response.DebugString();
+          PS_LOG(INFO) << "Instance details: " << response.DebugString();
           instance_id_ = std::string{response.instance_details().instance_id()};
+          auto& labels = response.instance_details().labels();
+          // Mandatory labels:
           operator_ = response.instance_details().labels().at(kOperatorTagName);
-          environment_ =
-              response.instance_details().labels().at(kEnvironmentTagName);
-          service_ = response.instance_details().labels().at(kServiceTagName);
+          environment_ = labels.at(kEnvironmentTagName);
+          service_ = labels.at(kServiceTagName);
+          // Optional labels:
+          if (auto zone_it = labels.find(kComputeZone);
+              zone_it != labels.end()) {
+            zone_ = zone_it->second;
+          }
+          if (auto region_it = labels.find(kRegion);
+              region_it != labels.end()) {
+            region_ = region_it->second;
+          }
         } else {
-          ABSL_LOG(ERROR) << absl::StrFormat(
-              kResourceTagFetchError, GetErrorMessage(result.status_code));
+          PS_LOG(ERROR) << absl::StrFormat(kResourceTagFetchError,
+                                           GetErrorMessage(result.status_code));
         }
         done.Notify();
       });
   if (!status.ok()) {
-    ABSL_LOG(ERROR) << absl::StrFormat(kResourceTagFetchError,
-                                       status.message());
+    PS_LOG(ERROR) << absl::StrFormat(kResourceTagFetchError, status.message());
   } else {
     done.WaitForNotification();
   }

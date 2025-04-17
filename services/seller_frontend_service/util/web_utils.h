@@ -144,6 +144,7 @@ absl::StatusOr<std::string> Encode(
     const ::google::protobuf::Map<
         std::string, AuctionResult::InterestGroupIndex>& bidding_group_map,
     const UpdateGroupMap& update_group_map,
+    const AdtechOriginDebugUrlsMap& adtech_origin_debug_urls_map,
     const std::optional<AuctionResult::Error>& error,
     const std::function<void(const grpc::Status&)>& error_handler,
     int per_adtech_paapi_contributions_limit = 0,
@@ -190,6 +191,7 @@ T DecodeProtectedAuctionInput(cbor_item_t* root,
                               ErrorAccumulator& error_accumulator,
                               bool fail_fast) {
   T output;
+  output.set_enable_debug_reporting(true);  // Default value if not present.
 
   IsTypeValid(&cbor_isa_map, root, kProtectedAuctionInput, kMap,
               error_accumulator);
@@ -284,6 +286,28 @@ T DecodeProtectedAuctionInput(cbor_item_t* root,
 
         if (is_valid_enforce_k_anon_type) {
           output.set_enforce_kanon(cbor_get_bool(entry.value));
+        }
+        break;
+      }
+      case 8: {  // Enable Sampled Debug Reporting.
+        bool is_valid_sampled_debug_type =
+            IsTypeValid(&cbor_is_bool, entry.value, kSampledDebugReporting,
+                        kBool, error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+
+        if (is_valid_sampled_debug_type && cbor_get_bool(entry.value)) {
+          output.mutable_fdo_flags()->set_enable_sampled_debug_reporting(true);
+        }
+        break;
+      }
+      case 9: {  // Seller in Cooldown or Lockout.
+        bool is_valid_cooldown_or_lockout_type =
+            IsTypeValid(&cbor_is_bool, entry.value, kInCooldownOrLockout, kBool,
+                        error_accumulator);
+        RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast, output);
+
+        if (is_valid_cooldown_or_lockout_type && cbor_get_bool(entry.value)) {
+          output.mutable_fdo_flags()->set_in_cooldown_or_lockout(true);
         }
         break;
       }

@@ -38,17 +38,21 @@ struct RequestOptions {
 
 // Sends a request to SFE. The parameters used for the request are retrieved
 // from absl flags that are used to run the script.
-absl::Status SendRequestToSfe(ClientType client_type, const HpkeKeyset& keyset,
-                              std::optional<bool> enable_debug_reporting,
-                              std::optional<bool> enable_debug_info,
-                              std::optional<bool> enable_unlimited_egress,
-                              std::optional<bool> enforce_kanon);
+absl::Status SendRequestToSfe(
+    ClientType client_type, const HpkeKeyset& keyset,
+    std::optional<bool> enable_debug_reporting,
+    std::optional<bool> enable_sampled_debug_reporting,
+    std::optional<bool> enable_debug_info,
+    std::optional<bool> enable_unlimited_egress,
+    std::optional<bool> enforce_kanon);
 
 // Sends a request to BFE. The parameters used for the request are retrieved
 // from absl flags that are used to run the script.
 absl::Status SendRequestToBfe(
-    const HpkeKeyset& keyset, std::optional<bool> enable_debug_reporting,
+    const HpkeKeyset& keyset,
     std::unique_ptr<BuyerFrontEnd::StubInterface> stub = nullptr,
+    std::optional<bool> enable_debug_reporting = std::nullopt,
+    std::optional<bool> enable_sampled_debug_reporting = std::nullopt,
     std::optional<bool> enable_unlimited_egress = std::nullopt);
 
 // Gets contents of the provided file path.
@@ -58,6 +62,7 @@ std::string LoadFile(absl::string_view file_path);
 // to the secure invoke tool.
 std::string PackagePlainTextGetBidsRequestToJson(
     const HpkeKeyset& keyset, std::optional<bool> enable_debug_reporting,
+    std::optional<bool> enable_sampled_debug_reporting,
     std::optional<bool> enable_unlimited_egress);
 
 }  // namespace privacy_sandbox::bidding_auction_servers

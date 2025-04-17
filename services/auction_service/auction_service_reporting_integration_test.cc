@@ -12,30 +12,14 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-#include <thread>
-
-#include "absl/container/flat_hash_set.h"
-#include "absl/random/random.h"
-#include "absl/strings/str_format.h"
-#include "absl/synchronization/blocking_counter.h"
 #include "gtest/gtest.h"
 #include "services/auction_service/auction_constants.h"
 #include "services/auction_service/auction_service.h"
 #include "services/auction_service/auction_service_integration_test_util.h"
 #include "services/auction_service/auction_test_constants.h"
 #include "services/auction_service/code_wrapper/buyer_reporting_test_constants.h"
-#include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
-#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
-#include "services/common/clients/config/trusted_server_config_client.h"
-#include "services/common/constants/common_service_flags.h"
-#include "services/common/encryption/key_fetcher_factory.h"
-#include "services/common/encryption/mock_crypto_client_wrapper.h"
-#include "services/common/metric/server_definition.h"
-#include "services/common/test/mocks.h"
-#include "services/common/test/random.h"
 #include "services/common/test/utils/test_init.h"
-#include "services/common/util/request_response_constants.h"
 #include "src/core/test/utils/proto_test_utils.h"
 
 using ::google::scp::core::test::EqualsProto;
@@ -82,9 +66,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .top_level_seller = kTopLevelSeller,
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
@@ -123,12 +105,10 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestComponentAuctionResultData component_data =
       GenerateTestComponentAuctionResultData();
   component_data.test_component_seller = kTestSeller;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner,
       .component_auction_data = component_data};
@@ -171,9 +151,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
@@ -213,7 +191,6 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_private_aggregate_reporting = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = {},
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
@@ -244,7 +221,6 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_private_aggregate_reporting = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = {},
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
@@ -290,7 +266,6 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_private_aggregate_reporting = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = {},
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPA(
@@ -331,9 +306,7 @@ TEST_F(
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true,
       .enable_private_aggregate_reporting = true};
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
@@ -373,9 +346,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_win_url_generation = true,
       .enable_protected_app_signals = true,
       .enable_seller_and_buyer_udf_isolation = true};
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPAS(runtime_config, test_score_ads_request_config,
@@ -405,9 +376,7 @@ TEST_F(
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config,
@@ -445,9 +414,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .interest_group_owner = kTestIgOwner};
   LoadAndRunScoreAdsForPA(runtime_config, test_score_ads_request_config, "",
@@ -490,9 +457,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .default_score_ad_version = kTestSellerCodeVersion.data(),
       .enable_seller_and_buyer_udf_isolation = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
       .interest_group_owner = kTestIgOwner};
@@ -560,9 +525,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
       .interest_group_owner = kTestIgOwner};
@@ -595,9 +558,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
       .interest_group_owner = kTestIgOwner};
@@ -625,9 +586,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .enable_report_result_url_generation = true,
       .enable_report_win_url_generation = true,
       .enable_seller_and_buyer_udf_isolation = true};
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
       .interest_group_owner = kTestIgOwner};
@@ -654,9 +613,7 @@ TEST_F(AuctionServiceReportingIntegrationTest,
       .default_score_ad_version = kTestSellerCodeVersion.data(),
       .enable_seller_and_buyer_udf_isolation = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .buyer_reporting_id = kBuyerReportingId,
       .buyer_and_seller_reporting_id = kBuyerAndSellerReportingId,
       .selected_buyer_and_seller_reporting_id =
@@ -705,9 +662,7 @@ TEST_F(AuctionServiceReportingIntegrationTest, KAnonStatusInPAReportWin) {
       .enable_seller_and_buyer_udf_isolation = true,
       .enable_kanon = true};
   runtime_config.buyers_with_report_win_enabled.insert(kTestIgOwner);
-  TestBuyerReportingSignals test_buyer_reporting_signals;
   TestScoreAdsRequestConfig test_score_ads_request_config = {
-      .test_buyer_reporting_signals = test_buyer_reporting_signals,
       .interest_group_owner = kTestIgOwner,
       .enforce_kanon = true,
       .k_anon_status = true};

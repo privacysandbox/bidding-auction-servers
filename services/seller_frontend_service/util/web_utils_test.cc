@@ -172,6 +172,10 @@ struct cbor_item_t* BuildSampleCborInterestGroup(
       cbor_build_stringn(kBrowserSignals, sizeof(kBrowserSignals) - 1);
   EXPECT_TRUE(cbor_map_add(interest_group, {cbor_move(browser_signals_key),
                                             cbor_move(browser_signals)}));
+
+  EXPECT_TRUE(cbor_map_add(
+      interest_group,
+      BuildBoolMapPair(kInCooldownOrLockout, kSampleInCooldownOrLockout)));
   return cbor_move(interest_group);
 }
 
@@ -299,7 +303,25 @@ UpdateGroupMap GetTestUpdateGroupMap() {
   return update_group_map;
 }
 
-AdtechOriginDebugUrlsMap GetTestAdtechOriginDebugUrlsMap() {
+AdtechOriginDebugUrlsMap GetTestAdtechOriginDebugUrlsMapForSampledAuction() {
+  AdtechOriginDebugUrlsMap adtech_origin_debug_urls_map;
+  adtech_origin_debug_urls_map[kTestSellerOrigin] =
+      DebugReportsBuilder().AddReports(
+          DebugReports_DebugReportBuilder()
+              .SetUrl("https://seller-adtech.com/win")
+              .SetIsWinReport(true)
+              .SetIsSellerReport(true)
+              .SetIsComponentWin(false));
+  adtech_origin_debug_urls_map[kTestBuyerOrigin] =
+      DebugReportsBuilder().AddReports(DebugReports_DebugReportBuilder()
+                                           .SetUrl("")
+                                           .SetIsWinReport(false)
+                                           .SetIsSellerReport(false)
+                                           .SetIsComponentWin(false));
+  return adtech_origin_debug_urls_map;
+}
+
+AdtechOriginDebugUrlsMap GetTestAdtechOriginDebugUrlsMapForComponentAuction() {
   AdtechOriginDebugUrlsMap adtech_origin_debug_urls_map;
   adtech_origin_debug_urls_map[kTestSellerOrigin] =
       DebugReportsBuilder()
@@ -328,7 +350,8 @@ AdtechOriginDebugUrlsMap GetTestAdtechOriginDebugUrlsMap() {
   return adtech_origin_debug_urls_map;
 }
 
-void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
+void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config,
+                std::optional<bool> enable_debug_reporting = std::nullopt) {
   ScopedCbor protected_auction_input(
       cbor_new_definite_map(kNumRequestRootKeys));
   EXPECT_TRUE(cbor_map_add(*protected_auction_input,
@@ -336,14 +359,24 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   EXPECT_TRUE(
       cbor_map_add(*protected_auction_input,
                    BuildStringMapPair(kGenerationId, kSampleGenerationId)));
-  EXPECT_TRUE(cbor_map_add(*protected_auction_input,
-                           BuildBoolMapPair(kDebugReporting, true)));
+  if (enable_debug_reporting) {
+    EXPECT_TRUE(cbor_map_add(
+        *protected_auction_input,
+        BuildBoolMapPair(kDebugReporting, enable_debug_reporting.value())));
+  }
   EXPECT_TRUE(
       cbor_map_add(*protected_auction_input,
                    BuildIntMapPair(kRequestTimestampMs, kSampleRequestMs)));
   EXPECT_TRUE(
       cbor_map_add(*protected_auction_input,
                    BuildBoolMapPair(kEnforceKAnon, kSampleEnforceKAnon)));
+  EXPECT_TRUE(
+      cbor_map_add(*protected_auction_input,
+                   BuildBoolMapPair(kSampledDebugReporting,
+                                    kSampleEnableSampledDebugReporting)));
+  EXPECT_TRUE(cbor_map_add(
+      *protected_auction_input,
+      BuildBoolMapPair(kInCooldownOrLockout, kSampleInCooldownOrLockout)));
 
   ScopedCbor ig_array(cbor_new_definite_array(1));
   EXPECT_TRUE(cbor_array_push(
@@ -383,10 +416,15 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
 
   ProtectedAuctionInput expected;
   expected.set_publisher_name(kSamplePublisher);
-  expected.set_enable_debug_reporting(true);
+  expected.set_enable_debug_reporting(
+      enable_debug_reporting ? enable_debug_reporting.value() : true);
   expected.set_generation_id(kSampleGenerationId);
   expected.set_request_timestamp_ms(kSampleRequestMs);
   expected.set_enforce_kanon(kSampleEnforceKAnon);
+  expected.mutable_fdo_flags()->set_enable_sampled_debug_reporting(
+      kSampleEnableSampledDebugReporting);
+  expected.mutable_fdo_flags()->set_in_cooldown_or_lockout(
+      kSampleInCooldownOrLockout);
 
   BuyerInput::InterestGroup expected_ig;
   expected_ig.set_name(kSampleIgName);
@@ -413,7 +451,9 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   signals->set_prev_wins(prev_wins_json_str);
 
   BuyerInputForBidding buyer_input;
-  *buyer_input.add_interest_groups() = ToInterestGroupForBidding(expected_ig);
+  *buyer_input.add_interest_groups() =
+      ToInterestGroupForBidding(std::move(expected_ig));
+  buyer_input.set_in_cooldown_or_lockout(true);
   google::protobuf::Map<std::string, BuyerInputForBidding> buyer_inputs;
   buyer_inputs.emplace(kSampleIgOwner, std::move(buyer_input));
 
@@ -429,19 +469,19 @@ void TestDecode(const CborInterestGroupConfig& cbor_interest_group_config) {
   *expected.mutable_consented_debug_config() =
       std::move(consented_debug_config);
 
-  std::string papi_differences;
-  google::protobuf::util::MessageDifferencer papi_differencer;
-  papi_differencer.ReportDifferencesToString(&papi_differences);
+  std::string differences;
+  google::protobuf::util::MessageDifferencer differencer;
+  differencer.ReportDifferencesToString(&differences);
   // Note that this comparison is fragile because the CBOR encoding depends
   // on the order in which the data was created and if we have a difference
   // between the order in which the data items are added in the test vs how
   // they are added in the implementation, we will start to see failures.
-  if (!papi_differencer.Compare(actual, expected)) {
+  if (!differencer.Compare(actual, expected)) {
     ABSL_LOG(INFO) << "Actual proto does not match expected proto";
     ABSL_LOG(INFO) << "\nExpected:\n" << expected.DebugString();
     ABSL_LOG(INFO) << "\nActual:\n" << actual.DebugString();
     ABSL_LOG(INFO) << "\nFound differences in ProtectedAuctionInput:\n"
-                   << papi_differences;
+                   << differences;
 
     auto expected_buyer_inputs =
         DecodeBuyerInputs(expected.buyer_input(), error_accumulator);
@@ -485,6 +525,12 @@ TEST(ChromeRequestUtils, DecodeSuccessWithRecencyAndRecencyMsInBrowserSignals) {
   CborInterestGroupConfig cbor_interest_group_config = {
       .recency = kSampleRecency, .recency_ms = kSampleRecencyMs};
   TestDecode(cbor_interest_group_config);
+}
+
+TEST(ChromeRequestUtils, DecodeSuccessWithEnableDebugReporting) {
+  CborInterestGroupConfig cbor_interest_group_config = {.recency =
+                                                            kSampleRecency};
+  TestDecode(cbor_interest_group_config, /*enable_debug_reporting=*/false);
 }
 
 TEST(ChromeRequestUtils, Decode_FailOnWrongType) {
@@ -808,10 +854,12 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
   bidding_group_map.try_emplace(winner.interest_group_owner(),
                                 std::move(ig_indices));
   UpdateGroupMap update_group_map = GetTestUpdateGroupMap();
+  AdtechOriginDebugUrlsMap adtech_origin_debug_urls_map =
+      GetTestAdtechOriginDebugUrlsMapForSampledAuction();
 
-  auto response_with_cbor =
-      Encode(winner, bidding_group_map, update_group_map,
-             /*error=*/std::nullopt, [](const grpc::Status& status) {});
+  auto response_with_cbor = Encode(
+      winner, bidding_group_map, update_group_map, adtech_origin_debug_urls_map,
+      /*error=*/std::nullopt, [](const grpc::Status& status) {});
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
 
   ABSL_LOG(INFO) << "Encoded CBOR: "
@@ -854,6 +902,20 @@ TEST(ChromeResponseUtils, VerifyCborEncoding) {
             interest_groups { index: 1 update_if_older_than_ms: 500000 }
           }
         }
+        adtech_origin_debug_urls_map {
+          key: "https://buyer-adtech.com"
+          value { reports {} }
+        }
+        adtech_origin_debug_urls_map {
+          key: "https://seller-adtech.com"
+          value {
+            reports {
+              url: "https://seller-adtech.com/win"
+              is_win_report: true
+              is_seller_report: true
+            }
+          }
+        }
       )pb");
 
   EXPECT_THAT(*decoded_result, EqualsProto(expected));
@@ -891,7 +953,8 @@ TEST(ChromeResponseUtils, SerializesBothWinnerAndKAnonGhostWinner) {
 
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
-      /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*adtech_origin_debug_urls_map=*/{}, /*error=*/std::nullopt,
+      [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100, "",
       std::move(kanon_auction_result_data));
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
@@ -938,6 +1001,7 @@ TEST(ChromeResponseUtils, SerializesBothWinnerAndKAnonGhostWinner) {
             buyer_reporting_id: "buyerReportingId"
             selected_buyer_and_seller_reporting_id: "selectedBuyerAndSellerReportingId"
             buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+            ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
           }
         }
       )pb");
@@ -975,7 +1039,7 @@ TEST(ChromeResponseUtils, SerializesKAnonGhostWinnerAndDoesntSetChaff) {
   auto response_with_cbor =
       Encode(/*high_score=*/
              std::nullopt, /*bidding_group_map=*/{},
-             /*update_group_map=*/{},
+             /*update_group_map=*/{}, /*adtech_origin_debug_urls_map=*/{},
              /*error=*/std::nullopt, [](const grpc::Status& status) {},
              /*per_adtech_paapi_contributions_limit=*/100,
              kSampleAdAuctionResultNonce, std::move(kanon_auction_result_data));
@@ -1012,6 +1076,7 @@ TEST(ChromeResponseUtils, SerializesKAnonGhostWinnerAndDoesntSetChaff) {
             buyer_reporting_id: "buyerReportingId"
             selected_buyer_and_seller_reporting_id: "selectedBuyerAndSellerReportingId"
             buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+            ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
           }
         }
       )pb");
@@ -1030,7 +1095,7 @@ TEST(ChromeResponseUtils, CborEncodesComponentAuctionResult) {
                                 std::move(ig_indices));
   UpdateGroupMap update_group_map = GetTestUpdateGroupMap();
   AdtechOriginDebugUrlsMap adtech_origin_debug_urls_map =
-      GetTestAdtechOriginDebugUrlsMap();
+      GetTestAdtechOriginDebugUrlsMapForComponentAuction();
 
   auto response_with_cbor = EncodeComponent(
       kTestTopLevelSellerOrigin, winner, bidding_group_map, update_group_map,
@@ -1143,7 +1208,8 @@ TEST(ChromeResponseUtils, VerifyCborEncodedError) {
 
   auto response_with_cbor =
       Encode(/*high_score=*/std::nullopt, /*bidding_group_map=*/{},
-             /*update_group_map=*/{}, error, [](const grpc::Status& status) {});
+             /*update_group_map=*/{}, /*adtech_origin_debug_urls_map=*/{},
+             error, [](const grpc::Status& status) {});
 
   absl::StatusOr<AuctionResult> decoded_result =
       CborDecodeAuctionResultToProto(*response_with_cbor);
@@ -1160,7 +1226,8 @@ TEST(ChromeResponseUtils, EncodesNonceWithError) {
   auto response_with_cbor = Encode(
       /*high_score=*/
       std::nullopt, /*bidding_group_map=*/{},
-      /*update_group_map=*/{}, error, [](const grpc::Status& status) {},
+      /*update_group_map=*/{}, /*adtech_origin_debug_urls_map=*/{}, error,
+      [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100,
       kSampleAdAuctionResultNonce);
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
@@ -1176,7 +1243,7 @@ TEST(ChromeResponseUtils, EncodesNonceWithChaff) {
   auto response_with_cbor = Encode(
       /*high_score=*/
       std::nullopt, /*bidding_group_map=*/{},
-      /*update_group_map=*/{},
+      /*update_group_map=*/{}, /*adtech_origin_debug_urls_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100,
       kSampleAdAuctionResultNonce);
@@ -1194,6 +1261,7 @@ TEST(ChromeResponseUtils, EncodesNonceWithAdScore) {
 
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
+      /*adtech_origin_debug_urls_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100,
       kSampleAdAuctionResultNonce);
@@ -1214,7 +1282,8 @@ TEST(ChromeResponseUtils, DoesNotContainNonceWithErrorWhenEmpty) {
   auto response_with_cbor = Encode(
       /*high_score=*/
       std::nullopt, /*bidding_group_map=*/{},
-      /*update_group_map=*/{}, error, [](const grpc::Status& status) {},
+      /*update_group_map=*/{}, /*adtech_origin_debug_urls_map=*/{}, error,
+      [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100,
       /*ad_auction_result_nonce=*/"");
   ASSERT_TRUE(response_with_cbor.ok()) << response_with_cbor.status();
@@ -1232,7 +1301,7 @@ TEST(ChromeResponseUtils, DoesNotContainNonceWithChaffWhenEmpty) {
   auto response_with_cbor = Encode(
       /*high_score=*/
       std::nullopt, /*bidding_group_map=*/{},
-      /*update_group_map=*/{},
+      /*update_group_map=*/{}, /*adtech_origin_debug_urls_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100,
       /*ad_auction_result_nonce=*/"");
@@ -1252,6 +1321,7 @@ TEST(ChromeResponseUtils, DoesNotContainNonceWithAdScoreWhenEmpty) {
 
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
+      /*adtech_origin_debug_urls_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100,
       /*ad_auction_result_nonce=*/"");
@@ -1408,6 +1478,7 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
   ScoreAdsResponse::AdScore winner;
   auto response_with_cbor = Encode(
       winner, /*bidding_group_map=*/{}, /*update_group_map=*/{},
+      /*adtech_origin_debug_urls_map=*/{},
       /*error=*/std::nullopt, [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100,
       /*ad_auction_result_nonce=*/"", std::move(kanon_auction_result_data));
@@ -1445,7 +1516,8 @@ TEST(ChromeResponseUtils, EncodesKAnonData) {
             ad_metadata: "adMetadata"
             buyer_reporting_id: "buyerReportingId"
             selected_buyer_and_seller_reporting_id: "selectedBuyerAndSellerReportingId"
-            buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+            buyer_and_seller_reporting_id: "buyerAndSellerReportingId",
+            ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
           }
         }
       )pb");
@@ -1700,6 +1772,7 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
 
   auto ret = Encode(
       std::move(winner), bidding_group_map, update_group_map,
+      /*adtech_origin_debug_urls_map=*/{},
       /*error=*/std::nullopt, [](auto error) {},
       /*per_adtech_paapi_contributions_limit=*/100, kSampleAdAuctionResultNonce,
       std::move(kanon_auction_result_data));
@@ -1750,6 +1823,99 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncoding) {
           "74696f6e616c496e64657805"));
 }
 
+TEST(ChromeResponseUtils,
+     VerifyMinimalResponseEncodingWithSampledDebugReports) {
+  ScoreAdsResponse::AdScore winner = GetTestAdScore();
+  google::protobuf::Map<std::string, AuctionResult::InterestGroupIndex>
+      bidding_group_map = GetTestBiddingGroupMap();
+  UpdateGroupMap update_group_map = GetTestUpdateGroupMap();
+  AdtechOriginDebugUrlsMap adtech_origin_debug_urls_map =
+      GetTestAdtechOriginDebugUrlsMapForSampledAuction();
+  std::unique_ptr<KAnonAuctionResultData> kanon_auction_result_data =
+      SampleKAnonAuctionResultData(
+          {.ig_index = kSampleIgIndex,
+           .ig_owner = kSampleIgOwner,
+           .ig_name = kSampleIgName,
+           .bucket_name =
+               std::vector<uint8_t>(kSampleBucket.begin(), kSampleBucket.end()),
+           .bucket_value = kSampleValue,
+           .ad_render_url = kSampleAdRenderUrl,
+           .ad_component_render_url = kSampleAdComponentRenderUrl,
+           .modified_bid = kSampleModifiedBid,
+           .bid_currency = kSampleBidCurrency,
+           .ad_metadata = kSampleAdMetadata,
+           .buyer_reporting_id = kSampleBuyerReportingId,
+           .buyer_and_seller_reporting_id = kSampleBuyerAndSellerReportingId,
+           .selected_buyer_and_seller_reporting_id =
+               kSampleSelectedBuyerAndSellerReportingId,
+           .ad_render_url_hash = std::vector<uint8_t>(
+               kSampleAdRenderUrlHash.begin(), kSampleAdRenderUrlHash.end()),
+           .ad_component_render_urls_hash =
+               std::vector<uint8_t>(kSampleAdComponentRenderUrlsHash.begin(),
+                                    kSampleAdComponentRenderUrlsHash.end()),
+           .reporting_id_hash = std::vector<uint8_t>(
+               kSampleReportingIdHash.begin(), kSampleReportingIdHash.end()),
+           .winner_positional_index = kSampleWinnerPositionalIndex});
+
+  auto ret = Encode(
+      std::move(winner), bidding_group_map, update_group_map,
+      adtech_origin_debug_urls_map, /*error=*/std::nullopt, [](auto error) {},
+      /*per_adtech_paapi_contributions_limit=*/100, kSampleAdAuctionResultNonce,
+      std::move(kanon_auction_result_data));
+
+  ASSERT_TRUE(ret.ok()) << ret.status();
+  // Conversion can be verified at: https://cbor.me/
+  EXPECT_THAT(
+      absl::BytesToHexString(*ret),
+      testing::StrEq(
+          "af63626964fa3f9ae148656e6f6e63657761642d61756374696f6e2d726573756c74"
+          "2d6e306e63656573636f7265fa401666666769734368616666f46a636f6d706f6e65"
+          "6e7473806b616452656e64657255524c781d68747470733a2f2f62757965722d6164"
+          "746563682e636f6d2f61642d316c64656275675265706f72747382a2677265706f72"
+          "747381a46375726c606b697357696e5265706f7274f46c636f6d706f6e656e745769"
+          "6ef46e697353656c6c65725265706f7274f46c6164546563684f726967696e781868"
+          "747470733a2f2f62757965722d6164746563682e636f6da2677265706f72747381a4"
+          "6375726c781d68747470733a2f2f73656c6c65722d6164746563682e636f6d2f7769"
+          "6e6b697357696e5265706f7274f56c636f6d706f6e656e7457696ef46e697353656c"
+          "6c65725265706f7274f56c6164546563684f726967696e781968747470733a2f2f73"
+          "656c6c65722d6164746563682e636f6d6c75706461746547726f757073a178186874"
+          "7470733a2f2f62757965722d6164746563682e636f6d82a265696e64657800737570"
+          "6461746549664f6c6465725468616e4d731a000186a0a265696e6465780173757064"
+          "61746549664f6c6465725468616e4d731a0007a1206d62696464696e6747726f7570"
+          "73a3666f776e657231820702666f776e657232820702781868747470733a2f2f6275"
+          "7965722d6164746563682e636f6d8207027077696e5265706f7274696e6755524c73"
+          "a27262757965725265706f7274696e6755524c73a26c7265706f7274696e6755524c"
+          "74687474703a2f2f7265706f727457696e2e636f6d7818696e746572616374696f6e"
+          "5265706f7274696e6755524c73a165636c69636b70687474703a2f2f636c69636b2e"
+          "636f6d781b746f704c6576656c53656c6c65725265706f7274696e6755524c73a26c"
+          "7265706f7274696e6755524c77687474703a2f2f7265706f7274526573756c742e63"
+          "6f6d7818696e746572616374696f6e5265706f7274696e6755524c73a165636c6963"
+          "6b70687474703a2f2f636c69636b2e636f6d71696e74657265737447726f75704e61"
+          "6d656e696e7465726573745f67726f7570716b416e6f6e47686f737457696e6e6572"
+          "7381a6656f776e657269666f6f5f6f776e657271696e74657265737447726f75704e"
+          "616d656b666f6f5f69675f6e616d6572696e74657265737447726f7570496e646578"
+          "0a736b416e6f6e4a6f696e43616e64696461746573a36f616452656e64657255524c"
+          "486173684501020304056f7265706f7274696e674964486173684502040608097819"
+          "6164436f6d706f6e656e7452656e64657255524c734861736881450504030201781d"
+          "67686f737457696e6e6572466f72546f704c6576656c41756374696f6ea86a61644d"
+          "657461646174616a61644d657461646174616b616452656e64657255524c6b616452"
+          "656e64657255726c6b62696443757272656e63796b62696443757272656e63796b6d"
+          "6f646966696564426964fa3f9d70a47062757965725265706f7274696e6749647062"
+          "757965725265706f7274696e674964756164436f6d706f6e656e7452656e64657255"
+          "524c7381746164436f6d706f6e656e7452656e64657255726c78196275796572416e"
+          "6453656c6c65725265706f7274696e67496478196275796572416e6453656c6c6572"
+          "5265706f7274696e674964782173656c65637465644275796572416e6453656c6c65"
+          "725265706f7274696e674964782173656c65637465644275796572416e6453656c6c"
+          "65725265706f7274696e674964782467686f737457696e6e65725072697661746541"
+          "67677265676174696f6e5369676e616c7381a26576616c756515666275636b657445"
+          "010305070972696e74657265737447726f75704f776e6572781868747470733a2f2f"
+          "62757965722d6164746563682e636f6d78196b416e6f6e57696e6e65724a6f696e43"
+          "616e64696461746573a36f616452656e64657255524c486173684501020304056f72"
+          "65706f7274696e6749644861736845020406080978196164436f6d706f6e656e7452"
+          "656e64657255524c734861736881450504030201781a6b416e6f6e57696e6e657250"
+          "6f736974696f6e616c496e64657805"));
+}
+
 TEST(ChromeResponseUtils, VerifyMinimalResponseEncodingWithBuyerReportingId) {
   ScoreAdsResponse::AdScore winner = GetTestAdScore();
   winner.set_buyer_reporting_id(kTestBuyerReportingId);
@@ -1763,6 +1929,7 @@ TEST(ChromeResponseUtils, VerifyMinimalResponseEncodingWithBuyerReportingId) {
 
   auto ret = Encode(
       std::move(winner), bidding_group_map, update_group_map,
+      /*adtech_origin_debug_urls_map=*/{},
       /*error=*/std::nullopt, [](auto error) {},
       /*per_adtech_paapi_contributions_limit=*/1);
   ASSERT_TRUE(ret.ok()) << ret.status();
@@ -1884,7 +2051,7 @@ TEST(ChromeResponseUtils,
       bidding_group_map = GetTestBiddingGroupMap();
   UpdateGroupMap update_group_map = GetTestUpdateGroupMap();
   AdtechOriginDebugUrlsMap adtech_origin_debug_urls_map =
-      GetTestAdtechOriginDebugUrlsMap();
+      GetTestAdtechOriginDebugUrlsMapForComponentAuction();
 
   auto ret = EncodeComponent(kTestTopLevelSellerOrigin, std::move(winner),
                              bidding_group_map, update_group_map,

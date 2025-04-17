@@ -102,6 +102,8 @@ class SelectAdReactorForWebTest : public ::testing::Test {
       config_.SetOverride(kTrue, ENABLE_TKV_V2_BROWSER);
     }
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING_V2);
+    config_.SetOverride(kFalse, ENABLE_BUYER_CACHING);
     config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
     config_.SetOverride("", K_ANON_API_KEY);
@@ -1585,6 +1587,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
             modified_bid: 1
             buyer_reporting_id: "buyerReportingId"
             buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+            ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
           }
         }
         k_anon_ghost_winners {
@@ -1603,6 +1606,7 @@ TYPED_TEST(SelectAdReactorForWebTest,
             modified_bid: 2
             buyer_reporting_id: "buyerReportingId"
             buyer_and_seller_reporting_id: "buyerAndSellerReportingId"
+            ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
           }
         }
       )pb",

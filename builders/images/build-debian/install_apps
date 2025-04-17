@@ -87,7 +87,8 @@ function install_misc() {
     unzip="6.0-*" \
     wget="1.20.*" \
     xz-utils="5.2.*" \
-    zip="3.0-*"
+    zip="3.0-*" \
+    graphviz=2.*
 
   if [[ -n ${INSTALL_LOCALE} ]]; then
     printf "\nSetting locale to: %s\n" "${INSTALL_LOCALE}"

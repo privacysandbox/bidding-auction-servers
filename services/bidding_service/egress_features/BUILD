@@ -299,7 +299,9 @@ cc_test(
     size = "small",
     srcs = ["egress_schema_fetch_manager_test.cc"],
     deps = [
+        ":egress_schema_bucket_fetcher",
         ":egress_schema_fetch_manager",
+        "//services/common/blob_storage_client:blob_storage_client_cpio",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
         "@com_google_absl//absl/strings",
@@ -309,15 +311,48 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "egress_schema_bucket_fetcher_test",
+    size = "small",
+    srcs = select({
+        "//:parc_enabled": ["egress_schema_bucket_fetcher_parc_test.cc"],
+        "//conditions:default": ["egress_schema_bucket_fetcher_cpio_test.cc"],
+    }),
+    data = [
+        "//services/bidding_service:packaged_cddl_specs",
+    ],
+    deps = [
+        ":egress_schema_bucket_fetcher",
+        "//services/bidding_service:cddl_spec_cache",
+        "//services/bidding_service:egress_schema_cache",
+        "//services/common/blob_storage_client:blob_storage_client_parc",
+        "//services/common/clients/config:parc_service_grpc_proto",
+        "//services/common/data_fetch:version_util",
+        "//services/common/test:mocks",
+        "//services/common/test/utils:test_init",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
+        "@google_privacysandbox_servers_common//src/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
+    ],
+)
+
 cc_library(
     name = "egress_schema_bucket_fetcher",
     srcs = ["egress_schema_bucket_fetcher.cc"],
-    hdrs = ["egress_schema_bucket_fetcher.h"],
+    hdrs = [
+        "egress_schema_bucket_fetcher.h",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         "//services/bidding_service:egress_schema_cache",
         "//services/bidding_service:egress_schema_fetch_config_cc_proto",
         "//services/bidding_service/data:runtime_config",
+        "//services/common/clients/config:parc_service_grpc_proto",
+        "//services/common/data_fetch:blob_storage_client",
         "//services/common/data_fetch:periodic_bucket_fetcher",
         "//services/common/data_fetch:version_util",
         "//services/common/loggers:request_log_context",
@@ -332,30 +367,7 @@ cc_library(
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",
         "@google_privacysandbox_servers_common//src/public/core/interface:errors",
         "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
-    ],
-)
-
-cc_test(
-    name = "egress_schema_bucket_fetcher_test",
-    size = "small",
-    srcs = ["egress_schema_bucket_fetcher_test.cc"],
-    data = [
-        "//services/bidding_service:packaged_cddl_specs",
-    ],
-    deps = [
-        ":egress_schema_bucket_fetcher",
-        "//services/bidding_service:cddl_spec_cache",
-        "//services/bidding_service:egress_schema_cache",
-        "//services/common/data_fetch:version_util",
-        "//services/common/test:mocks",
-        "//services/common/test/utils:test_init",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
     ],
 )

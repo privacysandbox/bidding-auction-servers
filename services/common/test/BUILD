@@ -42,7 +42,6 @@ cc_library(
         "//services/common/clients/code_dispatcher:v8_dispatch_client",
         "//services/common/clients/code_dispatcher/byob:byob_dispatch_client",
         "//services/common/clients/http:http_fetcher_async",
-        "//services/common/clients/k_anon_server:k_anon_client",
         "//services/common/concurrent:local_cache",
         "//services/common/providers:async_provider",
         "//services/common/reporters:async_reporter",

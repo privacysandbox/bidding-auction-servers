@@ -21,6 +21,8 @@
 
 #include "absl/strings/str_cat.h"
 #include "gtest/gtest.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
+#include "services/common/blob_storage_client/blob_storage_client_cpio.h"
 #include "services/common/data_fetch/version_util.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
@@ -69,9 +71,12 @@ TEST_F(BuyerCodeFetchManagerByobTest, LocalModeTriesFileLoadExec) {
   EXPECT_CALL(*blob_storage_client_, Init).Times(0);
   EXPECT_CALL(*blob_storage_client_, Run).Times(0);
 
-  BuyerCodeFetchManagerByob udf_fetcher(
-      executor_.get(), http_fetcher_.get(), loader_.get(),
-      std::move(blob_storage_client_), udf_config);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManagerByob udf_fetcher(executor_.get(), http_fetcher_.get(),
+                                        loader_.get(), std::move(cpio_client),
+                                        udf_config);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(), absl::StrCat(kPathFailed, pa_exec_path));
@@ -84,9 +89,12 @@ TEST_F(BuyerCodeFetchManagerByobTest, BucketModeFailsForNoPABucket) {
   EXPECT_CALL(*blob_storage_client_, Init).WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
 
-  BuyerCodeFetchManagerByob udf_fetcher(
-      executor_.get(), http_fetcher_.get(), loader_.get(),
-      std::move(blob_storage_client_), udf_config);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManagerByob udf_fetcher(executor_.get(), http_fetcher_.get(),
+                                        loader_.get(), std::move(cpio_client),
+                                        udf_config);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(),
@@ -151,9 +159,12 @@ TEST_F(BuyerCodeFetchManagerByobTest, BucketModeFetchesExecForPA) {
         return absl::OkStatus();
       });
 
-  BuyerCodeFetchManagerByob udf_fetcher(
-      executor_.get(), http_fetcher_.get(), loader_.get(),
-      std::move(blob_storage_client_), udf_config);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManagerByob udf_fetcher(executor_.get(), http_fetcher_.get(),
+                                        loader_.get(), std::move(cpio_client),
+                                        udf_config);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -169,9 +180,12 @@ TEST_F(BuyerCodeFetchManagerByobTest, UrlModeFailsForNoPAUrl) {
   EXPECT_CALL(*blob_storage_client_, Run).Times(0);
   EXPECT_CALL(*http_fetcher_, FetchUrls).Times(0);
 
-  BuyerCodeFetchManagerByob udf_fetcher(
-      executor_.get(), http_fetcher_.get(), loader_.get(),
-      std::move(blob_storage_client_), udf_config);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManagerByob udf_fetcher(executor_.get(), http_fetcher_.get(),
+                                        loader_.get(), std::move(cpio_client),
+                                        udf_config);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(),
@@ -205,9 +219,12 @@ TEST_F(BuyerCodeFetchManagerByobTest, UrlModeFetchesExecForPA) {
         std::move(done_callback)({""});
       });
 
-  BuyerCodeFetchManagerByob udf_fetcher(
-      executor_.get(), http_fetcher_.get(), loader_.get(),
-      std::move(blob_storage_client_), udf_config);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManagerByob udf_fetcher(executor_.get(), http_fetcher_.get(),
+                                        loader_.get(), std::move(cpio_client),
+                                        udf_config);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }

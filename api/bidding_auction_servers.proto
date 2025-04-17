@@ -49,7 +49,9 @@ message ProtectedAudienceInput {
   string publisher_name = 2;
 
   // A boolean value which indicates if event level debug reporting should be
-  // enabled or disabled for this request.
+  // enabled or disabled for this request. For Chrome, this is defaulted to
+  // true, but the request can override it to false for experimentation.
+  // For Android, this is always false since debug reporting is not supported.
   bool enable_debug_reporting = 3;
 
   // Globally unique identifier for the client request.
@@ -72,11 +74,11 @@ message ProtectedAudienceInput {
   // timestamp will come from the system clock on the device.
   int64 request_timestamp_ms = 7;
 
-  // Maximum number of ghost winners for K-Anonymity controlled by platform (Chrome,
-  // Android) for experimentation.
+  // Maximum number of ghost winners for K-Anonymity controlled by platform
+  // (Chrome, Android) for experimentation.
   // By default this is set to 1 on the server side, hence client should
   // populate the field if and only if they want to override for
-  //experimentation.
+  // experimentation.
   optional int32 num_k_anon_ghost_winners = 8;
 
   // Clients can indicate whether K-Anonymity is enforced for the traffic.
@@ -87,6 +89,9 @@ message ProtectedAudienceInput {
   // By default, this would be false, i.e. cannot be used for debug.
   // Currently Android request with ad-id is eligible.
   bool prod_debug = 10;
+
+  // Flags needed to handle event level debug reporting urls.
+  ForDebuggingOnlyFlags fdo_flags = 11;
 }
 
 // ProtectedAuctionInput is generated and encrypted by the client,
@@ -110,7 +115,9 @@ message ProtectedAuctionInput {
   string publisher_name = 2;
 
   // A boolean value which indicates if event level debug reporting should be
-  // enabled or disabled for this request.
+  // enabled or disabled for this request. For Chrome, this is defaulted to
+  // true, but the request can override it to false for experimentation.
+  // For Android, this is always false since debug reporting is not supported.
   bool enable_debug_reporting = 3;
 
   // Globally unique identifier for the client request.
@@ -133,11 +140,11 @@ message ProtectedAuctionInput {
   // timestamp will come from the system clock on the device.
   int64 request_timestamp_ms = 7;
 
-  // Maximum number of ghost winners for K-Anonymity controlled by platform (Chrome,
-  // Android) for experimentation.
+  // Maximum number of ghost winners for K-Anonymity controlled by platform
+  // (Chrome, Android) for experimentation.
   // By default this is set to 1 on the server side, hence client should
   // populate the field if and only if they want to override for
-  //experimentation.
+  // experimentation.
   optional int32 num_k_anon_ghost_winners = 8;
 
   // Clients can indicate whether K-Anonymity is enforced for the traffic.
@@ -148,6 +155,9 @@ message ProtectedAuctionInput {
   // By default, this would be false, i.e. cannot be used for debug.
   // Currently Android request with ad-id is eligible.
   bool prod_debug = 10;
+
+  // Flags needed to handle event level debug reporting urls.
+  ForDebuggingOnlyFlags fdo_flags = 11;
 }
 
 // Grouping of data pertaining to protected app signals.
@@ -222,6 +232,10 @@ message BuyerInput {
   // Signals from device that can help generate a relevant app install ad for
   // users.
   ProtectedAppSignals protected_app_signals = 2;
+
+  // Indicates whether the buyer is in cooldown period or the device is in
+  // lockout for downsampled event level debug reporting.
+  bool in_cooldown_or_lockout = 3;
 }
 
 // Internal representation of BuyerInput, which represents buyer input as
@@ -251,6 +265,18 @@ message BuyerInputForBidding {
   repeated InterestGroupForBidding interest_groups = 1;
 
   ProtectedAppSignals protected_app_signals = 2;
+
+  bool in_cooldown_or_lockout = 3;
+}
+
+message ForDebuggingOnlyFlags {
+  // Indicates whether the device has enabled downsampling for event level debug
+  // reporting.
+  bool enable_sampled_debug_reporting = 1;
+
+  // Indicates whether the adtech is in cooldown period or the device is in
+  // lockout for downsampled event level debug reporting.
+  bool in_cooldown_or_lockout = 2;
 }
 
 // Information about an Interest Group passed by the browser.
@@ -638,6 +664,9 @@ message AuctionResult {
       // This will be verified with the buyerAndSellerReportingId in the Ad
       // properties on the browser.
       optional string buyer_and_seller_reporting_id = 8;
+
+      // Type of the ad (required for scoring).
+      AdType ad_type = 9;
     }
     optional GhostWinnerForTopLevelAuction ghost_winner_for_top_level_auction = 7;
   }
@@ -648,7 +677,7 @@ message AuctionResult {
   repeated PrivateAggregateReportingResponse top_level_contributions = 24;
 
   // Map from adtech origin (seller/interest group owner) to the list of
-  // corresponding debugging reports.
+  // corresponding debug reports.
   map<string, DebugReports> adtech_origin_debug_urls_map = 27;
 }
 
@@ -1140,6 +1169,10 @@ message GetBidsRequest {
     // and other signals for bidding. In the case of is_chaff = true, this will
     // be noise.
     BuyerInputForBidding buyer_input_for_bidding = 20;
+
+    // Indicates whether the device has enabled downsampling for event level
+    // debug reporting.
+    bool enable_sampled_debug_reporting = 21;
   }
 
   // Encrypted GetBidsRawRequest.
@@ -1247,6 +1280,16 @@ message AdWithBid {
   // Optional. Value of the data version header from the buyer kv server.
   // This is passed through to the buyer reporting function.
   int32 data_version = 15;
+
+  // Indicates whether the debug win url for this bid was cleared due to it not
+  // being selected in the 1/1000 sampling. If this bid wins the (top-level)
+  // auction and this is true, the client will put the buyer adtech in cooldown.
+  bool debug_win_url_failed_sampling = 16;
+
+  // Indicates whether the debug loss url for this bid was cleared due to it not
+  // being selected in the 1/1000 sampling. If this bid loses the auction and
+  // this is true, the client will put the buyer adtech in cooldown.
+  bool debug_loss_url_failed_sampling = 17;
 }
 // (-- LINT.ThenChange(bid_generate_bid) --)
 
@@ -1416,6 +1459,9 @@ message GenerateBidsRequest {
     // Represents all blob versions the buyer logic should use for this request.
     // Buyer can pass this information to the Seller in RTB response.
     BuyerBlobVersions blob_versions = 15;
+
+    // Flags needed to handle event level debug reporting urls.
+    ForDebuggingOnlyFlags fdo_flags = 16;
   }
 
   // Encrypted GenerateBidsRawRequest.
@@ -1490,8 +1536,9 @@ message GenerateProtectedAppSignalsBidsRequest {
     server_common.ConsentedDebugConfiguration consented_debug_config = 7;
 
     // A boolean value which indicates if event level debug reporting should be
-    // enabled or disabled for this request.
-    bool enable_debug_reporting = 8;
+    // enabled or disabled for this request. This is always false since debug
+    // reporting is not available on Android.
+    bool enable_debug_reporting = 8 [deprecated = true];
 
     // Contextual data regarding PAS ads.
     ContextualProtectedAppSignalsData contextual_protected_app_signals_data = 9;
@@ -1842,6 +1889,9 @@ message ScoreAdsRequest {
 
     // Optional. From AuctionConfig.code_experiment_spec.score_ad_version.
     string score_ad_version = 19;
+
+    // Flags needed to handle event level debug reporting urls.
+    ForDebuggingOnlyFlags fdo_flags = 20;
   }
 
   // Encrypted ScoreAdsRawRequest.
@@ -1955,7 +2005,7 @@ message ScoreAdsResponse {
     DebugReportUrls debug_report_urls = 11;
 
     // Map of the interest group owners to the list of bids that got the second
-    // highest score. This is used for debugging reporting.
+    // highest score. This is used for debug reporting.
     map<string, google.protobuf.ListValue> ig_owner_highest_scoring_other_bids_map = 12;
 
     // List of rejection reasons for scored ads. For ads which are not rejected,
@@ -2037,6 +2087,11 @@ message ScoreAdsResponse {
     // Indicates whether debug data is exported.
     bool auction_export_debug = 3;
 
+    // Seller debug reports that were not pinged by the Auction service and will
+    // need to be sent to the client. These are populated in case of component
+    // auctions and for auctions which have enabled sampled debug reporting.
+    DebugReports seller_debug_reports = 4;
+
     // Debug logs for auction servers (only in non_prod)
     server_common.DebugInfo debug_info = 99;
   }
@@ -2074,7 +2129,7 @@ message WinReportingUrls {
 // The debug reports corresponding to a single adtech that are not yet pinged.
 message DebugReports {
   message DebugReport {
-    // The debugging url for this report.
+    // The debug url for this report.
     string url = 1;
 
     // Boolean indicating whether this url corresponds to a win (true) or a

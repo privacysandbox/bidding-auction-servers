@@ -25,6 +25,8 @@
 #include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
+#include "services/common/blob_storage_client/blob_storage_client_cpio.h"
 #include "services/common/data_fetch/version_util.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
@@ -121,11 +123,14 @@ TEST_F(SellerUdfFetchManagerTest, FetchModeLocalTriesFileLoad) {
   const std::string bad_path = "error";
   const bool enable_protected_app_signals = true;
 
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
   udf_config.set_auction_js_path(bad_path);
-  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
-                                    executor_.get(), http_fetcher_.get(),
-                                    http_fetcher_.get(), dispatcher_.get(),
-                                    udf_config, enable_protected_app_signals);
+  SellerUdfFetchManager udf_fetcher(std::move(cpio_client), executor_.get(),
+                                    http_fetcher_.get(), http_fetcher_.get(),
+                                    dispatcher_.get(), udf_config,
+                                    enable_protected_app_signals);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(), absl::StrCat(kPathFailed, bad_path));
@@ -215,11 +220,13 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
                   std::string::npos);
         return absl::OkStatus();
       });
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
 
-  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
-                                    executor_.get(), http_fetcher_.get(),
-                                    http_fetcher_.get(), dispatcher_.get(),
-                                    udf_config, enable_protected_app_signals);
+  SellerUdfFetchManager udf_fetcher(std::move(cpio_client), executor_.get(),
+                                    http_fetcher_.get(), http_fetcher_.get(),
+                                    dispatcher_.get(), udf_config,
+                                    enable_protected_app_signals);
 
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
@@ -326,11 +333,13 @@ TEST_F(SellerUdfFetchManagerTest,
                 pa_reporting_udfs, pas_reporting_udfs));
         return absl::OkStatus();
       });
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
 
-  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
-                                    executor_.get(), http_fetcher_.get(),
-                                    http_fetcher_.get(), dispatcher_.get(),
-                                    udf_config, enable_protected_app_signals);
+  SellerUdfFetchManager udf_fetcher(std::move(cpio_client), executor_.get(),
+                                    http_fetcher_.get(), http_fetcher_.get(),
+                                    dispatcher_.get(), udf_config,
+                                    enable_protected_app_signals);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -458,10 +467,13 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
         return absl::OkStatus();
       });
 
-  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
-                                    executor_.get(), http_fetcher_.get(),
-                                    http_fetcher_.get(), dispatcher_.get(),
-                                    udf_config, enable_protected_app_signals);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  SellerUdfFetchManager udf_fetcher(std::move(cpio_client), executor_.get(),
+                                    http_fetcher_.get(), http_fetcher_.get(),
+                                    dispatcher_.get(), udf_config,
+                                    enable_protected_app_signals);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -557,10 +569,13 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
         return absl::OkStatus();
       });
 
-  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
-                                    executor_.get(), http_fetcher_.get(),
-                                    http_fetcher_.get(), dispatcher_.get(),
-                                    udf_config, enable_protected_app_signals);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  SellerUdfFetchManager udf_fetcher(std::move(cpio_client), executor_.get(),
+                                    http_fetcher_.get(), http_fetcher_.get(),
+                                    dispatcher_.get(), udf_config,
+                                    enable_protected_app_signals);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -650,10 +665,13 @@ reportWin = function(auctionSignals, perBuyerSignals, signalsForWinner, buyerRep
         return absl::OkStatus();
       });
 
-  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
-                                    executor_.get(), http_fetcher_.get(),
-                                    http_fetcher_.get(), dispatcher_.get(),
-                                    udf_config, enable_protected_app_signals);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  SellerUdfFetchManager udf_fetcher(std::move(cpio_client), executor_.get(),
+                                    http_fetcher_.get(), http_fetcher_.get(),
+                                    dispatcher_.get(), udf_config,
+                                    enable_protected_app_signals);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -724,13 +742,17 @@ TEST_F(SellerUdfFetchManagerTest, FetchModeUrlSucceedsLoadingWrappedUrlBlobs) {
         return absl::OkStatus();
       });
 
-  SellerUdfFetchManager udf_fetcher(std::move(blob_storage_client_),
-                                    executor_.get(), http_fetcher_.get(),
-                                    http_fetcher_.get(), dispatcher_.get(),
-                                    udf_config, enable_protected_app_signals);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  SellerUdfFetchManager udf_fetcher(std::move(cpio_client), executor_.get(),
+                                    http_fetcher_.get(), http_fetcher_.get(),
+                                    dispatcher_.get(), udf_config,
+                                    enable_protected_app_signals);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
+// TODO add Parc appraoch test
 
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

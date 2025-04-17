@@ -27,6 +27,7 @@
 #include "services/auction_service/data/runtime_config.h"
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/auction_service/udf_fetcher/buyer_reporting_fetcher.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/data_fetch/fetcher_interface.h"
 #include "services/common/data_fetch/periodic_bucket_code_fetcher.h"

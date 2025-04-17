@@ -40,8 +40,12 @@ a parent connection and your github repo.
 
 ### Terraform
 
-Fill out the `backend` block in [terraform.tf](./terraform.tf) and all fields in
-[cloud_build.auto.tfvars.json](./cloud_build.auto.tfvars.json).
+1. In [terraform.tf](./terraform.tf) fill out the `backend` block with the Cloud Storage bucket name
+   to store terraform state files (you need to create this bucket manually beforehand).
+2. In [cloud_build.auto.tfvars](./cloud_build.auto.tfvars) fill out all the fields.
+
+Note: You can choose to have terraform create a new Cloud Build service account for you, or reuse
+existing Service Account. Uncomment either of the option.
 
 Then, in the same directory as this README, run:
 
@@ -50,7 +54,7 @@ terraform init
 terraform apply # You will have to type 'yes' if you approve of the plan.
 ```
 
-This will create triggers that automatically build `prod` and `non_prod` images of the Bidding and
-Auction Services every time a new release (tag) is pushed to the
+This will create triggers that automatically build `prod`, `non_prod`, and `non_prod_local_testing`
+images of the Bidding and Auction Services every time a new release (tag) is pushed to the
 [connected repo](#connecting-to-github). The images will be pushed to an Artifact Registry of your
-choice, using the default compute service account.
+choice.

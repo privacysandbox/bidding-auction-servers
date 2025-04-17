@@ -121,6 +121,8 @@ class SellerFrontEndServiceTest : public ::testing::Test {
     }
     config_.SetOverride("{}", SELLER_CLOUD_PLATFORMS_MAP);
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING_V2);
+    config_.SetOverride(kFalse, ENABLE_BUYER_CACHING);
     config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
     config_.SetOverride("", K_ANON_API_KEY);

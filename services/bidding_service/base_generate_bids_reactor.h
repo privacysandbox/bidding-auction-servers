@@ -30,16 +30,7 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-inline constexpr char kDispatchHandlerFunctionNameWithCodeWrapper[] =
-    "generateBidEntryFunction";
 inline constexpr long kBytesMultiplyer = 1024;
-
-// Returns up the index of the provided enum as int from the underlying enum
-// storage.
-template <typename T>
-inline constexpr int ArgIndex(T arg) {
-  return static_cast<std::underlying_type_t<T>>(arg);
-}
 
 template <typename Request, typename RawRequest, typename Response,
           typename RawResponse>
@@ -67,12 +58,8 @@ class BaseGenerateBidsReactor
             [this]() { return this->raw_response_.mutable_debug_info(); },
             this->raw_request_.is_sampled_for_debug()),
         enable_adtech_code_logging_(log_context_.is_consented() ||
-                                    this->raw_request_.is_sampled_for_debug()),
-        max_allowed_size_debug_url_chars_(
-            runtime_config.max_allowed_size_debug_url_bytes),
-        max_allowed_size_all_debug_urls_chars_(
-            kBytesMultiplyer *
-            runtime_config.max_allowed_size_all_debug_urls_kb) {}
+                                    this->raw_request_.is_sampled_for_debug()) {
+  }
 
   virtual ~BaseGenerateBidsReactor() = default;
 
@@ -91,8 +78,6 @@ class BaseGenerateBidsReactor
   RomaRequestContextFactory roma_request_context_factory_;
   RequestLogContext log_context_;
   bool enable_adtech_code_logging_;
-  int max_allowed_size_debug_url_chars_;
-  long max_allowed_size_all_debug_urls_chars_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

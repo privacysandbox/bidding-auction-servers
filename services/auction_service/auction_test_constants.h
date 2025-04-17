@@ -310,10 +310,52 @@ constexpr char kTestProtectedAppScoringSignals[] = R"json(
 )json";
 constexpr char kTestAdRenderUrl[] =
     "https://adtech?adg_id=142601302539&cr_id=628073386727&cv_id=0";
-constexpr absl::string_view kDebugLossUrlForZeroethIg =
+constexpr absl::string_view kAdScoreWithDebugUrlsTemplate = R"json(
+  {
+    "response": {
+      "desirability": $0,
+      "bid": $0,
+      "allowComponentAuction": true,
+      "debugReportUrls": {
+        "auctionDebugLossUrl": "https://example-ssp.com/debugLoss/$0",
+        "auctionDebugWinUrl": "https://example-ssp.com/debugWin/$0"
+      }
+    },
+    "logs": []
+  }
+)json";
+constexpr absl::string_view kAdScoreWithOnlyDebugWinUrlTemplate = R"json(
+    {
+      "response": {
+        "desirability": $0,
+        "bid": $0,
+        "allowComponentAuction": true,
+        "debugReportUrls": {
+          "auctionDebugWinUrl": "https://example-ssp.com/debugWin/$0"
+        }
+      },
+      "logs": []
+    }
+  )json";
+constexpr absl::string_view kAdScoreWithOnlyDebugLossUrlTemplate = R"json(
+    {
+      "response": {
+        "desirability": $0,
+        "bid": $0,
+        "allowComponentAuction": true,
+        "debugReportUrls": {
+          "auctionDebugLossUrl": "https://example-ssp.com/debugLoss/$0"
+        }
+      },
+      "logs": []
+    }
+  )json";
+constexpr absl::string_view kDebugLossUrlForLosingIg =
     "https://example-ssp.com/debugLoss/0";
-constexpr absl::string_view kDebugWinUrlForFirstIg =
+constexpr absl::string_view kDebugWinUrlForWinningIg =
     "https://example-ssp.com/debugWin/1";
+constexpr absl::string_view kDebugLossUrlForWinningIg =
+    "https://example-ssp.com/debugLoss/1";
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

@@ -55,8 +55,14 @@ inline constexpr char
 inline constexpr absl::string_view
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES =
         "BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES";
+inline constexpr absl::string_view CURL_BIDDING_NUM_WORKERS =
+    "CURL_BIDDING_NUM_WORKERS";
+inline constexpr absl::string_view CURL_BIDDING_QUEUE_MAX_WAIT_MS =
+    "CURL_BIDDING_QUEUE_MAX_WAIT_MS";
+inline constexpr absl::string_view CURL_BIDDING_WORK_QUEUE_LENGTH =
+    "CURL_BIDDING_WORK_QUEUE_LENGTH";
 
-inline constexpr int kNumRuntimeFlags = 16;
+inline constexpr int kNumRuntimeFlags = 19;
 inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     PORT,
     HEALTHCHECK_PORT,
@@ -74,6 +80,9 @@ inline constexpr std::array<absl::string_view, kNumRuntimeFlags> kFlags = {
     AD_RETRIEVAL_TIMEOUT_MS,
     BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND,
     BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES,
+    CURL_BIDDING_NUM_WORKERS,
+    CURL_BIDDING_QUEUE_MAX_WAIT_MS,
+    CURL_BIDDING_WORK_QUEUE_LENGTH,
 };
 
 inline std::vector<absl::string_view> GetServiceFlags() {

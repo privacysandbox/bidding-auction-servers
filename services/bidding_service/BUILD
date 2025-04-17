@@ -19,7 +19,7 @@ load(
     "pkg_files",
 )
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES", "IS_PROD_BUILD_DEFINES")
 
 cc_library(
     name = "runtime_flags",
@@ -66,6 +66,7 @@ cc_test(
     deps = [
         ":buyer_code_fetch_manager",
         "//services/bidding_service/code_wrapper:buyer_code_wrapper",
+        "//services/common/data_fetch:periodic_bucket_code_fetcher",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
         "@com_google_absl//absl/strings",
@@ -89,7 +90,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
-        "//services/bidding_service:bidding_constants",
+        "//services/bidding_service:bidding_v8_constants",
         "//services/bidding_service:egress_schema_cache",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
@@ -139,6 +140,7 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:key_fetcher_manager",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+        "@google_privacysandbox_servers_common//src/roma/interface",
     ],
 )
 
@@ -271,7 +273,7 @@ cc_library(
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
         "//services/bidding_service/byob:generate_bid_byob_dispatch_client",
         "//services/common/clients/config:config_client",
-        "//services/common/clients/http:multi_curl_http_fetcher_async",
+        "//services/common/clients/http:multi_curl_http_fetcher_async_no_queue",
         "//services/common/metric:server_definition",
         "@aws_sdk_cpp//:core",
         "@com_github_grpc_grpc//:grpc++",
@@ -318,7 +320,7 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
-    local_defines = ENABLE_CORE_DUMPS_DEFINES,
+    local_defines = ENABLE_CORE_DUMPS_DEFINES + IS_PROD_BUILD_DEFINES,
     malloc = "@com_google_tcmalloc//tcmalloc",
     visibility = ["//visibility:public"],
     deps = [
@@ -328,7 +330,7 @@ cc_binary(
         ":egress_schema_fetch_config_cc_proto",
         "//api:bidding_auction_servers_cc_grpc_proto",
         "//api:bidding_auction_servers_cc_proto",
-        "//services/bidding_service:bidding_constants",
+        "//services/bidding_service:bidding_v8_constants",
         "//services/bidding_service:cddl_spec_cache",
         "//services/bidding_service:egress_schema_cache",
         "//services/bidding_service/benchmarking:bidding_benchmarking_logger",
@@ -351,6 +353,7 @@ cc_binary(
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/metric:udf_metric",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:blob_storage_client_utils",
         "//services/common/util:file_util",
         "//services/common/util:read_system",
         "//services/common/util:request_response_constants",
@@ -375,8 +378,8 @@ cc_binary(
 )
 
 cc_library(
-    name = "bidding_constants",
-    hdrs = ["constants.h"],
+    name = "bidding_v8_constants",
+    hdrs = ["bidding_v8_constants.h"],
     visibility = ["//visibility:public"],
     deps = ["@com_google_absl//absl/strings"],
 )
@@ -418,7 +421,7 @@ cc_library(
     srcs = ["generate_bids_reactor_test_utils.cc"],
     hdrs = ["generate_bids_reactor_test_utils.h"],
     deps = [
-        "//services/bidding_service:bidding_constants",
+        "//services/bidding_service:bidding_v8_constants",
         "//services/common/constants:common_service_flags",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:crypto_client_wrapper",
@@ -484,7 +487,7 @@ cc_library(
     hdrs = ["egress_schema_cache.h"],
     visibility = ["//visibility:public"],
     deps = [
-        "//services/bidding_service:bidding_constants",
+        "//services/bidding_service:bidding_v8_constants",
         "//services/bidding_service:cddl_spec_cache",
         "//services/bidding_service/egress_features:egress_feature",
         "//services/bidding_service/egress_features:feature_factory",

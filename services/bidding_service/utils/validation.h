@@ -23,22 +23,31 @@
 #include "absl/strings/str_cat.h"
 #include "api/bidding_auction_servers.pb.h"
 #include "services/common/loggers/request_log_context.h"
+#include "services/common/metric/server_definition.h"
+#include "services/common/util/reporting_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-struct DebugUrlsSize {
-  long win_url_chars;
-  long loss_url_chars;
+struct DebugUrlsValidationConfig {
+  long max_allowed_size_debug_url_chars;
+  long max_allowed_size_all_debug_urls_chars;
+  bool enable_sampled_debug_reporting;
+  int debug_reporting_sampling_upper_bound;
 };
 
-// Clears debug URLs for ad_with_bid if they exceed the maximum allowed size per
-// debug URL, or if they cause the total size of all debug URLs to exceed the
-// maximum allowed size of all debug URLs. Returns updated size of win and loss
-// debug URLs of ad_with_bid.
-DebugUrlsSize TrimAndReturnDebugUrlsSize(
-    AdWithBid& ad_with_bid, int max_allowed_size_debug_url_chars,
-    long max_allowed_size_all_debug_urls_chars, long total_debug_urls_chars,
-    RequestLogContext& log_context);
+// Clears the debug win/loss url for ad_with_bid if:
+// i) It exceeds the maximum allowed size per debug url.
+// ii) It causes the total size of all debug urls to exceed maximum allowed size
+// of all debug urls.
+// iii) Sampling is enabled and it is not selected. If this happens, the
+// appropriate debug_win/loss_url_failed_sampling boolean is set to true.
+// Updates current_total_debug_urls_chars. Returns count of non-empty validated
+// debug urls remaining.
+int ValidateBuyerDebugUrls(AdWithBid& ad_with_bid,
+                           long& current_total_debug_urls_chars,
+                           const DebugUrlsValidationConfig& config,
+                           RequestLogContext& log_context = NoOpContext().log,
+                           metric::BiddingContext* metric_context = nullptr);
 
 // Converts protected audience bid to string for logging.
 inline std::string GetProtectedAudienceBidDebugInfo(const AdWithBid& bid) {

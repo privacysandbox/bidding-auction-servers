@@ -22,6 +22,8 @@ Usage:
   --use-with-generateBid-file <path>     Use the provided generateBid file for bidding. Path MUST be relative to project root.
   --inference_sidecar_binary_path <path> Path to the inference sidecar binary (default: "/server/bin/inference_sidecar_pytorch_v2_1_1")
   --generate_bid_model_path <path>       Use the provided model for inference. Path MUST be relative to project root (default: "services/inference_sidecar/common/testdata/models/pytorch_generate_bid_model.pt")
+  --cpu-prof                             Enable CPU profiling
+  --heap-prof                            Enable heap profiling
   -h, --help                             Print usage information
 USAGE
     exit 0
@@ -38,6 +40,7 @@ GENERATE_BID_MODEL_PATH="${GENERATE_BID_MODEL_PATH:-services/inference_sidecar/c
 declare -i ENABLE_INFERENCE=0
 declare -i USE_GDB=0
 declare -i CPU_PROF=0
+declare -i HEAP_PROF=0
 declare GENERATE_BID_FILEPATH=""
 declare -i FETCH_MODE=0
 
@@ -53,6 +56,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --cpu-prof)
       CPU_PROF=1
+      shift
+      ;;
+    --heap-prof)
+      HEAP_PROF=1
       shift
       ;;
     --use-with-generateBid-file)
@@ -212,7 +219,13 @@ elif [[ ${CPU_PROF} -eq 1 ]]; then
   local_debian_setup
   "${PROJECT_ROOT}/builders/tools/cbuild" --seccomp-unconfined \
   --docker-network host --image build-debian --cmd-profiler \
-  --cpu-profiler-filename bidding.prof --cpu-profiler-signal 12 \
+  --cpu-profiler-filename bidding.prof --cpu-profiler-signal ${CPU_PROF_SIGNAL} \
+  --cmd "${SERVER_START_CMD}"
+elif [[ ${HEAP_PROF} -eq 1 ]]; then
+  local_debian_setup
+  "${PROJECT_ROOT}/builders/tools/cbuild" --seccomp-unconfined \
+  --docker-network host --image build-debian --cmd-profiler \
+  --heap-profiler-filename bidding.hprof --heap-profiler-signal ${MEM_PROF_SIGNAL} \
   --cmd "${SERVER_START_CMD}"
 else
   docker_image_uri="${DOCKER_IMAGE_URI:-$(docker load -i dist/debian/bidding_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")}"

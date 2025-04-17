@@ -24,8 +24,8 @@
 
 #include "absl/strings/string_view.h"
 #include "services/common/blob_fetch/blob_fetcher_base.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "src/concurrent/executor.h"
-#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -37,8 +37,7 @@ class BlobFetcher : public BlobFetcherBase {
   // Constructs a new BlobFetcher.
   // `bucket_name`: The cloud storage bucket name to read from.
   BlobFetcher(absl::string_view bucket_name, server_common::Executor* executor,
-              std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-                  blob_storage_client);
+              std::unique_ptr<BlobStorageClient> blob_storage_client);
 
   // Not copyable or movable.
   BlobFetcher(const BlobFetcher&) = delete;
@@ -57,8 +56,7 @@ class BlobFetcher : public BlobFetcherBase {
 
   const std::string bucket_name_;
   server_common::Executor* executor_;  // not owned
-  std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-      blob_storage_client_;
+  std::unique_ptr<BlobStorageClient> blob_storage_client_;
   // Keeps the latest snapshot of the storage bucket.
   std::vector<Blob> snapshot_;
 };

@@ -96,10 +96,57 @@ constexpr absl::string_view kTestBuyerDebugWinUrlPrefix =
     "https://buyer.com/debugWin?render=";
 constexpr absl::string_view kTestBuyerDebugLossUrlPrefix =
     "https://buyer.com/debugLoss?render=";
-constexpr absl::string_view kTestSellerDebugWinUrlPrefix =
-    "https://seller.com/debugWin?render=";
-constexpr absl::string_view kTestSellerDebugLossUrlPrefix =
-    "https://seller.com/debugLoss?render=";
+constexpr absl::string_view kTestBuyerDebugWinReportTemplate = R"pb(
+  reports {
+    url: "https://buyer.com/debugWin?render=$0"
+    is_win_report: true
+    is_seller_report: false
+    is_component_win: false
+  })pb";
+constexpr absl::string_view kTestBuyerDebugLossReportTemplate = R"pb(
+  reports {
+    url: "https://buyer.com/debugLoss?render=$0"
+    is_win_report: false
+    is_seller_report: false
+    is_component_win: false
+  })pb";
+constexpr absl::string_view kTestBuyerDebugWinReportForComponentWinnerTemplate =
+    R"pb(
+  reports {
+    url: "https://buyer.com/debugWin?render=$0"
+    is_win_report: true
+    is_seller_report: false
+    is_component_win: true
+  })pb";
+constexpr absl::string_view
+    kTestBuyerDebugLossReportForComponentWinnerTemplate = R"pb(
+  reports {
+    url: "https://buyer.com/debugLoss?render=$0"
+    is_win_report: false
+    is_seller_report: false
+    is_component_win: true
+  })pb";
+constexpr absl::string_view kTestSellerDebugWinReport = R"pb(
+  reports {
+    url: "https://seller.com/debugWin"
+    is_win_report: true
+    is_seller_report: true
+    is_component_win: false
+  }
+)pb";
+constexpr absl::string_view kTestSellerDebugReportsForComponentWinner = R"pb(
+  reports {
+    url: "https://seller.com/debugWin"
+    is_win_report: true
+    is_seller_report: true
+    is_component_win: true
+  }
+  reports {
+    url: "https://seller.com/debugLoss"
+    is_win_report: false
+    is_seller_report: true
+    is_component_win: true
+  })pb";
 
 template <typename T>
 struct EncryptedSelectAdRequestWithContext {
@@ -118,7 +165,9 @@ absl::flat_hash_map<std::string, std::string> BuildBuyerWinningAdUrlMap(
 struct BuildNewAdWithBidOptions {
   absl::string_view interest_group_name = "";
   const float bid_value = 1.0f;
-  const bool enable_event_level_debug_reporting = false;
+  const bool enable_debug_reporting = false;
+  const bool debug_win_url_failed_sampling = false;
+  const bool debug_loss_url_failed_sampling = false;
   const int number_ad_component_render_urls = kDefaultNumAdComponents;
   absl::string_view bid_currency = "";
   absl::string_view buyer_reporting_id = "";
@@ -159,7 +208,6 @@ AdWithBid BuildNewAdWithBid(
 
 ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
     const std::string& ad_render_url, absl::optional<float> bid_value,
-    const bool enable_event_level_debug_reporting,
     absl::optional<absl::string_view> bid_currency);
 
 struct ScoringProviderMockOptions {
@@ -225,11 +273,12 @@ SelectAdResponse RunRequest(
     server_common::Executor* executor, const ReportWinMap& report_win_map,
     const int max_buyers_solicited = 2, const bool enable_kanon = false,
     const bool enable_buyer_private_aggregate_reporting = false,
-    int per_adtech_paapi_contributions_limit = 100) {
+    int per_adtech_paapi_contributions_limit = 100,
+    RandomNumberGeneratorFactory rng_factory = RandomNumberGeneratorFactory()) {
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   T reactor(&context, &request, &response, executor, clients, config_client,
-            report_win_map,
+            report_win_map, rng_factory,
             /*enable_cancellation=*/false, enable_kanon,
             enable_buyer_private_aggregate_reporting,
             per_adtech_paapi_contributions_limit,
@@ -556,12 +605,14 @@ SelectAdResponse RunReactorRequest(
     server_common::Executor* executor, bool enable_kanon = false,
     bool enable_buyer_private_aggregate_reporting = false,
     int per_adtech_paapi_contributions_limit = 100, bool fail_fast = false,
-    const ReportWinMap& report_win_map = {}) {
+    const ReportWinMap& report_win_map = {},
+    const RandomNumberGeneratorFactory& rng_factory =
+        RandomNumberGeneratorFactory()) {
   metric::SfeContextMap()->Get(&request);
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   T reactor(&context, &request, &response, executor, clients, config_client,
-            report_win_map,
+            report_win_map, rng_factory,
             /*enable_cancellation=*/false, enable_kanon,
             enable_buyer_private_aggregate_reporting,
             per_adtech_paapi_contributions_limit, fail_fast);

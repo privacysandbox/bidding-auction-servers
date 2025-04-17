@@ -80,7 +80,7 @@ cc_library(
     ],
     deps = [
         ":expand_js_to_header",
-        "//services/bidding_service:bidding_constants",
+        "//services/bidding_service:bidding_v8_constants",
         "//services/bidding_service:runtime_flags",
         "//services/common/clients/config:config_client",
         "//services/common/constants:common_service_flags",

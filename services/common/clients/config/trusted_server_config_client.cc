@@ -19,16 +19,20 @@
 #include <utility>
 #include <vector>
 
+#include <grpcpp/grpcpp.h>
+
 #include "absl/functional/any_invocable.h"
-#include "absl/log/absl_log.h"
 #include "absl/status/status.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/blocking_counter.h"
+#include "services/common/loggers/request_log_context.h"
 #include "src/core/interface/errors.h"
 #include "src/public/core/interface/execution_result.h"
 #include "src/public/cpio/interface/parameter_client/parameter_client_interface.h"
 #include "src/util/status_macro/status_macros.h"
+
+#include "parc_parameter_client.h"
 
 using ::google::cmrt::sdk::parameter_service::v1::GetParameterRequest;
 using ::google::cmrt::sdk::parameter_service::v1::GetParameterResponse;
@@ -40,33 +44,56 @@ using ::google::scp::cpio::ParameterClientFactory;
 using ::google::scp::cpio::ParameterClientInterface;
 using ::google::scp::cpio::ParameterClientOptions;
 
+namespace privacy_sandbox::bidding_auction_servers {
+namespace {
 constexpr char error_message[] =
     "GetParameter failed during parameter fetch (parameter_name: %s, "
     "status_code: %s)\n";
 
 absl::Status HandleFailure(absl::string_view error) noexcept {
-  ABSL_LOG(ERROR) << error;
+  PS_LOG(ERROR) << error;
   return absl::UnavailableError(error);
 }
+}  // namespace
 
-namespace privacy_sandbox::bidding_auction_servers {
 TrustedServersConfigClient::TrustedServersConfigClient(
-    absl::Span<const absl::string_view> all_flags,
-    absl::AnyInvocable<
-        std::unique_ptr<ParameterClientInterface>(ParameterClientOptions) &&>
-        config_client_provider_fn)
-    : config_client_provider_fn_(std::move(config_client_provider_fn)) {
+    absl::Span<const absl::string_view> all_flags) {
   for (absl::string_view flag_name : all_flags) {
     config_entries_map_.try_emplace(flag_name, kEmptyValue);
   }
 }
 
 absl::Status TrustedServersConfigClient::Init(
-    std::string_view config_param_prefix) noexcept {
+    std::string_view config_param_prefix,
+    std::unique_ptr<ParcParameterClient> parameter_client) noexcept {
+  parc_parameter_client_ = std::move(parameter_client);
+
+  // Add the fetched values back to config_entries_map_.
+  for (const auto& [key, initial_value] : config_entries_map_) {
+    std::string param_name = absl::StrCat(config_param_prefix, key);
+    PS_LOG(INFO) << "Fetching parameter: " << param_name;
+    absl::StatusOr<std::string> param_value =
+        parc_parameter_client_->GetParameterSync(param_name);
+    if (param_value.ok()) {
+      config_entries_map_.insert_or_assign(key, *std::move(param_value));
+    } else {
+      PS_LOG(WARNING) << absl::StrFormat(error_message, param_name,
+                                         param_value.status().message());
+      if (initial_value == kEmptyValue) {
+        PS_LOG(ERROR) << "Parameter: " << param_name << " is missing a value.";
+      }
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status TrustedServersConfigClient::Init(
+    std::string_view config_param_prefix,
+    std::unique_ptr<google::scp::cpio::ParameterClientInterface>
+        parameter_client) noexcept {
   // Initialize and run the config client to fetch the corresponding values for
   // empty_parameter.
-  config_client_ =
-      std::move(config_client_provider_fn_)(ParameterClientOptions());
+  cpio_parameter_client_ = std::move(parameter_client);
   PS_RETURN_IF_ERROR(InitAndRunConfigClient());
 
   // Add the fetched values back to config_entries_map_.
@@ -79,7 +106,7 @@ absl::Status TrustedServersConfigClient::Init(
     // Callbacks occur synchronously.
     // The GetParameter() call returns success given a valid request object
     // (e.g. a non-empty parameter name).
-    absl::Status status = config_client_->GetParameter(
+    absl::Status status = cpio_parameter_client_->GetParameter(
         std::move(get_parameter_request),
         [this, &key = key, &initial_value = value, &counter](
             const ExecutionResult& result,
@@ -88,10 +115,10 @@ absl::Status TrustedServersConfigClient::Init(
             config_entries_map_.insert_or_assign(key,
                                                  response.parameter_value());
           } else if (initial_value == kEmptyValue) {
-            ABSL_LOG(ERROR) << absl::StrFormat(
+            PS_LOG(ERROR) << absl::StrFormat(
                 error_message, key, GetErrorMessage(result.status_code));
           } else {
-            ABSL_LOG(WARNING) << absl::StrFormat(
+            PS_LOG(WARNING) << absl::StrFormat(
                 error_message, key, GetErrorMessage(result.status_code));
           }
           counter.DecrementCount();
@@ -104,7 +131,6 @@ absl::Status TrustedServersConfigClient::Init(
           absl::StrFormat(error_message, key, status.message()));
     }
   }
-
   counter.Wait();
   return absl::OkStatus();
 }
@@ -144,11 +170,17 @@ double TrustedServersConfigClient::GetDoubleParameter(
   return std::stod(config_entries_map_.at(name));
 }
 
+float TrustedServersConfigClient::GetFloatParameter(
+    absl::string_view name) const noexcept {
+  DCHECK(HasParameter(name)) << "Flag " << name << " not found";
+  return std::stof(config_entries_map_.at(name));
+}
+
 absl::Status TrustedServersConfigClient::InitAndRunConfigClient() noexcept {
-  PS_RETURN_IF_ERROR(config_client_->Init()).SetPrepend()
-      << "Cannot init config client: ";
-  PS_RETURN_IF_ERROR(config_client_->Run()).SetPrepend()
-      << "Cannot run config client";
+  PS_RETURN_IF_ERROR(cpio_parameter_client_->Init()).SetPrepend()
+      << "Cannot init CPIO parameter client: ";
+  PS_RETURN_IF_ERROR(cpio_parameter_client_->Run()).SetPrepend()
+      << "Cannot run CPIO parameter client";
   return absl::OkStatus();
 }
 

@@ -82,22 +82,13 @@ class BuyerFrontEndAsyncGrpcClient
                                GetBidsResponse::GetBidsRawResponse>* params)
       const override;
 
-  // Decodes/Parses GetBidsResponses as per the old response format.
-  void OnGetBidsDoneChaffingDisabled(
-      std::string decrypted_payload, const grpc::Status& status,
-      BuyerFrontendRawClientParams* params) const;
-  // Decodes/Parses GetBidsResponses as per the new response format.
-  // See the documentation on EncodeAndCompressGetBidsPayload() in
-  // transcoding_utils.h for the format.
-  void OnGetBidsDoneChaffingEnabled(std::string decrypted_payload,
-                                    const grpc::Status& status,
-                                    BuyerFrontendRawClientParams* params) const;
+  // Decodes/Parses GetBidsResponses. See the documentation on
+  // EncodeAndCompressGetBidsPayload() in transcoding_utils.h for the format.
+  void OnGetBidsDone(absl::string_view decrypted_payload,
+                     const grpc::Status& status,
+                     BuyerFrontendRawClientParams* params) const;
 
   std::unique_ptr<BuyerFrontEnd::StubInterface> stub_;
-
-  // This flag is overloaded in this class and decides whether chaffing as well
-  // as encoding/decoding requests in the new SFE <> BFE format is enabled.
-  bool chaffing_enabled_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -34,12 +34,13 @@ using BuyerFrontEndImplementationType =
         GetBidsResponse::GetBidsRawResponse, ServiceThread,
         BuyerFrontEndAsyncGrpcClient, BuyerServiceClientConfig>>;
 
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(UnencodedAsyncGrpcClientStubTest);
+
 INSTANTIATE_TYPED_TEST_SUITE_P(BuyerFrontEndAsyncGrpcClientStubTest,
                                AsyncGrpcClientStubTest,
                                BuyerFrontEndImplementationType);
 
-TEST(BuyerFrontEndAsyncGrpcClientStubTest,
-     ChaffingEnabled_VerifyChaffRequestFormat) {
+TEST(BuyerFrontEndAsyncGrpcClientStubTest, VerifyChaffRequestResponse) {
   GetBidsResponse mock_bfe_response;
   mock_bfe_response.set_response_ciphertext("sample_ciphertext");
 
@@ -69,19 +70,21 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);
 
-  RequestConfig request_config = {.chaff_request_size = 100,
-                                  .compression_type = CompressionType::kGzip};
+  size_t get_bids_request_size = 100;
+  RequestConfig request_config = {.minimum_request_size = get_bids_request_size,
+                                  .compression_type = CompressionType::kGzip,
+                                  .is_chaff_request = true};
 
   MockCryptoClientWrapper crypto_client;
   // Mock the HpkeEncrypt() call on the crypto client.
   absl::StatusOr<std::string> encoded_raw_request =
       EncodeAndCompressGetBidsPayload(raw_request, CompressionType::kGzip,
-                                      request_config.chaff_request_size);
+                                      request_config.minimum_request_size);
   ASSERT_TRUE(encoded_raw_request.ok());
   MockHpkeEncryptCall(crypto_client, *encoded_raw_request);
+
   // Mock the AeadDecrypt() call on the crypto client.
   GetBidsResponse::GetBidsRawResponse mock_bfe_raw_response;
-
   absl::StatusOr<std::string> encoded_mock_bfe_raw_response =
       EncodeAndCompressGetBidsPayload(mock_bfe_raw_response,
                                       CompressionType::kGzip, 50);
@@ -104,8 +107,8 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
               response,
           ResponseMetadata response_metadata) {
-        // Verify that response_size in the ResponseMetadata correctly is
-        // populated correctly. It should match the mock_bfe_response we had the
+        // Verify that response_size in the ResponseMetadata is populated
+        // correctly. It should match the mock_bfe_response we had the
         // dummy thread/reactor return.
         EXPECT_EQ(response_metadata.response_size,
                   mock_bfe_response.ByteSizeLong());
@@ -140,18 +143,14 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
       << received_request->get_bids_proto.DebugString() << "\n\nExpected:\n"
       << raw_request.DebugString() << "\n\nDifference:\n"
       << get_bids_raw_req_diff;
+
+  EXPECT_EQ(bfe_received_request_ciphertext.size(),
+            get_bids_request_size + kTotalMetadataSizeBytes);
 }
 
-TEST(BuyerFrontEndAsyncGrpcClientStubTest,
-     ChaffingDisabled_VerifyNonChaffRequestFormat) {
-  // Create a GetBidsResponse for our mock BFE to return.
-  AdWithBid ad_with_bid;
-  ad_with_bid.set_render("foo");
-  GetBidsResponse::GetBidsRawResponse mock_bfe_raw_response;
-  mock_bfe_raw_response.mutable_bids()->Add(std::move(ad_with_bid));
+TEST(BuyerFrontEndAsyncGrpcClientStubTest, VerifyNonChaffRequestResponse) {
   GetBidsResponse mock_bfe_response;
-  mock_bfe_response.set_response_ciphertext(*Compress(
-      mock_bfe_raw_response.SerializeAsString(), CompressionType::kGzip));
+  mock_bfe_response.set_response_ciphertext("sample_ciphertext");
 
   // Hold onto a copy of the ciphertext that the BFE receives; we validate its
   // encoding below.
@@ -170,7 +169,7 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
       });
   BuyerServiceClientConfig client_config = {
       .server_addr = dummy_service_thread_->GetServerAddr(),
-      .chaffing_enabled = false,
+      .chaffing_enabled = true,
       .ca_root_pem = kTestCaCertPath};
 
   TrustedServersConfigClient config_client({});
@@ -178,19 +177,29 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
 
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(false);
+  raw_request.set_auction_signals("auction_signals");
 
-  RequestConfig request_config = {.chaff_request_size = 0,
-                                  .compression_type = CompressionType::kGzip};
+  RequestConfig request_config = {.minimum_request_size = 0,
+                                  .compression_type = CompressionType::kGzip,
+                                  .is_chaff_request = false};
 
   MockCryptoClientWrapper crypto_client;
   // Mock the HpkeEncrypt() call on the crypto client.
-  MockHpkeEncryptCall(crypto_client, *Compress(raw_request.SerializeAsString(),
-                                               CompressionType::kGzip));
+  absl::StatusOr<std::string> encoded_raw_request =
+      EncodeAndCompressGetBidsPayload(raw_request, CompressionType::kGzip,
+                                      request_config.minimum_request_size);
+  ASSERT_TRUE(encoded_raw_request.ok());
+  MockHpkeEncryptCall(crypto_client, *encoded_raw_request);
+
   // Mock the AeadDecrypt() call on the crypto client.
-  // Call Compress() since the client will try to decompress the result.
-  MockAeadDecryptCall(crypto_client,
-                      *Compress(mock_bfe_raw_response.SerializeAsString(),
-                                CompressionType::kGzip));
+  GetBidsResponse::GetBidsRawResponse mock_bfe_raw_response;
+  *mock_bfe_raw_response.mutable_bids()->Add() = MakeARandomAdWithBid(1, 10);
+  absl::StatusOr<std::string> encoded_mock_bfe_raw_response =
+      EncodeAndCompressGetBidsPayload(mock_bfe_raw_response,
+                                      CompressionType::kGzip,
+                                      /* minimum_payload_size= */ 0);
+  ASSERT_TRUE(encoded_mock_bfe_raw_response.ok());
+  MockAeadDecryptCall(crypto_client, *encoded_mock_bfe_raw_response);
 
   // Set up the BuyerFrontEndAsyncGrpcClient for the test.
   auto key_fetcher_manager =
@@ -208,12 +217,12 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
           absl::StatusOr<std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
               response,
           ResponseMetadata response_metadata) {
-        // Verify that response_size in the ResponseMetadata correctly is
-        // populated correctly. It should match the mock_bfe_response we had the
+        // Verify that response_size in the ResponseMetadata is populated
+        // correctly. It should match the mock_bfe_response we had the
         // dummy thread/reactor return.
         EXPECT_EQ(response_metadata.response_size,
                   mock_bfe_response.ByteSizeLong());
-        // We pass an empty proto up to the reactor for chaff requests.
+        ASSERT_TRUE(response.ok());
         EXPECT_EQ((*response)->ByteSizeLong(),
                   mock_bfe_raw_response.ByteSizeLong());
 
@@ -224,16 +233,26 @@ TEST(BuyerFrontEndAsyncGrpcClientStubTest,
   notification.WaitForNotification();
 
   // Decode the GetBidsRequest received by our mock BFE and verify it matches
-  // the request we sent. For this test, the request should actually just be an
-  // empty string because the only field on the request was is_chaff to be
-  // false, which it is by default.
-  absl::StatusOr<std::string> received_request = Decompress(
-      std::move(bfe_received_request_ciphertext), CompressionType::kGzip);
+  // the request we sent.
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsRequest::GetBidsRawRequest>>
+      received_request =
+          DecodeGetBidsPayload<GetBidsRequest::GetBidsRawRequest>(
+              bfe_received_request_ciphertext);
   ASSERT_TRUE(received_request.ok());
+  // Version bits are 0 for now.
+  EXPECT_EQ(received_request->version, 0);
+  EXPECT_EQ(received_request->compression_type, CompressionType::kGzip);
 
-  GetBidsResponse::GetBidsRawResponse actual;
-  ASSERT_TRUE(actual.ParseFromString(*received_request));
-  EXPECT_EQ(actual.ByteSizeLong(), 0);
+  std::string get_bids_raw_req_diff;
+  google::protobuf::util::MessageDifferencer get_bids_raw_req_differencer;
+  get_bids_raw_req_differencer.ReportDifferencesToString(
+      &get_bids_raw_req_diff);
+  EXPECT_TRUE(get_bids_raw_req_differencer.Compare(
+      received_request->get_bids_proto, raw_request))
+      << "\nActual:\n"
+      << received_request->get_bids_proto.DebugString() << "\n\nExpected:\n"
+      << raw_request.DebugString() << "\n\nDifference:\n"
+      << get_bids_raw_req_diff;
 }
 
 }  // namespace

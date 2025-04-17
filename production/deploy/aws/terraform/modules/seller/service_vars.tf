@@ -259,3 +259,15 @@ variable "coordinator_role_arns" {
   description = "ARNs for coordinator roles."
   type        = list(string)
 }
+
+variable "forced_availability_zones" {
+  description = "Only use those forced availability zones. Not all instances types are available in all zones"
+  type        = set(string)
+  default     = []
+}
+
+variable "auto_scaling_use_first_zone" {
+  description = "Only use first zone for autoscaling"
+  type        = bool
+  default     = false
+}

@@ -62,6 +62,7 @@ GhostWinnerForTopLevelAuction GetGhostWinnerDataForTopLevelAuction(
          .mutable_selected_buyer_and_seller_reporting_id() =
         score.selected_buyer_and_seller_reporting_id();
   }
+  ghost_winner_for_top_level_auction.set_ad_type(score.ad_type());
   return ghost_winner_for_top_level_auction;
 }
 

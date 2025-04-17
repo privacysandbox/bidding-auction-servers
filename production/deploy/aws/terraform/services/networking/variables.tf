@@ -28,3 +28,9 @@ variable "vpc_cidr_block" {
   description = "CIDR range for the VPC where KV server will be deployed."
   type        = string
 }
+
+variable "forced_availability_zones" {
+  description = "Only use those forced availability zones."
+  type        = set(string)
+  default     = []
+}

@@ -27,6 +27,7 @@
 #include "services/common/constants/user_error_strings.h"
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
+#include "services/common/random/rng.h"
 #include "services/common/util/json_util.h"
 #include "services/common/util/priority_vector/priority_vector_utils.h"
 #include "services/common/util/request_metadata.h"
@@ -143,7 +144,8 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
     ProtectedAppSignalsBiddingAsyncClient* pas_bidding_async_client,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client, KVAsyncClient* kv_async_client,
-    server_common::Executor& executor, bool enable_benchmarking)
+    server_common::Executor& executor,
+    const RandomNumberGeneratorFactory& rng_factory, bool enable_benchmarking)
     : context_(&context),
       request_(&get_bids_request),
       get_bids_response_(&get_bids_response),
@@ -157,13 +159,16 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
       key_fetcher_manager_(key_fetcher_manager),
       crypto_client_(crypto_client),
       chaffing_enabled_(config_.is_chaffing_enabled),
-      is_sampled_for_debug_([this]() {
+      is_sampled_for_debug_([this, &rng_factory]() {
         decrypt_status_ = DecryptRequest();
-        return SetGeneratorAndSample(
-            config_.debug_sample_rate_micro,
-            chaffing_enabled_ && raw_request_.is_chaff(),
-            raw_request_.is_debug_eligible(),
-            raw_request_.log_context().generation_id(), generator_);
+        rng_ =
+            CreateRng(config_.debug_sample_rate_micro,
+                      chaffing_enabled_ && raw_request_.is_chaff(),
+                      raw_request_.is_debug_eligible(),
+                      raw_request_.log_context().generation_id(), rng_factory);
+
+        return ShouldSample(config_.debug_sample_rate_micro,
+                            raw_request_.is_debug_eligible(), *rng_);
       }()),
       log_context_([this]() {
         if (config_.consent_all_requests) {
@@ -191,16 +196,20 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
   } else {
     benchmarking_logger_ = std::make_unique<NoOpsLogger>();
   }
-  CHECK_OK([this]() {
-    PS_ASSIGN_OR_RETURN(metric_context_,
-                        metric::BfeContextMap()->Remove(request_));
-    if (log_context_.is_consented()) {
-      metric_context_->SetConsented(raw_request_.log_context().generation_id());
-    } else if (log_context_.is_prod_debug()) {
-      metric_context_->SetConsented(kProdDebug.data());
-    }
-    return absl::OkStatus();
-  }()) << "BfeContextMap()->Get(request) should have been called";
+  PS_CHECK_OK(
+      [this]() {
+        PS_ASSIGN_OR_RETURN(metric_context_,
+                            metric::BfeContextMap()->Remove(request_));
+        if (log_context_.is_consented()) {
+          metric_context_->SetConsented(
+              raw_request_.log_context().generation_id());
+        } else if (log_context_.is_prod_debug()) {
+          metric_context_->SetConsented(kProdDebug.data());
+        }
+        return absl::OkStatus();
+      }(),
+      log_context_)
+      << "BfeContextMap()->Get(request) should have been called";
 
   DCHECK(!config_.is_protected_app_signals_enabled ||
          protected_app_signals_bidding_async_client_ != nullptr)
@@ -215,12 +224,13 @@ GetBidsUnaryReactor::GetBidsUnaryReactor(
     BiddingAsyncClient& bidding_async_client, const GetBidsConfig& config,
     server_common::KeyFetcherManagerInterface* key_fetcher_manager,
     CryptoClientWrapperInterface* crypto_client, KVAsyncClient* kv_async_client,
-    server_common::Executor& executor, bool enable_benchmarking)
+    server_common::Executor& executor,
+    const RandomNumberGeneratorFactory& rng_factory, bool enable_benchmarking)
     : GetBidsUnaryReactor(context, get_bids_request, get_bids_response,
                           bidding_signals_async_provider, bidding_async_client,
                           config, /*pas_bidding_async_client=*/nullptr,
                           key_fetcher_manager, crypto_client, kv_async_client,
-                          executor, enable_benchmarking) {}
+                          executor, rng_factory, enable_benchmarking) {}
 
 void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
   if (enable_cancellation_ && context_->IsCancelled()) {
@@ -248,8 +258,10 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
   // ExportEventMessage before encrypt response
   log_context_.ExportEventMessage(/*if_export_consented=*/true,
                                   should_export_debug_);
-  if (auto encryption_status = EncryptResponse(); !encryption_status.ok()) {
-    PS_LOG(ERROR, log_context_) << "Failed to encrypt the response";
+  if (absl::Status encryption_status = EncryptResponse();
+      !encryption_status.ok()) {
+    PS_LOG(ERROR, log_context_)
+        << "Failed to encrypt the response: " << encryption_status;
     benchmarking_logger_->End();
     FinishWithStatus(
         grpc::Status(grpc::StatusCode::INTERNAL, encryption_status.ToString()));
@@ -265,68 +277,32 @@ void GetBidsUnaryReactor::OnAllBidsDone(bool any_successful_bids) {
 
 grpc::Status GetBidsUnaryReactor::ParseRawRequestBytestring(
     HpkeDecryptResponse& decrypt_response) {
-  absl::StatusOr<CompressionType> compression_type = GetCompressionType();
-  if (!compression_type.ok()) {
-    return {grpc::StatusCode::INVALID_ARGUMENT,
-            compression_type.status().message().data()};
+  // If the payload begins with the null terminator or the first bit set, the
+  // request is in the the new request format.
+  if (decrypt_response.payload().front() != '\0' &&
+      decrypt_response.payload().front() != '\x01') {
+    return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedRequest};
   }
 
-  // compression_type defaults to kUncompressed if no header is provided in the
-  // request.
-  if (*compression_type != CompressionType::kUncompressed) {
-    // If compression_type_ is NOT kUncompressed, this is a request following
-    // the old request format and is compressed.
-    compression_type_ = *compression_type;
-    absl::StatusOr<std::string> decompressed = Decompress(
-        std::move(*decrypt_response.mutable_payload()), compression_type_);
-    if (!decompressed.ok()) {
-      PS_LOG(ERROR) << "Failed to decompress request: "
-                    << decompressed.status();
-      return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedRequest};
-    }
-
-    PS_VLOG(kStats) << "Decompressed payload size: " << decompressed->length();
-    if (!raw_request_.ParseFromString(*decompressed)) {
-      return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedRequest};
-    }
-  } else if (chaffing_enabled_ &&
-             ((decrypt_response.payload().front() == '\0') ||
-              (decrypt_response.payload().front() == '\x01'))) {
-    PS_VLOG(9) << "Decoding request according to new request format";
-    // If the payload begins with the null terminator, the request is in the
-    // the new request format.
-
-    // Save that the request is following the new format into
-    // use_new_payload_encoding_; the response will also use the new format.
-    use_new_payload_encoding_ = true;
-    absl::StatusOr<DecodedGetBidsPayload<GetBidsRequest::GetBidsRawRequest>>
-        decoded_payload =
-            DecodeGetBidsPayload<GetBidsRequest::GetBidsRawRequest>(
-                decrypt_response.payload());
-    if (!decoded_payload.ok()) {
-      PS_LOG(ERROR) << "Failed to decode request: " << decoded_payload.status();
-      return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
-    }
-
-    compression_type_ = decoded_payload->compression_type;
-    if (decoded_payload->version != 0) {
-      // For now, we don't support any version/compression bytes besides 0.
-      return {grpc::StatusCode::INVALID_ARGUMENT, kUnsupportedMetadataValues};
-    }
-
-    raw_request_ = std::move(decoded_payload->get_bids_proto);
-
-    PS_VLOG(kStats) << "Compression type: " << ((int)compression_type_);
-    PS_VLOG(kStats) << "Decoded/Decompressed payload size: "
-                    << raw_request_.SerializeAsString().length();
-  } else {
-    if (!raw_request_.ParseFromString(decrypt_response.payload())) {
-      // If not, try to parse the request as before.
-      return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedRequest};
-    }
-
-    compression_type_ = *compression_type;  // kUncompressed
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsRequest::GetBidsRawRequest>>
+      decoded_payload = DecodeGetBidsPayload<GetBidsRequest::GetBidsRawRequest>(
+          decrypt_response.payload());
+  if (!decoded_payload.ok()) {
+    PS_LOG(ERROR) << "Failed to decode request: " << decoded_payload.status();
+    return {grpc::StatusCode::INVALID_ARGUMENT, kMalformedCiphertext};
   }
+
+  compression_type_ = decoded_payload->compression_type;
+  if (decoded_payload->version != 0) {
+    // For now, we don't support any version/compression bytes besides 0.
+    return {grpc::StatusCode::INVALID_ARGUMENT, kUnsupportedMetadataValues};
+  }
+
+  raw_request_ = std::move(decoded_payload->get_bids_proto);
+
+  PS_VLOG(kStats) << "Compression type: " << ((int)compression_type_);
+  PS_VLOG(kStats) << "Decoded/Decompressed payload size: "
+                  << raw_request_.SerializeAsString().length();
 
   return grpc::Status::OK;
 }
@@ -430,22 +406,6 @@ void GetBidsUnaryReactor::CancellableExecute() {
     return;
   }
 
-  if (raw_request_.has_buyer_input()) {
-    *raw_request_.mutable_buyer_input_for_bidding() =
-        ToBuyerInputForBidding(raw_request_.buyer_input());
-  }
-
-  const int num_bidding_calls = GetNumberOfMaximumBiddingCalls();
-  if (num_bidding_calls == 0) {
-    // This is unlikely to happen since we already have this check in place
-    // in SFE.
-    PS_LOG(ERROR, log_context_) << "No protected audience or protected app "
-                                   "signals input found in the request";
-    benchmarking_logger_->End();
-    FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT, kMissingInputs));
-    return;
-  }
-
   if (config_.priority_vector_enabled &&
       !raw_request_.priority_signals().empty()) {
     absl::StatusOr<rapidjson::Document> priority_signals =
@@ -458,26 +418,52 @@ void GetBidsUnaryReactor::CancellableExecute() {
     priority_signals_vector_ = *std::move(priority_signals);
   }
 
+  const int num_bidding_calls = GetNumberOfMaximumBiddingCalls();
+  if (num_bidding_calls == 0) {
+    // This is unlikely to happen since we already have this check in place
+    // in SFE.
+    PS_LOG(ERROR, log_context_) << "No protected audience or protected app "
+                                   "signals input found in the request";
+    benchmarking_logger_->End();
+    FinishWithStatus(grpc::Status(grpc::INVALID_ARGUMENT, kMissingInputs));
+    return;
+  }
   async_task_tracker_.SetNumTasksToTrack(num_bidding_calls);
-  MayGetProtectedAudienceBids();
-  MayGetProtectedSignalsBids();
+
+  if (raw_request_.has_buyer_input()) {
+    *raw_request_.mutable_buyer_input_for_bidding() =
+        ToBuyerInputForBidding(std::move(*raw_request_.mutable_buyer_input()));
+  }
+
+  const bool get_protected_audience_bids =
+      config_.is_protected_audience_enabled &&
+      !raw_request_.buyer_input_for_bidding().interest_groups().empty();
+  const bool get_protected_signals_bids =
+      config_.is_protected_app_signals_enabled &&
+      raw_request_.has_protected_app_signals_buyer_input();
+  if (get_protected_audience_bids && get_protected_signals_bids) {
+    GetProtectedAudienceBids();
+    GetProtectedSignalsBids();
+  } else if (get_protected_audience_bids) {
+    GetProtectedAudienceBids();
+  } else if (get_protected_signals_bids) {
+    GetProtectedSignalsBids();
+  }
 }
 
 void GetBidsUnaryReactor::CancellableExecuteChaffRequest() {
-  // Sleep to make it seem (from the client's perspective) that the BFE is
-  // processing the request.
+  // Artificially delay the response for chaff requests to mimic processing a
+  // real request.
   size_t chaff_request_duration = 0;
-  std::uniform_int_distribution<size_t> request_duration_dist(
-      kMinChaffRequestDurationMs, kMaxChaffRequestDurationMs);
-  if (generator_.has_value()) {
-    chaff_request_duration = request_duration_dist(*generator_);
+  if (rng_) {
+    chaff_request_duration = rng_->GetUniformInt(kMinChaffRequestDurationMs,
+                                                 kMaxChaffRequestDurationMs);
   }
   // Produce chaff response.
   size_t chaff_response_size = 0;
-  std::uniform_int_distribution<size_t> chaff_response_size_dist(
-      kMinChaffResponseSizeBytes, kMaxChaffResponseSizeBytes);
-  if (generator_.has_value()) {
-    chaff_response_size = chaff_response_size_dist(*generator_);
+  if (rng_) {
+    chaff_response_size = rng_->GetUniformInt(kMinChaffResponseSizeBytes,
+                                              kMaxChaffResponseSizeBytes);
   }
   absl::StatusOr<std::string> encoded_payload = EncodeAndCompressGetBidsPayload(
       *get_bids_raw_response_, compression_type_, chaff_response_size);
@@ -520,12 +506,7 @@ void GetBidsUnaryReactor::LogInitiatedRequestErrorMetrics(
   }
 }
 
-void GetBidsUnaryReactor::MayGetProtectedSignalsBids() {
-  if (!config_.is_protected_app_signals_enabled) {
-    PS_VLOG(8, log_context_) << "Protected App Signals feature not enabled";
-    return;
-  }
-
+void GetBidsUnaryReactor::GetProtectedSignalsBids() {
   if (!raw_request_.has_protected_app_signals_buyer_input() ||
       !raw_request_.protected_app_signals_buyer_input()
            .has_protected_app_signals()) {
@@ -784,20 +765,7 @@ void GetBidsUnaryReactor::MayGetProtectedAudienceBidsV2(
   }
 }
 
-void GetBidsUnaryReactor::MayGetProtectedAudienceBids() {
-  if (!config_.is_protected_audience_enabled) {
-    PS_VLOG(kNoisyWarn, log_context_)
-        << "Protected Audience is not enabled, skipping bids fetching for PA";
-    return;
-  }
-
-  if (raw_request_.buyer_input().interest_groups().empty() &&
-      raw_request_.buyer_input_for_bidding().interest_groups().empty()) {
-    PS_VLOG(kNoisyWarn, log_context_)
-        << "No interest groups found, skipping bidding for protected audience";
-    return;
-  }
-
+void GetBidsUnaryReactor::GetProtectedAudienceBids() {
   if (bidding_signals_fetch_mode_ != BiddingSignalsFetchMode::NOT_FETCHED) {
     BiddingSignalsRequest bidding_signals_request(raw_request_, kv_metadata_);
     if (UseKvV2(raw_request_.client_type(), config_.is_tkv_v2_browser_enabled,
@@ -855,9 +823,15 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
       .per_ig_priority_vectors =
           bidding_signal_json_components_.per_ig_priority_vectors};
 
+  absl::flat_hash_map<std::string, std::string> common_bidding_signals;
+  if (bidding_signal_json_components_.bidding_signals) {
+    common_bidding_signals =
+        BiddingSignalsToMap(*bidding_signal_json_components_.bidding_signals);
+  }
   PrepareGenerateBidsRequestResult result = PrepareGenerateBidsRequest(
-      raw_request_, std::move(bidding_signal_json_components_.bidding_signals),
+      raw_request_, common_bidding_signals,
       bidding_signal_json_components_.raw_size, data_version, pv_config,
+      executor_,
       {.enable_kanon = enable_enforce_kanon_,
        .require_bidding_signals =
            bidding_signals_fetch_mode_ == BiddingSignalsFetchMode::REQUIRED});
@@ -948,34 +922,14 @@ void GetBidsUnaryReactor::PrepareAndGenerateProtectedAudienceBid(
 }
 
 absl::Status GetBidsUnaryReactor::EncryptResponse() {
-  std::string payload;
-  if (use_new_payload_encoding_) {
-    absl::StatusOr<std::string> encoded_payload =
-        EncodeAndCompressGetBidsPayload(*get_bids_raw_response_,
-                                        CompressionType::kGzip);
-    if (!encoded_payload.ok()) {
-      PS_LOG(ERROR, log_context_)
-          << "Failed to encode/compress response: " << encoded_payload.status();
-      return encoded_payload.status();
-    }
+  absl::StatusOr<std::string> encoded_payload = EncodeAndCompressGetBidsPayload(
+      *get_bids_raw_response_, CompressionType::kGzip);
+  PS_RETURN_IF_ERROR(encoded_payload.status())
+      << "when trying to encode/compress SelectAdResponse";
 
-    payload = *std::move(encoded_payload);
-  } else {
-    PS_VLOG(9, log_context_) << "Using old response format";
-    payload = get_bids_raw_response_->SerializeAsString();
-    PS_VLOG(kStats, log_context_) << "compression_type_: " << compression_type_;
-    PS_VLOG(kStats, log_context_)
-        << "response payload size before compression: " << payload.length();
-    PS_ASSIGN_OR_RETURN(std::string compressed_payload,
-                        Compress(std::move(payload), compression_type_));
-    PS_VLOG(kStats, log_context_) << "Response payload size after compression: "
-                                  << compressed_payload.length();
-    payload = std::move(compressed_payload);
-  }
-
-  PS_ASSIGN_OR_RETURN(auto aead_encrypt,
-                      crypto_client_->AeadEncrypt(payload, hpke_secret_));
-
+  PS_ASSIGN_OR_RETURN(
+      auto aead_encrypt,
+      crypto_client_->AeadEncrypt(*std::move(encoded_payload), hpke_secret_));
   get_bids_response_->set_response_ciphertext(
       aead_encrypt.encrypted_data().ciphertext());
   return absl::OkStatus();
@@ -993,25 +947,6 @@ void GetBidsUnaryReactor::FinishWithStatus(const grpc::Status& status) {
     metric_context_->SetRequestResult(server_common::ToAbslStatus(status));
   }
   Finish(status);
-}
-
-absl::StatusOr<CompressionType> GetBidsUnaryReactor::GetCompressionType() {
-  int compression_type_num = 0;
-  auto compression_type_it =
-      context_->client_metadata().find(kBiddingAuctionCompressionHeader.data());
-  if (compression_type_it != context_->client_metadata().end()) {
-    PS_VLOG(8) << "B&A compression header found in request";
-    std::string compression_type_str(compression_type_it->second.begin(),
-                                     compression_type_it->second.end());
-    if (!absl::SimpleAtoi(compression_type_str, &compression_type_num) ||
-        !ToCompressionType(compression_type_num).ok()) {
-      return absl::InvalidArgumentError(kInvalidCompressionHeaderValue);
-    }
-  }
-
-  PS_VLOG(8) << "Compression type from examining request headers: "
-             << compression_type_num;
-  return ToCompressionType(compression_type_num);
 }
 
 // Deletes all data related to this object.

@@ -344,7 +344,7 @@ TEST_F(AuctionServiceTest, AbortsIfMissingDispatchRequests) {
   *request_.mutable_request_ciphertext() = raw_request.SerializeAsString();
   grpc::Status status = stub->ScoreAds(&context, request_, &response_);
 
-  EXPECT_EQ(status.error_message(), kNoAdsWithValidScoringSignals);
+  EXPECT_EQ(status.error_message(), kNoAdsWithValidDispatchRequests);
   EXPECT_EQ(status.error_code(), grpc::StatusCode::INTERNAL);
 }
 

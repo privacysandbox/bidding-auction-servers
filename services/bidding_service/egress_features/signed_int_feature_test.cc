@@ -66,7 +66,7 @@ TEST_F(SignedIntFeatureTest, ComplainsForOutOfBoundPositiveNumber) {
   // serialize.
   CHECK_OK(status);
   auto serialized_val = signed_int_feature.Serialize();
-  ASSERT_TRUE(!serialized_val.ok()) << serialized_val.status();
+  ASSERT_FALSE(serialized_val.ok()) << serialized_val.status();
   EXPECT_THAT(serialized_val.status().message(),
               HasSubstr("Out of bound error"));
 }
@@ -78,7 +78,7 @@ TEST_F(SignedIntFeatureTest, ComplainsForOutOfBoundNegativeNumber) {
   // serialize.
   CHECK_OK(status);
   auto serialized_val = signed_int_feature.Serialize();
-  ASSERT_TRUE(!serialized_val.ok()) << serialized_val.status();
+  ASSERT_FALSE(serialized_val.ok()) << serialized_val.status();
   EXPECT_THAT(serialized_val.status().message(),
               HasSubstr("Out of bound error"));
 }

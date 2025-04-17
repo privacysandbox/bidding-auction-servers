@@ -150,9 +150,9 @@ absl::StatusOr<std::string> PackageAuctionResultForWeb(
       Encode(high_score,
              maybe_bidding_group_map.has_value() ? *maybe_bidding_group_map
                                                  : IgsWithBidsMap(),
-             update_group_map, error, error_handler,
-             per_adtech_paapi_contributions_limit, auction_result_nonce,
-             std::move(kanon_data));
+             update_group_map, /*adtech_origin_debug_urls_map=*/{}, error,
+             error_handler, per_adtech_paapi_contributions_limit,
+             auction_result_nonce, std::move(kanon_data));
   if (!serialized_data.ok()) {
     wait_for_error_callback.WaitForNotification();
     return absl::Status(serialized_data.status().code(), error_msg);
@@ -246,7 +246,8 @@ CreateTopLevelScoreAdsRawRequest(
     const SelectAdRequest::AuctionConfig& auction_config,
     std::variant<ProtectedAudienceInput, ProtectedAuctionInput>&
         protected_auction_input,
-    std::vector<AuctionResult>& component_auction_results) {
+    std::vector<AuctionResult>& component_auction_results, bool enable_kanon,
+    int num_allowed_ghost_winners) {
   auto raw_request = std::make_unique<ScoreAdsRequest::ScoreAdsRawRequest>();
   *raw_request->mutable_auction_signals() = auction_config.auction_signals();
   *raw_request->mutable_seller_signals() = auction_config.seller_signals();
@@ -264,7 +265,8 @@ CreateTopLevelScoreAdsRawRequest(
     }
   }
   std::visit(
-      [&raw_request, &auction_config](const auto& protected_auction_input) {
+      [&raw_request, &auction_config, &enable_kanon,
+       &num_allowed_ghost_winners](const auto& protected_auction_input) {
         raw_request->set_publisher_hostname(
             protected_auction_input.publisher_name());
         raw_request->set_enable_debug_reporting(
@@ -275,6 +277,11 @@ CreateTopLevelScoreAdsRawRequest(
         if (protected_auction_input.has_consented_debug_config()) {
           *raw_request->mutable_consented_debug_config() =
               protected_auction_input.consented_debug_config();
+        }
+        if (enable_kanon) {
+          raw_request->set_num_allowed_ghost_winners(num_allowed_ghost_winners);
+          raw_request->set_enforce_kanon(
+              protected_auction_input.enforce_kanon());
         }
       },
       protected_auction_input);

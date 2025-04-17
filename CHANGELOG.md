@@ -2,6 +2,104 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 4.9.0 (2025-04-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Non-Production builds: Adtechs running non-prod builds must upgrade both the buyer and seller non-prod stacks to 4.9.
+
+  Note: This change does not impact production environments.
+
+### Features
+
+* [Azure] Add azure to otel zone and region config
+* [Azure] Add support for azure build bazel build flags
+* [Azure] Add comment to Azure documentation
+* [Azure] Add more descriptive comments
+* [Azure] Add Parc ConfigMap Hash to the backend service deployment
+* [Azure] B&A docker image build scripts for azure
+* [Azure] Create Kubernetes Services to enable traffic to bidding and auction servers pods via IaC (Terraform)
+* [Azure] Create region-specific virtual network and subnets with dynamic delegation via IaC (Terraform)
+* [Azure] Create scalable and customizable multi-region and multi-buyer stacks via IaC (Terraform)
+* [Azure] Create namespace within AKS cluster
+* [Azure] Deploy Virtual ACI Nodes to provide Confidential Compute via IaC (Terraform)
+* [Azure] Enable Horizontal Pod Autoscaling on bidding and auction servers via IaC (Terraform)
+* [Azure] Enable TLS encryption and offloading to the AKS Cluster and a Frontend Health Check Policy via IaC (Terraform)
+* [Azure] Implement buyer and seller modules to cohesively run all of the components as needed via IaC (Terraform)
+* [Azure] Implement Kubernetes Deployments for bidding and auction servers via IaC (Terraform)
+* [Azure] Implement OTel Collector service, deployment, and ConfigMap for telemetry data collection via IaC (Terraform)
+* [Azure] Implement Parc service, deployment, and ConfigMap for getParameter integration via IaC (Terraform)
+* [Azure] Provision AKS cluster with Log Analytics and Key Vault integration for bidding and auction servers via IaC (Terraform)
+* [Azure] Provision IAM roles for virtual nodes, application gateway for containers, and TLS certificates via IaC (Terraform)
+* [Azure] Provision regional application gateway for containers (AGfC) and integrate with traffic manager and AKS via IaC (Terraform)
+* [Azure] Several small improvements and fixes
+* [fDO] Add libtld library to extract eTLD+1 from fDO urls
+* [fDO] Add enable_sampled_debug_reporting flag
+* [fDO] Add forDebuggingOnlyInCooldownOrLockout to generateBid()
+* [fDO] Add forDebuggingOnlyInCooldownOrLockout to scoreAd()
+* [fDO] Default enable_debug_reporting to true for requests from browser
+* [fDO] Only consider debug urls sent from Auction to SFE for MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB check
+* [fDO] Partition bidding.business_logic.debug_url_count by status
+* [fDO] Populate sampled debug reports for single-seller auctions in client response
+* [fDO] Sample buyer debug urls for component auctions in SFE
+* [fDO] Sample buyer debug urls in Bidding
+* [fDO] Sample seller debug urls for component auctions in Auction service
+* [fDO] Sample seller debug urls for single-seller auctions in Auction service
+* Add AWS log based metric for errors and crashes
+* Add chaffing v2 changes on seller side
+* Add GCP log based metric for errors and crashes
+* Add GCP/AWS alert on server request failure rate
+* Add request age metric on SFE
+* Add roma dashboard for AWS
+* Add roma metrics dashboard for GCP
+* Add roma metrics to bidding server
+* Add roma queue duration metric in AWS
+* Add roma queue duration metric in GCP
+* Add terraform variables to force AWS availability zones (credit to fhoering)
+* Add udf initialization duration metric to track retry time
+* Add support for PAS Ghost candidates in top level auction
+* Allow setting DNS records in separate GCP project (credit to davidae)
+* Allow to use Intel AMX/TDX for bidding server in GCP
+* Enable prod_debug flag for Android request debugging
+* PARC blob storage client migration
+* PARC param fetcher
+* Parse multiple bids per IG to support K-Anonymity with BYOB
+* Publish metric if invalid component auctions in top level auction input
+* Remove old SFE <> BFE request/response format code paths
+* Skip chaffing for 99% of requests on SFE
+* Support custom gcp ssl policies in frontend load balancer (credit to maciejkowalczyk)
+* Support proto in new request parser and tensorflow parser
+* Update GCP Cloud Build to build local testing image
+* Upgrade google terraform plugin to 5.36.0
+
+
+### Bug Fixes
+
+* Add prefix to parc param fetch
+* Better documentation for GCP service account naming
+* BYOB flags for local testing
+* Check ok() on StatusOr in prev_wins_ms code path
+* Disable bash xtrace for Dockerfile.libtld bazel target
+* Disable BYOB in prod build
+* Fix asan warning for model reset
+* Fix incorrect param position
+* Fix incorrect test suite naming for the ONNX sidecar
+* Fix inference.request.duration_ms_by_model graph in GCP dashboard
+* Fix multiple logging of roma metrics
+* Fix a potential race in BFE
+* Reinstate blocking counter for cpio param fetch
+* Stop processing on failure to decrypt response
+* Typo in k-anon microbenchmark BUILD rule
+* Update GCP inference dashboard
+* Update GCP seller dashboard
+* Use `cquery` to fix local tests
+
+
+### Documentation
+
+* AWS Enclave CPU and Mem Reqs in TF Config
+
 ## 4.8.0 (2025-03-06)
 
 
@@ -11,7 +109,7 @@ All notable changes to this project will be documented in this file. See [commit
 * Add BYOB functional support for AWS
 * Add DOCKER_IMAGE_URI param to local startup scripts
 * Add ENABLE_BUYER_CACHING flag to Terraform
-* Add hybrid logic for buyers ([04229da]( )), closes [/github.com/WICG/turtledove/blob/692ad8825e9b7e6b1b1347b9b0d38ee1fdaadf63/FLEDGE_Key_Value_Server_API.md#query-api-version-1]( ) [/github.com/WICG/turtledove/blob/main/FLEDGE_Key_Value_Server_API.md#query-api-version-2]( )
+* Add hybrid logic for buyers
 * Add invoked buyers cache on SFE
 * Implement support for PAS top level auction in SFE
 * Migrate B&A repo off of BatchExecute
@@ -30,7 +128,7 @@ All notable changes to this project will be documented in this file. See [commit
 * Mount roots.pem for SFE
 * Rename /etc/roots.pem to default location
 * Revert use of confidential_instance_type in terraform-provider-google
-* terraform plan less noisy for blob load status dashboard (gh issue [#35]( ))
+* terraform plan less noisy for blob load status dashboard
 * Use default event engine for K-Anon/invoked buyer cache
 * Validate gRPC headers on SFE/BFE/Bidding services
 

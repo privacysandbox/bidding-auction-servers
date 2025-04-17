@@ -62,6 +62,22 @@ cc_library(
 )
 
 cc_library(
+    name = "request_proto_parser",
+    srcs = [
+        "request_proto_parser.cc",
+    ],
+    hdrs = [
+        "request_proto_parser.h",
+    ],
+    deps = [
+        ":json_util",
+        "//proto:inference_payload_cc_proto",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+        "@rapidjson",
+    ],
+)
+
+cc_library(
     name = "resource_size_utils",
     srcs = [
         "resource_size_utils.cc",
@@ -96,6 +112,19 @@ cc_test(
         ":request_parser",
         ":test_util",
         "//proto:inference_sidecar_cc_proto",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "request_proto_parser_test",
+    size = "small",
+    timeout = "short",
+    srcs = ["request_proto_parser_test.cc"],
+    deps = [
+        ":request_proto_parser",
+        "//proto:inference_payload_cc_proto",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],

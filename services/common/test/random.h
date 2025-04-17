@@ -206,14 +206,13 @@ GetBidsRequest::GetBidsRawRequest MakeARandomGetBidsRawRequest();
 GetBidsRequest MakeARandomGetBidsRequest();
 
 template <typename T>
-T MakeARandomProtectedAuctionInput(int num_buyers = 2,
-                                   bool enable_debug_reporting = true) {
+T MakeARandomProtectedAuctionInput(int num_buyers = 2) {
   google::protobuf::Map<std::string, BuyerInputForBidding> buyer_inputs;
   for (int i = 0; i < num_buyers; i++) {
     BuyerInputForBidding buyer_input;
     auto ig_with_two_ads = MakeAnInterestGroupSentFromDevice();
     *buyer_input.mutable_interest_groups()->Add() =
-        ToInterestGroupForBidding(*ig_with_two_ads.get());
+        ToInterestGroupForBidding(std::move(*ig_with_two_ads));
     buyer_inputs.emplace(absl::StrFormat("ad_tech_%d.com", i), buyer_input);
   }
   absl::StatusOr<EncodedBuyerInputs> encoded_buyer_input =
@@ -224,7 +223,6 @@ T MakeARandomProtectedAuctionInput(int num_buyers = 2,
   *protected_auction_input.mutable_buyer_input() =
       *std::move(encoded_buyer_input);
   protected_auction_input.set_publisher_name(MakeARandomString());
-  protected_auction_input.set_enable_debug_reporting(enable_debug_reporting);
   return protected_auction_input;
 }
 

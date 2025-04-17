@@ -73,6 +73,10 @@ struct AuctionServiceRuntimeConfig {
   absl::flat_hash_set<std::string>
       protected_app_signals_buyers_with_report_win_enabled = {};
   bool require_scoring_signals_for_scoring = true;
+
+  // Each debug url has a 1/n chance of being selected when sampling is enabled.
+  // This flag defines the value of n.
+  int debug_reporting_sampling_upper_bound = 1000;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

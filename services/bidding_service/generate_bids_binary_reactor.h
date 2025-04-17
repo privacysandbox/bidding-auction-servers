@@ -88,6 +88,9 @@ class GenerateBidsBinaryReactor
   // The maximum time a single ROMA execution will block for.
   absl::Duration roma_timeout_duration_;
 
+  // The maximum number of bids that can be returned per interest group.
+  int32_t multi_bid_limit_;
+
   // Stores the list of bids for an interest group, for each interest group.
   std::vector<std::vector<AdWithBid>> ads_with_bids_by_ig_;
 
@@ -101,6 +104,9 @@ class GenerateBidsBinaryReactor
   // Specifies whether this is a single seller or component auction.
   // Impacts the parsing of generateBid output.
   AuctionScope auction_scope_;
+
+  // Specifies the max size limits and sampling config for debug reporting.
+  DebugUrlsValidationConfig debug_urls_validation_config_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

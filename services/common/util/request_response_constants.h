@@ -37,7 +37,7 @@ using AdtechOriginDebugUrlsMap =
     ::google::protobuf::Map<std::string, DebugReports>;
 
 // Maximum number of keys in the incoming ProtectedAuctionInput request.
-inline constexpr int kNumRequestRootKeys = 8;
+inline constexpr int kNumRequestRootKeys = 10;
 
 // Maximum number of keys that will be populated in the encoded CBOR
 // ConsentedDebugConfig request.
@@ -102,6 +102,8 @@ inline constexpr char kAdtechDebugId[] = "adtechDebugId";
 inline constexpr char kSellerDebugId[] = "sellerDebugId";
 inline constexpr char kBuyerDebugId[] = "buyerDebugId";
 inline constexpr char kDebugReporting[] = "enableDebugReporting";
+inline constexpr char kSampledDebugReporting[] = "enableSampledDebugReporting";
+inline constexpr char kInCooldownOrLockout[] = "inCooldownOrLockout";
 inline constexpr char kInterestGroups[] = "interestGroups";
 inline constexpr char kAdRenderId[] = "ad_render_id";
 inline constexpr char kName[] = "name";
@@ -220,11 +222,14 @@ inline constexpr std::array<absl::string_view, kNumRequestRootKeys>
                         kDebugReporting,
                         kConsentedDebugConfig,
                         kRequestTimestampMs,
-                        kEnforceKAnon};
-inline constexpr int kNumInterestGroupKeys = 6;
+                        kEnforceKAnon,
+                        kSampledDebugReporting,
+                        kInCooldownOrLockout};
+inline constexpr int kNumInterestGroupKeys = 7;
 inline constexpr std::array<absl::string_view, kNumInterestGroupKeys>
-    kInterestGroupKeys = {kName, kBiddingSignalsKeys, kUserBiddingSignals,
-                          kAds,  kAdComponents,       kBrowserSignals};
+    kInterestGroupKeys = {
+        kName,         kBiddingSignalsKeys, kUserBiddingSignals, kAds,
+        kAdComponents, kBrowserSignals,     kInCooldownOrLockout};
 
 inline constexpr int kNumBrowserSignalKeys = 5;
 inline constexpr std::array<absl::string_view, kNumBrowserSignalKeys>

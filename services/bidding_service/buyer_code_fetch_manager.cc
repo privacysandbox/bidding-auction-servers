@@ -21,9 +21,10 @@
 #include <vector>
 
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
-#include "services/bidding_service/constants.h"
 #include "services/bidding_service/data/runtime_config.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "services/common/clients/code_dispatcher/udf_code_loader_interface.h"
 #include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
 #include "services/common/data_fetch/periodic_code_fetcher.h"

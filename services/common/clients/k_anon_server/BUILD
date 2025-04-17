@@ -49,3 +49,19 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "k_anon_client_mock",
+    testonly = True,
+    srcs = ["k_anon_client_mock.h"],
+    deps = [
+        ":k_anon_client",
+        "//api:k_anon_query_cc_grpc_proto",
+        "//api:k_anon_query_cc_proto",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest",
+    ],
+)

@@ -127,6 +127,7 @@ PackagePlainTextSelectAdRequest(
     absl::string_view input_json_str, ClientType client_type,
     const HpkeKeyset& keyset,
     std::optional<bool> enable_debug_reporting = std::nullopt,
+    std::optional<bool> enable_sampled_debug_reporting = std::nullopt,
     std::optional<bool> enable_debug_info = std::nullopt,
     absl::string_view protected_app_signals_json = "",
     std::optional<bool> enable_unlimited_egress = std::nullopt,
@@ -138,6 +139,7 @@ std::string PackagePlainTextSelectAdRequestToJson(
     absl::string_view input_json_str, ClientType client_type,
     const HpkeKeyset& keyset,
     std::optional<bool> enable_debug_reporting = std::nullopt,
+    std::optional<bool> enable_sampled_debug_reporting = std::nullopt,
     std::optional<bool> enable_debug_info = std::nullopt,
     std::optional<bool> enable_unlimited_egress = std::nullopt,
     std::optional<bool> enforce_kanon = std::nullopt);

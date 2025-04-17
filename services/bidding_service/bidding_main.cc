@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include <apis/privacysandbox/apis/parc/v0/parc_service.grpc.pb.h>
 #include <google/protobuf/util/json_util.h>
 
 #include "absl/debugging/failure_signal_handler.h"
@@ -37,12 +38,12 @@
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/bidding_service/bidding_service.h"
 #include "services/bidding_service/bidding_service_factories.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/buyer_code_fetch_manager.h"
 #include "services/bidding_service/byob/buyer_code_fetch_manager_byob.h"
 #include "services/bidding_service/byob/generate_bid_byob_dispatch_client.h"
 #include "services/bidding_service/cddl_spec_cache.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
-#include "services/bidding_service/constants.h"
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/bidding_service/egress_features/egress_schema_fetch_manager.h"
 #include "services/bidding_service/egress_schema_fetch_config.pb.h"
@@ -55,7 +56,7 @@
 #include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
-#include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/clients/http/multi_curl_http_fetcher_async_no_queue.h"
 #include "services/common/data_fetch/periodic_bucket_fetcher_metrics.h"
 #include "services/common/data_fetch/periodic_code_fetcher.h"
 #include "services/common/data_fetch/version_util.h"
@@ -64,6 +65,7 @@
 #include "services/common/feature_flags.h"
 #include "services/common/metric/udf_metric.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/blob_storage_client_utils.h"
 #include "services/common/util/file_util.h"
 #include "services/common/util/read_system.h"
 #include "services/common/util/request_response_constants.h"
@@ -122,6 +124,14 @@ ABSL_FLAG(std::optional<int64_t>, bidding_tcmalloc_max_total_thread_cache_bytes,
           std::nullopt,
           "Maximum amount of cached memory in bytes across all threads (or "
           "logical CPUs)");
+ABSL_FLAG(std::optional<int>, curl_bidding_num_workers, 1,
+          "Number of threads to use to run transfers over curl handles");
+ABSL_FLAG(std::optional<int>, curl_bidding_queue_max_wait_ms, 1000,
+          "Maximum amount of time (in milliseconds) to wait for curl request "
+          "processing");
+ABSL_FLAG(std::optional<int>, curl_bidding_work_queue_length, 10,
+          "Maximum number of outstanding curl requests that are allowed to "
+          "wait for processing");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -218,10 +228,18 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       BIDDING_TCMALLOC_BACKGROUND_RELEASE_RATE_BYTES_PER_SECOND);
   config_client.SetFlag(FLAGS_bidding_tcmalloc_max_total_thread_cache_bytes,
                         BIDDING_TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES);
-  if (absl::GetFlag(FLAGS_init_config_client)) {
-    PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
-        << "Config client failed to initialize.";
-  }
+  config_client.SetFlag(FLAGS_parc_addr, PARC_ADDR);
+  config_client.SetFlag(FLAGS_curl_bidding_num_workers,
+                        CURL_BIDDING_NUM_WORKERS);
+  config_client.SetFlag(FLAGS_curl_bidding_queue_max_wait_ms,
+                        CURL_BIDDING_QUEUE_MAX_WAIT_MS);
+  config_client.SetFlag(FLAGS_curl_bidding_work_queue_length,
+                        CURL_BIDDING_WORK_QUEUE_LENGTH);
+
+  PS_RETURN_IF_ERROR(
+      MaybeInitConfigClient(absl::GetFlag(FLAGS_init_config_client),
+                            config_client, config_param_prefix));
+
   // Set verbosity
   server_common::log::SetGlobalPSVLogLevel(
       config_client.GetIntParameter(PS_VERBOSITY));
@@ -230,7 +248,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
   const bool enable_protected_audience =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
-  CHECK(enable_protected_audience || enable_protected_app_signals)
+  PS_CHECK(enable_protected_audience || enable_protected_app_signals)
       << "Neither Protected Audience nor Protected App Signals support "
          "enabled.";
   PS_LOG(INFO) << "Protected App Signals support enabled on the service: "
@@ -358,7 +376,8 @@ absl::Status RunServer() {
   std::string server_address = absl::StrCat("0.0.0.0:", port);
 
   // Convert Json string into a BiddingCodeBlobFetcherConfig proto
-  CHECK(!config_client.GetStringParameter(BUYER_CODE_FETCH_CONFIG).empty())
+  PS_CHECK(!config_client.GetStringParameter(BUYER_CODE_FETCH_CONFIG).empty(),
+           SystemLogContext())
       << "BUYER_CODE_FETCH_CONFIG is a mandatory flag.";
   BuyerCodeFetchConfig udf_config;
   absl::Status result = google::protobuf::util::JsonStringToMessage(
@@ -373,11 +392,31 @@ absl::Status RunServer() {
   std::unique_ptr<server_common::Executor> executor =
       std::make_unique<server_common::EventEngineExecutor>(
           grpc_event_engine::experimental::CreateEventEngine());
-  auto http_fetcher_async =
-      std::make_unique<MultiCurlHttpFetcherAsync>(executor.get());
+  ScheduleTcmallocProcessBackgroundAction(executor.get());
+
+  int num_curl_workers =
+      config_client.GetIntParameter(CURL_BIDDING_NUM_WORKERS);
+  int curl_max_wait_time_ms =
+      config_client.GetIntParameter(CURL_BIDDING_QUEUE_MAX_WAIT_MS);
+  int curl_queue_length =
+      config_client.GetIntParameter(CURL_BIDDING_WORK_QUEUE_LENGTH);
+  auto http_fetcher_async = std::make_unique<MultiCurlHttpFetcherAsyncNoQueue>(
+      executor.get(),
+      MultiCurlHttpFetcherAsyncOptions{
+          .num_curl_workers =
+              num_curl_workers > 0 ? num_curl_workers : kDefaultNumCurlWorkers,
+          .curl_max_wait_time_ms =
+              curl_max_wait_time_ms > 0
+                  ? absl::Milliseconds(curl_max_wait_time_ms)
+                  : kDefaultMaxRequestWaitTime,
+          .curl_queue_length = curl_queue_length > 0
+                                   ? curl_queue_length
+                                   : kDefaultMaxCurlPendingRequests,
+      });
 
   std::string_view inference_sidecar_binary_path =
       GetStringParameterSafe(config_client, INFERENCE_SIDECAR_BINARY_PATH);
+
   const bool enable_inference = !inference_sidecar_binary_path.empty();
   const bool enable_protected_audience =
       config_client.HasParameter(ENABLE_PROTECTED_AUDIENCE) &&
@@ -403,8 +442,12 @@ absl::Status RunServer() {
       protected_app_signals_generate_bids_reactor_factory;
 
   if (UdfConfigHasByob(udf_config)) {
-    CHECK(enable_protected_audience) << kProtectedAudienceMustBeEnabled;
-    CHECK(!enable_protected_app_signals) << kProtectedAppSignalsMustBeDisabled;
+    PS_CHECK(!PS_IS_PROD_BUILD)
+        << "BYOB is not available in prod builds right now";
+    PS_CHECK(enable_protected_audience, SystemLogContext())
+        << kProtectedAudienceMustBeEnabled;
+    PS_CHECK(!enable_protected_app_signals, SystemLogContext())
+        << kProtectedAppSignalsMustBeDisabled;
 
     PS_ASSIGN_OR_RETURN(auto temp_client,
                         GenerateBidByobDispatchClient::Create(
@@ -414,7 +457,7 @@ absl::Status RunServer() {
 
     udf_fetcher = std::make_unique<BuyerCodeFetchManagerByob>(
         executor.get(), http_fetcher_async.get(), byob_client.get(),
-        BlobStorageClientFactory::Create(), udf_config);
+        BuildBlobStorageClient(), udf_config);
     PS_RETURN_IF_ERROR(udf_fetcher->Init())
         << "Failed to initialize UDF fetch.";
 
@@ -428,11 +471,10 @@ absl::Status RunServer() {
     v8_client = std::make_unique<V8DispatchClient>(*v8_dispatcher.get());
     PS_RETURN_IF_ERROR(v8_dispatcher->Init())
         << "Could not start V8 dispatcher.";
-
     udf_fetcher = std::make_unique<BuyerCodeFetchManager>(
         executor.get(), http_fetcher_async.get(), v8_dispatcher.get(),
-        BlobStorageClientFactory::Create(), udf_config,
-        enable_protected_audience, enable_protected_app_signals);
+        BuildBlobStorageClient(), udf_config, enable_protected_audience,
+        enable_protected_app_signals);
     PS_RETURN_IF_ERROR(udf_fetcher->Init())
         << "Failed to initialize UDF fetch.";
     generate_bids_reactor_factory = GetProtectedAudienceV8ReactorFactory(
@@ -449,14 +491,14 @@ absl::Status RunServer() {
           GetStringParameterSafe(config_client, INFERENCE_MODEL_BUCKET_NAME);
       std::string_view model_config_path =
           GetStringParameterSafe(config_client, INFERENCE_MODEL_CONFIG_PATH);
-
+      std::unique_ptr<BlobStorageClient> blob_storage_client =
+          BuildBlobStorageClient();
       // TODO(b/356153749): Deprecate static model fetcher.
       if (!bucket_name.empty() && !inference_model_bucket_paths.empty()) {
-        std::unique_ptr<BlobStorageClientInterface> blob_storage_client =
-            BlobStorageClientFactory::Create();
         auto blob_fetcher = std::make_unique<BlobFetcher>(
             bucket_name, executor.get(), std::move(blob_storage_client));
-        CHECK(blob_fetcher->FetchSync().ok()) << "FetchSync() failed.";
+        PS_CHECK_OK(blob_fetcher->FetchSync(), SystemLogContext())
+            << "FetchSync() failed.";
         const std::vector<BlobFetcher::Blob>& files = blob_fetcher->snapshot();
         PS_LOG(INFO) << "Register models from bucket.";
         if (absl::Status status =
@@ -471,7 +513,7 @@ absl::Status RunServer() {
         model_fetcher = std::make_unique<inference::PeriodicModelFetcher>(
             model_config_path,
             std::make_unique<BlobFetcher>(bucket_name, executor.get(),
-                                          BlobStorageClientFactory::Create()),
+                                          std::move(blob_storage_client)),
             inference::CreateInferenceStub(), executor.get(),
             absl::Milliseconds(config_client.GetInt64Parameter(
                 INFERENCE_MODEL_FETCH_PERIOD_MS)));
@@ -552,7 +594,6 @@ absl::Status RunServer() {
 
   PS_RETURN_IF_ERROR(udf_fetcher->ConfigureRuntimeDefaults(runtime_config))
       << "Could not init runtime defaults for udf fetching.";
-
   bidding_service::EgressSchemaFetchConfig egress_schema_fetch_config;
   EgressSchemaCaches egress_schema_caches;
   if (enable_protected_app_signals) {
@@ -564,7 +605,7 @@ absl::Status RunServer() {
             config_client.GetStringParameter(EGRESS_SCHEMA_FETCH_CONFIG),
         .executor = executor.get(),
         .http_fetcher_async = http_fetcher_async.get(),
-        .blob_storage_client = BlobStorageClientFactory::Create(),
+        .blob_storage_client = BuildBlobStorageClient(),
         .temporary_unlimited_egress_cddl_cache =
             std::make_unique<CddlSpecCache>(
                 "services/bidding_service/egress_cddl_spec/"),
@@ -607,8 +648,9 @@ absl::Status RunServer() {
 
   if (config_client.HasParameter(HEALTHCHECK_PORT) &&
       !config_client.GetStringParameter(HEALTHCHECK_PORT).empty()) {
-    CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
-          config_client.GetStringParameter(PORT))
+    PS_CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
+                 config_client.GetStringParameter(PORT),
+             SystemLogContext())
         << "Healthcheck port must be unique.";
     builder.AddListeningPort(
         absl::StrCat("0.0.0.0:",
@@ -641,7 +683,12 @@ int main(int argc, char** argv) {
   privacysandbox::server_common::SetRLimits({
       .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
   });
-  absl::FailureSignalHandlerOptions options = {.call_previous_handler = true};
+  absl::FailureSignalHandlerOptions options = {
+      .call_previous_handler = true,
+      .writerfn =
+          privacy_sandbox::bidding_auction_servers::WriteFailureMessage};
+  privacy_sandbox::bidding_auction_servers::extra_signal_writerfn =
+      options.writerfn;
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();
@@ -652,11 +699,12 @@ int main(int argc, char** argv) {
   bool init_config_client = absl::GetFlag(FLAGS_init_config_client);
   if (init_config_client) {
     cpio_options.log_option = google::scp::cpio::LogOption::kConsoleLog;
-    CHECK(google::scp::cpio::Cpio::InitCpio(cpio_options).Successful())
+    PS_CHECK(google::scp::cpio::Cpio::InitCpio(cpio_options).Successful())
         << "Failed to initialize CPIO library";
   }
 
-  CHECK_OK(privacy_sandbox::bidding_auction_servers::RunServer())
+  PS_CHECK_OK(privacy_sandbox::bidding_auction_servers::RunServer(),
+              privacy_sandbox::bidding_auction_servers::SystemLogContext())
       << "Failed to run server.";
 
   if (init_config_client) {

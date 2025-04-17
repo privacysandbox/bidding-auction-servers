@@ -73,3 +73,11 @@ EOF""",
     local = True,
     message = "copying AMI proto to dist/aws directory",
 )
+
+filegroup(
+    name = "configure_and_start_files",
+    srcs = [
+        "configure_and_start",
+    ],
+    visibility = ["//production/packaging:__subpackages__"],
+)

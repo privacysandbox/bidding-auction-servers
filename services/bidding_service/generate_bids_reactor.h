@@ -28,23 +28,13 @@
 #include "services/bidding_service/base_generate_bids_reactor.h"
 #include "services/bidding_service/benchmarking/bidding_benchmarking_logger.h"
 #include "services/bidding_service/data/runtime_config.h"
+#include "services/bidding_service/utils/validation.h"
 #include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/code_dispatch/code_dispatch_reactor.h"
 #include "services/common/metric/server_definition.h"
 #include "services/common/util/request_response_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-
-// See GenerateBidInput for more detail on each field.
-enum class GenerateBidArgs : std::uint8_t {
-  kInterestGroup = 0,
-  kAuctionSignals,
-  kBuyerSignals,
-  kTrustedBiddingSignals,
-  kDeviceSignals,
-  kMultiBidLimit,
-  kFeatureFlags
-};
 
 //  This is a gRPC reactor that serves a single GenerateBidsRequest.
 //  It stores state relevant to the request and after the
@@ -103,6 +93,11 @@ class GenerateBidsReactor
 
   // UDF version to use for this request.
   absl::string_view protected_audience_generate_bid_version_;
+
+  // Specifies the max size limits and sampling config for debug reporting.
+  DebugUrlsValidationConfig debug_urls_validation_config_;
+
+  // The max contributions limit for private aggregation.
   int per_adtech_paapi_contributions_limit_;
 };
 

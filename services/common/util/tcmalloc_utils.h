@@ -20,6 +20,9 @@
 #include <cstdint>
 #include <optional>
 
+#include "services/common/util/event.h"
+#include "services/common/util/event_base.h"
+#include "src/concurrent/executor.h"
 #include "src/logger/request_context_logger.h"
 #include "tcmalloc/malloc_extension.h"
 
@@ -52,6 +55,25 @@ inline void MaySetMaxTotalThreadCacheBytes(
              << *max_total_thread_cache_bytes;
   tcmalloc::MallocExtension::SetMaxTotalThreadCacheBytes(
       *max_total_thread_cache_bytes);
+}
+
+static inline void ProcessBackgroundWrapper(int fd, short event_type,
+                                            void* arg) {
+  tcmalloc::MallocExtension::ProcessBackgroundActions();
+}
+
+// Starts tcmalloc's background actions. This is called by all the services
+// upon startup.
+inline void ScheduleTcmallocProcessBackgroundAction(
+    server_common::Executor* executor) {
+  static EventBase event_base;
+  static struct timeval OneSecond = {1, 0};
+  static Event background_event(event_base.get(), /*fd=*/-1,
+                                /*event_type=*/EV_PERSIST,
+                                /*event_callback=*/ProcessBackgroundWrapper,
+                                /*arg=*/nullptr,
+                                /*priority=*/0, &OneSecond);
+  executor->Run([]() { event_base_dispatch(event_base.get()); });
 }
 
 }  // namespace privacy_sandbox::bidding_auction_servers

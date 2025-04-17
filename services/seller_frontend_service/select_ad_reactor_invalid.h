@@ -37,7 +37,8 @@ class SelectAdReactorInvalid : public SelectAdReactor {
       SelectAdResponse* response, server_common::Executor* executor,
       const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
-      const ReportWinMap& report_win_map);
+      const ReportWinMap& report_win_map,
+      const RandomNumberGeneratorFactory& rng_factory);
   virtual ~SelectAdReactorInvalid() = default;
 
   // SelectAdReactorInvalid is neither copyable nor movable.

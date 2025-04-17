@@ -17,6 +17,7 @@
 #ifndef SERVICES_COMMON_LOGGERS_REQUEST_LOG_CONTEXT_H_
 #define SERVICES_COMMON_LOGGERS_REQUEST_LOG_CONTEXT_H_
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,6 +28,7 @@
 #include "absl/random/random.h"
 #include "absl/strings/string_view.h"
 #include "api/bidding_auction_servers.pb.h"
+#include "services/common/random/rng.h"
 #include "src/logger/request_context_impl.h"
 
 #define EVENT_MESSAGE_PROVIDER_SET(T, field)                 \
@@ -181,29 +183,34 @@ inline void SetKvEventMessage(absl::string_view kv_client,
   }
 }
 
-inline bool RandomSample(int sample_rate_micro, absl::BitGenRef bitgen) {
-  absl::discrete_distribution dist(
-      {1e6 - sample_rate_micro, (double)sample_rate_micro});
-  return dist(bitgen);
-}
-
-inline bool SetGeneratorAndSample(int debug_sample_rate_micro,
-                                  bool chaffing_enabled, bool request_eligible,
-                                  absl::string_view gen_id,
-                                  std::optional<std::mt19937>& generator) {
+inline std::unique_ptr<RandomNumberGenerator> CreateRng(
+    int debug_sample_rate_micro, bool chaffing_enabled, bool request_eligible,
+    absl::string_view gen_id, const RandomNumberGeneratorFactory& rng_factory) {
   bool is_debug_eligible = request_eligible && debug_sample_rate_micro > 0;
   if (chaffing_enabled || is_debug_eligible) {
-    generator = std::mt19937(std::hash<std::string>{}(gen_id.data()));
-  } else {
-    generator = std::nullopt;
+    return rng_factory.CreateRng(std::hash<std::string>{}(gen_id.data()));
   }
-  return is_debug_eligible && RandomSample(debug_sample_rate_micro, *generator);
+
+  return nullptr;
+}
+
+inline bool ShouldSample(int debug_sample_rate_micro, bool request_eligible,
+                         RandomNumberGenerator& rng) {
+  bool is_debug_eligible = request_eligible && debug_sample_rate_micro > 0;
+  return is_debug_eligible && rng.RandomSample(debug_sample_rate_micro);
 }
 
 // in non_prod, modify config to consent
 void ModifyConsent(server_common::ConsentedDebugConfiguration& original);
 
 inline constexpr absl::string_view kProdDebug = "sampled_debug";
+
+inline void WriteFailureMessage(const char* data) {
+  if (data != nullptr && server_common::log::logger_private != nullptr) {
+    server_common::log::logger_private->EmitLogRecord(
+        data, ::opentelemetry::logs::Severity::kFatal);
+  }
+}
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

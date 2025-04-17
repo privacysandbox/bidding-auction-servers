@@ -17,22 +17,24 @@
 #include <string>
 
 #include "rapidjson/document.h"
+#include "services/common/loggers/request_log_context.h"
 #include "services/common/util/json_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 absl::StatusOr<std::string> ToPrevWinsMs(absl::string_view prev_wins) {
   absl::StatusOr<rapidjson::Document> document = ParseJsonString(prev_wins);
-
-  if (!document->IsArray()) {
-    return absl::InvalidArgumentError("");
+  if (!document.ok() || !document->IsArray()) {
+    return absl::InvalidArgumentError(
+        "Could not parse array from prev_wins field");
   }
 
   for (rapidjson::SizeType i = 0; i < document->Size(); i++) {
     rapidjson::Value& innerArray = (*document)[i];
     if (!(innerArray.IsArray() && innerArray.Size() == 2 &&
           innerArray[0].IsInt() && innerArray[1].IsString())) {
-      return absl::InvalidArgumentError("");
+      return absl::InvalidArgumentError(
+          "prev_wins supplied in an unexpected format");
     }
 
     int firstValue = innerArray[0].GetInt() * 1000;
@@ -56,33 +58,30 @@ BrowserSignalsForBidding ToBrowserSignalsForBidding(
 
   absl::StatusOr<std::string> prev_wins_ms =
       ToPrevWinsMs(signals_for_bidding.prev_wins());
-  if (prev_wins_ms.ok()) {
-    signals_for_bidding.set_prev_wins_ms(*prev_wins_ms);
+  if (!prev_wins_ms.ok()) {
+    PS_VLOG(8) << prev_wins_ms.status();
+    return signals_for_bidding;
   }
 
+  signals_for_bidding.set_prev_wins_ms(*prev_wins_ms);
   return signals_for_bidding;
 }
 
 BuyerInputForBidding::InterestGroupForBidding ToInterestGroupForBidding(
-    const BuyerInput::InterestGroup& interest_group) {
+    BuyerInput::InterestGroup&& interest_group) {
   BuyerInputForBidding::InterestGroupForBidding interest_group_for_bidding;
-  interest_group_for_bidding.set_name(interest_group.name());
-
-  for (const auto& key : interest_group.bidding_signals_keys()) {
-    interest_group_for_bidding.add_bidding_signals_keys(key);
-  }
-
-  for (const auto& ad_render_id : interest_group.ad_render_ids()) {
-    interest_group_for_bidding.add_ad_render_ids(ad_render_id);
-  }
-
-  for (const auto& component_ad : interest_group.component_ads()) {
-    interest_group_for_bidding.add_component_ads(component_ad);
-  }
+  interest_group_for_bidding.set_name(
+      std::move(*interest_group.mutable_name()));
+  interest_group_for_bidding.mutable_bidding_signals_keys()->Swap(
+      interest_group.mutable_bidding_signals_keys());
+  interest_group_for_bidding.mutable_ad_render_ids()->Swap(
+      interest_group.mutable_ad_render_ids());
+  interest_group_for_bidding.mutable_component_ads()->Swap(
+      interest_group.mutable_component_ads());
 
   if (!interest_group.user_bidding_signals().empty()) {
     interest_group_for_bidding.set_user_bidding_signals(
-        interest_group.user_bidding_signals());
+        std::move(*interest_group.mutable_user_bidding_signals()));
   }
 
   if (interest_group.has_browser_signals()) {
@@ -93,23 +92,27 @@ BuyerInputForBidding::InterestGroupForBidding ToInterestGroupForBidding(
   }
 
   if (!interest_group.origin().empty()) {
-    interest_group_for_bidding.set_origin(interest_group.origin());
+    interest_group_for_bidding.set_origin(
+        std::move(*interest_group.mutable_origin()));
   }
 
   return interest_group_for_bidding;
 }
 
-BuyerInputForBidding ToBuyerInputForBidding(const BuyerInput& buyer_input) {
+BuyerInputForBidding ToBuyerInputForBidding(BuyerInput&& buyer_input) {
   BuyerInputForBidding buyer_input_for_bidding;
-  for (const auto& buyer_interest_group : buyer_input.interest_groups()) {
+  for (auto&& buyer_interest_group : *buyer_input.mutable_interest_groups()) {
     *buyer_input_for_bidding.mutable_interest_groups()->Add() =
-        ToInterestGroupForBidding(buyer_interest_group);
+        ToInterestGroupForBidding(std::move(buyer_interest_group));
   }
 
   if (buyer_input.has_protected_app_signals()) {
-    buyer_input_for_bidding.mutable_protected_app_signals()->CopyFrom(
-        buyer_input.protected_app_signals());
+    buyer_input_for_bidding.mutable_protected_app_signals()->Swap(
+        buyer_input.mutable_protected_app_signals());
   }
+
+  buyer_input_for_bidding.set_in_cooldown_or_lockout(
+      buyer_input.in_cooldown_or_lockout());
 
   return buyer_input_for_bidding;
 }
@@ -157,6 +160,10 @@ BuyerInput ToBuyerInput(const BuyerInputForBidding& buyer_input_for_bidding) {
 
   *buyer_input.mutable_protected_app_signals() =
       buyer_input_for_bidding.protected_app_signals();
+
+  buyer_input.set_in_cooldown_or_lockout(
+      buyer_input_for_bidding.in_cooldown_or_lockout());
+
   return buyer_input;
 }
 

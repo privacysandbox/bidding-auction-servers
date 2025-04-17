@@ -70,13 +70,15 @@ SelectAdReactorForWeb::SelectAdReactorForWeb(
     SelectAdResponse* response, server_common::Executor* executor,
     const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
-    const ReportWinMap& report_win_map, bool enable_cancellation,
+    const ReportWinMap& report_win_map,
+    const RandomNumberGeneratorFactory& rng_factory, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
     int per_adtech_paapi_contributions_limit, bool fail_fast,
     int max_buyers_solicited)
     : SelectAdReactor(context, request, response, executor, clients,
-                      config_client, report_win_map, enable_cancellation,
-                      enable_kanon, enable_buyer_private_aggregate_reporting,
+                      config_client, report_win_map, rng_factory,
+                      enable_cancellation, enable_kanon,
+                      enable_buyer_private_aggregate_reporting,
                       per_adtech_paapi_contributions_limit, fail_fast,
                       max_buyers_solicited) {}
 
@@ -160,8 +162,8 @@ absl::StatusOr<std::string> SelectAdReactorForWeb::GetNonEncryptedResponse(
         encoded_data,
         Encode(high_score,
                GetBiddingGroups(shared_buyer_bids_map_, *buyer_inputs_),
-               shared_ig_updates_map_, error, error_handler,
-               per_adtech_paapi_contributions_limit,
+               shared_ig_updates_map_, adtech_origin_debug_urls_map_, error,
+               error_handler, per_adtech_paapi_contributions_limit,
                auction_config_.ad_auction_result_nonce(),
                std::move(kanon_data)));
     PS_VLOG(kPlain, log_context_) << "AuctionResult:\n" << (decode_lambda());

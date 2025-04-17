@@ -20,8 +20,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/code_wrapper/generated_private_aggregation_wrapper.h"
-#include "services/bidding_service/constants.h"
 #include "services/common/loggers/request_log_context.h"
 #include "services/common/util/reporting_util.h"
 
@@ -41,7 +41,7 @@ std::string WasmBytesToJavascript(absl::string_view wasm_bytes) {
   return absl::StrFormat(kWasmModuleTemplate, hex_array);
 }
 
-absl::string_view GetGenerateBidArgs(AuctionType auction_type) {
+absl::string_view GetGenerateBidUdfArgs(AuctionType auction_type) {
   switch (auction_type) {
     case AuctionType::kProtectedAudience:
       return kProtectedAudienceGenerateBidsArgs;
@@ -64,7 +64,7 @@ std::string GetBuyerWrappedCode(
     private_aggregation_wrapper = kPrivateAggregationWrapperFunction;
   }
   absl::string_view args =
-      GetGenerateBidArgs(buyer_code_wrapper_config.auction_type);
+      GetGenerateBidUdfArgs(buyer_code_wrapper_config.auction_type);
   return absl::StrCat(
       WasmBytesToJavascript(buyer_code_wrapper_config.ad_tech_wasm),
       absl::Substitute(kEntryFunction, args,

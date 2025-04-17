@@ -23,9 +23,10 @@ SelectAdReactorInvalid::SelectAdReactorInvalid(
     SelectAdResponse* response, server_common::Executor* executor,
     const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
-    const ReportWinMap& report_win_map)
+    const ReportWinMap& report_win_map,
+    const RandomNumberGeneratorFactory& rng_factory)
     : SelectAdReactor(context, request, response, executor, clients,
-                      config_client, report_win_map),
+                      config_client, report_win_map, rng_factory),
       client_type_(request->client_type()) {}
 
 void SelectAdReactorInvalid::Execute() {

@@ -138,6 +138,47 @@ locals {
     SCORING_SIGNALS_FETCH_MODE      = "REQUIRED"
     ALLOW_COMPRESSED_AUCTION_CONFIG = "" # Example: "true"
     ENABLE_BUYER_CACHING            = "" # Example: "true"
+
+    ###### [BEGIN] Libcurl parameters.
+    #
+    # Libcurl is used in frontend servers to fetch real time signals for BYOS
+    # KVs in the request path, as well as to fetch UDF blobs off the request
+    # path in the backend servers. The following params should be tuned based
+    # on the expected load to support, the capacity of the servers and expected
+    # size of data/signals/blob to be transfered.
+    #
+    # Number of curl workers to use in SFE/auction to run transfers using curl
+    # handles. This number should be scaled based on number of vCPUs available
+    # to the instance. Note: Each worker uses one thread.
+    CURL_SFE_NUM_WORKERS     = 4
+    CURL_AUCTION_NUM_WORKERS = 1
+    #
+    # Maximum wait time for a curl request to be allowed in the queue. After
+    # this time expires, the request is removed from the queue and the original
+    # request to the service will fail.
+    CURL_SFE_QUEUE_MAX_WAIT_MS     = 1000
+    CURL_AUCTION_QUEUE_MAX_WAIT_MS = 2000
+    #
+    # Number of pending curl requests that have not yet been scheduled to run.
+    # This should be scaled depending on the stack capacity, intended QPS,
+    # max wait time limit imposed on the requests in the queue etc.
+    CURL_SFE_WORK_QUEUE_LENGTH     = 1000
+    CURL_AUCTION_WORK_QUEUE_LENGTH = 1000
+    #
+    # Constrains the size of the libcurl connection cache.
+    # 0 is default, means unlimited.
+    # See https://curl.se/libcurl/c/CURLMOPT_MAXCONNECTS.html.
+    CURLMOPT_MAXCONNECTS = 0
+    # Sets the maximum number of simultaneously open connections.
+    # 0 is default, means unlimited.
+    # See https://curl.se/libcurl/c/CURLMOPT_MAX_TOTAL_CONNECTIONS.html.
+    CURLMOPT_MAX_TOTAL_CONNECTIONS = 0
+    # Sets the maximum number of connections to a single host.
+    # 0 is default, means unlimited.
+    # See: https://curl.se/libcurl/c/CURLMOPT_MAX_HOST_CONNECTIONS.html.
+    CURLMOPT_MAX_HOST_CONNECTIONS = 0
+    #
+    ###### [END] Libcurl parameters.
   }
 }
 provider "aws" {
@@ -162,10 +203,10 @@ module "seller-us-east-1" {
   # Machine sizing
   sfe_instance_type          = ""    # Example: "c6i.2xlarge"
   auction_instance_type      = ""    # Example: "c6i.2xlarge"
-  sfe_enclave_cpu_count      = 6     # Example: 6
-  sfe_enclave_memory_mib     = 12000 # Example: 12000
-  auction_enclave_cpu_count  = 6     # Example: 6
-  auction_enclave_memory_mib = 12000 # Example: 12000
+  sfe_enclave_cpu_count      = 6     # Example: 6, minimum 2.
+  sfe_enclave_memory_mib     = 12000 # Example: 12000, minimum 4000.
+  auction_enclave_cpu_count  = 6     # Example: 6, minimum 2.
+  auction_enclave_memory_mib = 12000 # Example: 12000, minimum 4000.
   runtime_flags = merge(local.runtime_flags, {
     UDF_NUM_WORKERS     = "" # Example: "48" Must be <=vCPUs in auction_enclave_cpu_count, and should be equal for best performance.
     JS_WORKER_QUEUE_LEN = "" # Example: "100".
@@ -207,4 +248,9 @@ module "seller-us-east-1" {
   # The value is required for "awss3" exporter defined in production/packaging/aws/common/ami/otel_collector_config.yaml.
   # Alternatively, "awss3" must not be used in otel_collector_config.yaml.
   consented_request_s3_bucket = "" # Example: ${name of a s3 bucket}
+}
+
+module "log_based_metric" {
+  source      = "../../services/log_based_metric"
+  environment = local.environment
 }

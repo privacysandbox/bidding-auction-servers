@@ -35,5 +35,9 @@ INSTANTIATE_TYPED_TEST_SUITE_P(ScoringAsyncGrpcClientStubTest,
                                AsyncGrpcClientStubTest,
                                ScoringImplementationType);
 
+INSTANTIATE_TYPED_TEST_SUITE_P(ScoringAsyncGrpcClientStubTest,
+                               UnencodedAsyncGrpcClientStubTest,
+                               ScoringImplementationType);
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

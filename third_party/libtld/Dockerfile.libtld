@@ -1,0 +1,39 @@
+
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+FROM ubuntu:latest AS libtld-build
+
+RUN mkdir output
+WORKDIR /work
+
+ARG LIBTLD_VERSION=2.0.5
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git patch build-essential cmake gcc g++ doxygen make \
+    ca-certificates && apt-get clean
+RUN update-ca-certificates
+
+ADD https://code.launchpad.net/~snapcpp/+archive/ubuntu/ppa/+sourcefiles/snapcmakemodules/1.0.71.0~mantic/snapcmakemodules_1.0.71.0~mantic.tar.gz /work/snapcmakemodules.tar.gz
+ADD https://github.com/m2osw/libtld/archive/refs/tags/${LIBTLD_VERSION}.tar.gz /work/libtld.tar.gz
+
+RUN tar xf snapcmakemodules.tar.gz
+RUN tar xf libtld.tar.gz
+RUN mkdir snapCMakeModules && mv cmake/* snapCMakeModules/
+
+RUN mkdir BUILD && cd BUILD && cmake -DSnapCMakeModules_DIR=../snapCMakeModules/Modules  -DSnapDoxygen_DIR=../snapCMakeModules/Modules -DCMAKE_MODULE_PATH=../snapCMakeModules/Modules ../libtld-${LIBTLD_VERSION} && make --ignore-errors
+RUN find . \( -name tld.cpp -o -name tld_data.c -o -name tld_domain_to_lowercase.c -o -name tld_file.cpp -o -name tld_strings.c -o -name tld.h -o -name tld_data.h -o -name tld_file.h \) -exec cp {} /output \;
+
+FROM scratch AS libtld-output
+COPY --from=libtld-build /output /

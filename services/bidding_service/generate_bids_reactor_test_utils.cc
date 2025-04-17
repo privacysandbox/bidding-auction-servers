@@ -22,7 +22,7 @@
 #include "gmock/gmock.h"
 #include "google/protobuf/util/json_util.h"
 #include "gtest/gtest.h"
-#include "services/bidding_service/constants.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
 #include "services/common/metric/server_definition.h"
@@ -34,6 +34,41 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 using ::google::protobuf::util::JsonStringToMessage;
 using ::testing::AnyNumber;
+
+GenerateBidsRawRequest BuildGenerateBidsRawRequest(
+    const GenerateBidsRawRequestOptions& options) {
+  GenerateBidsRawRequest raw_request;
+  for (int i = 0; i < options.interest_groups_to_add.size(); i++) {
+    *raw_request.mutable_interest_group_for_bidding()->Add() =
+        options.interest_groups_to_add[i];
+  }
+  raw_request.set_auction_signals(options.auction_signals);
+  raw_request.mutable_blob_versions()->set_protected_audience_generate_bid_udf(
+      "pa/generateBid");
+  raw_request.set_buyer_signals(options.buyer_signals);
+  raw_request.set_enable_debug_reporting(options.enable_debug_reporting);
+  raw_request.mutable_fdo_flags()->set_enable_sampled_debug_reporting(
+      options.enable_sampled_debug_reporting);
+  raw_request.mutable_fdo_flags()->set_in_cooldown_or_lockout(
+      options.in_cooldown_or_lockout);
+  raw_request.set_seller(options.seller);
+  raw_request.set_publisher_name(options.publisher_name);
+  raw_request.set_data_version(options.data_version);
+  if (options.enable_adtech_code_logging) {
+    raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
+    raw_request.mutable_consented_debug_config()->set_is_consented(true);
+  }
+  raw_request.set_multi_bid_limit(options.multi_bid_limit);
+  return raw_request;
+}
+
+GenerateBidsRawRequest BuildGenerateBidsRawRequestForComponentAuction(
+    const GenerateBidsRawRequestOptions& options,
+    absl::string_view top_level_seller) {
+  GenerateBidsRawRequest raw_request = BuildGenerateBidsRawRequest(options);
+  raw_request.set_top_level_seller(top_level_seller);
+  return raw_request;
+}
 
 PrivateAggregateContribution CreateTestPAggContribution(
     EventType event_type, absl::string_view event_name) {

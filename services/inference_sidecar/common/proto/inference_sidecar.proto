@@ -16,7 +16,12 @@ syntax = "proto3";
 
 package privacy_sandbox.bidding_auction_servers.inference;
 
+import "proto/inference_payload.proto";
+
 service InferenceService {
+  // Runs batch inference.
+  rpc PredictBatch(PredictBatchRequest) returns (PredictBatchResponse) {
+  }
   // Runs inference.
   rpc Predict(PredictRequest) returns (PredictResponse) {
   }
@@ -31,19 +36,37 @@ service InferenceService {
   }
 }
 
+message PredictBatchRequest {
+  // A list of Predict Request
+  repeated PredictRequest predict_requests = 1;
+}
+
+message PredictBatchResponse {
+  // A list of Predict Response
+  repeated PredictResponse predict_responses = 1;
+}
+
 message PredictRequest {
+  oneof input_data {
   // Input data.
   bytes input = 1;
   // Should consented logs be collected for the given predict request.
+  // Input data in proto format.
+  BatchInferenceRequest proto_input = 3;
+  }
   bool is_consented = 2;
 }
 
 // Response for PredictRequest on a successful run.
 message PredictResponse {
-  // Output data.
-  bytes output = 1;
+  oneof output_data {
+   // Output data.
+   bytes output = 1;
+   // Output data in proto format.
+   BatchInferenceResponse proto_output = 5;
+  }
   // Consented debugging log.
-  InferenceDebugInfo debug_info = 2;
+   InferenceDebugInfo debug_info = 2;
   // Map of metric names to lists of metric values and optional partition.
   map<string, MetricValueList> metrics_list = 4;
 

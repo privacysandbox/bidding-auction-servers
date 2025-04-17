@@ -25,9 +25,41 @@ namespace privacy_sandbox::bidding_auction_servers {
 // RequestConfig object. That struct type can be added to client_params.h's
 // template to avoid casting issues
 struct RequestConfig {
-  size_t chaff_request_size = 0;
+  // Whether chaff or not, requests will be padded to a size >=
+  // minimum_request_size.
+  size_t minimum_request_size = 0;
   CompressionType compression_type = CompressionType::kUncompressed;
+  bool is_chaff_request = false;
+
+  bool operator==(const RequestConfig& other) const {
+    return minimum_request_size == other.minimum_request_size &&
+           compression_type == other.compression_type &&
+           is_chaff_request == other.is_chaff_request;
+  }
 };
+
+// For printing a human readable form of RequestConfig objects, for
+// debugging/UTs.
+inline std::ostream& operator<<(std::ostream& os, const RequestConfig& config) {
+  os << "RequestConfig {"
+     << "minimum_request_size: " << config.minimum_request_size << ", "
+     << "compression_type: ";
+  switch (config.compression_type) {
+    case CompressionType::kUncompressed:
+      os << "kUncompressed";
+      break;
+    case CompressionType::kGzip:
+      os << "kGzip";
+      break;
+    default:
+      os << "UnknownCompressionType("
+         << static_cast<int>(config.compression_type) << ")";
+      break;
+  }
+  os << ", is_chaff_request: " << (config.is_chaff_request ? "true" : "false")
+     << "}";
+  return os;
+}
 
 struct ResponseMetadata {
   // The size of the *compressed and encrypted* request.

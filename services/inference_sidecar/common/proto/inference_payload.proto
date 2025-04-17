@@ -22,28 +22,37 @@ package privacy_sandbox.bidding_auction_servers.inference;
 // a JS request to C++, see
 // services/inference_sidecar/common/utils/request_parser.h.
 message BatchInferenceRequest {
-  repeated InferenceRequest request = 1;
+  repeated InferenceRequestProto request = 1;
 }
 
 message BatchInferenceResponse {
-  repeated InferenceResponse response = 1;
+  repeated InferenceResponseProto response = 1;
 }
 
-message InferenceRequest {
+message InferenceRequestProto {
   // Required servable model path; e.g. "my_bucket/models/pcvr_models/1".
   string model_path = 1;
-  repeated Tensor tensors = 2;
+  repeated TensorProto tensors = 2;
 }
 
-message InferenceResponse {
+message InferenceResponseProto {
   // Required servable model path; e.g. "my_bucket/models/pcvr/1".
   string model_path = 1;
-  repeated Tensor tensors = 2;
-  Error error = 3;
+  repeated TensorProto tensors = 2;
+  ErrorProto error = 3;
+}
+
+message OrderedInferenceErrorResponse{
+  int64 index = 1;
+  InferenceResponseProto response = 2;
+}
+
+message BatchOrderedInferenceErrorResponse{
+  repeated OrderedInferenceErrorResponse response = 1;
 }
 
 // Represents error during inference. To be propagated back to the JS caller.
-message Error {
+message ErrorProto {
   // Possible types of errors that inference execution could encounter.
   enum ErrorType {
     UNKNOWN = 0;
@@ -63,12 +72,14 @@ message Error {
   ErrorType error_type = 1;
   // Error description.
   string description = 2;
+  // Optional model path
+  string model_path = 3;
 }
 
-message Tensor {
+message TensorProto {
   // Type of data stored in tensor_content. A tensor exclusively holds data of
   // a uniform type.
-  DataType data_type = 1;
+  DataTypeProto data_type = 1;
 
   // Tensor shape.
   // The order of entries in "tensor_shape" matters: It indicates the layout of
@@ -98,7 +109,7 @@ message TensorContent {
 }
 
 // Supported tensor data types.
-enum DataType {
+enum DataTypeProto {
   FLOAT = 0;   // 32-bit floating point
   DOUBLE = 1;  // 64-bit floating point
   INT8 = 2;    // 8-bit integer (signed)

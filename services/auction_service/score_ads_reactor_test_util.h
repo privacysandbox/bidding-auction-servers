@@ -43,6 +43,7 @@ struct ScoreAdsRawRequestOptions {
   absl::string_view scoring_signals = kTestScoringSignals;
   absl::string_view publisher_hostname = kTestPublisherHostName;
   const bool enable_debug_reporting = false;
+  const bool enable_sampled_debug_reporting = false;
   const bool enable_adtech_code_logging = false;
   absl::string_view top_level_seller = "";
   absl::string_view seller_currency = "";

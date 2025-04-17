@@ -14,7 +14,10 @@
 
 #include "services/common/clients/http/multi_curl_http_fetcher_async.h"
 
+#include <stdlib.h>
+
 #include <algorithm>
+#include <random>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -28,85 +31,10 @@
 #include "event2/thread.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/loggers/request_log_context.h"
+#include "services/common/util/file_util.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 using ::grpc_event_engine::experimental::EventEngine;
-
-namespace {
-
-struct CurlTimeStats {
-  double time_namelookup = -1;
-  double time_connect = -1;
-  double time_appconnect = -1;
-  double time_pretransfer = -1;
-  double time_redirect = -1;
-  double time_starttransfer = -1;
-  double time_total = -1;
-  curl_off_t download_size = -1;
-  curl_off_t upload_size = -1;
-  curl_off_t download_speed = -1;
-  curl_off_t upload_speed = -1;
-  curl_off_t new_conns = -1;
-  curl_off_t queue_time_us = -1;
-};
-void GetTraceFromCurl(CURL* handle) {
-  if (server_common::log::PS_VLOG_IS_ON(kStats)) {
-    CurlTimeStats curl_time_stats;
-    char* request_url = nullptr;
-    curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME, &request_url);
-    curl_easy_getinfo(handle, CURLINFO_NAMELOOKUP_TIME,
-                      &curl_time_stats.time_namelookup);
-    curl_easy_getinfo(handle, CURLINFO_CONNECT_TIME,
-                      &curl_time_stats.time_connect);
-    curl_easy_getinfo(handle, CURLINFO_APPCONNECT_TIME,
-                      &curl_time_stats.time_appconnect);
-    curl_easy_getinfo(handle, CURLINFO_PRETRANSFER_TIME,
-                      &curl_time_stats.time_pretransfer);
-    curl_easy_getinfo(handle, CURLINFO_REDIRECT_TIME,
-                      &curl_time_stats.time_redirect);
-    curl_easy_getinfo(handle, CURLINFO_STARTTRANSFER_TIME,
-                      &curl_time_stats.time_starttransfer);
-    curl_easy_getinfo(handle, CURLINFO_TOTAL_TIME, &curl_time_stats.time_total);
-    curl_easy_getinfo(handle, CURLINFO_EFFECTIVE_URL, &request_url);
-    curl_easy_getinfo(handle, CURLINFO_SIZE_DOWNLOAD_T,
-                      &curl_time_stats.download_size);
-    curl_easy_getinfo(handle, CURLINFO_SIZE_UPLOAD_T,
-                      &curl_time_stats.upload_size);
-    curl_easy_getinfo(handle, CURLINFO_SPEED_DOWNLOAD_T,
-                      &curl_time_stats.download_speed);
-    curl_easy_getinfo(handle, CURLINFO_SPEED_UPLOAD_T,
-                      &curl_time_stats.upload_speed);
-    curl_easy_getinfo(handle, CURLINFO_NUM_CONNECTS,
-                      &curl_time_stats.new_conns);
-    curl_easy_getinfo(handle, CURLINFO_QUEUE_TIME_T,
-                      &curl_time_stats.queue_time_us);
-
-    PS_VLOG(kStats)
-        << "Curl request " << absl::StrCat(request_url) << " stats: \n"
-        << "time_namelookup:  " << curl_time_stats.time_namelookup << "\n"
-        << "time_connect:  " << curl_time_stats.time_connect << "\n"
-        << "time_appconnect:  " << curl_time_stats.time_appconnect << "\n"
-        << "time_pretransfer:  " << curl_time_stats.time_pretransfer << "\n"
-        << "time_redirect:  " << curl_time_stats.time_redirect << "\n"
-        << "time_starttransfer:  " << curl_time_stats.time_starttransfer << "\n"
-        << "time_total:  " << curl_time_stats.time_total << "\n"
-        << "download_size:  " << curl_time_stats.download_size << " bytes\n"
-        << "upload_size:  " << curl_time_stats.upload_size << " bytes\n"
-        << "download_speed:  " << curl_time_stats.download_speed
-        << " bytes/second\n"
-        << "upload_speed:  " << curl_time_stats.upload_speed
-        << " bytes/second\n"
-        << "new_conns:  " << curl_time_stats.new_conns << "\n"
-        << "queue duration: "
-        << absl::ToDoubleMilliseconds(
-               absl::Microseconds(curl_time_stats.queue_time_us))
-        << " ms\n";
-  }
-}
-
-}  // namespace
-
-static struct timeval OneSecond = {1, 0};
 
 MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
     server_common::Executor* executor,
@@ -117,64 +45,23 @@ MultiCurlHttpFetcherAsync::MultiCurlHttpFetcherAsync(
       skip_tls_verification_(
           absl::GetFlag(FLAGS_https_fetch_skips_tls_verification)
               .value_or(false)),
-      // Shutdown timer event is persistent because we don't want to remove
-      // it from the event loop the first time it fires. With this timer, we
-      // periodically check for fetcher shutdown and terminate the event loop
-      // if fetcher has been shutdown.
-      shutdown_timer_event_(Event(event_base_.get(), /*fd=*/-1,
-                                  /*event_type=*/EV_PERSIST,
-                                  /*event_callback=*/ShutdownEventLoop,
-                                  /*arg=*/this,
-                                  /*priority=*/0, &OneSecond)),
-      multi_curl_request_manager_(event_base_.get(),
-                                  options.curlmopt_maxconnects,
-                                  options.curlmopt_max_total_connections,
-                                  options.curlmopt_max_host_connections),
-      multi_timer_event_(Event(
-          event_base_.get(), /*fd=*/-1, /*event_type=*/0,
-          /*event_callback=*/multi_curl_request_manager_.MultiTimerCallback,
-          /*arg=*/&multi_curl_request_manager_)),
-      ca_cert_(options.ca_cert) {
-  multi_curl_request_manager_.Configure([this]() { PerformCurlUpdate(); },
-                                        multi_timer_event_.get());
-  // Start execution loop.
-  executor_->Run([this]() { event_base_dispatch(event_base_.get()); });
-}
+      ca_cert_(options.ca_cert),
+      num_curl_workers_(options.num_curl_workers) {
+  DCHECK_GT(num_curl_workers_, 0);
+  auto ca_cert_blob = GetFileContent(ca_cert_, /*log_on_error=*/true);
+  CHECK_OK(ca_cert_blob);
+  ca_cert_blob_ = *std::move(ca_cert_blob);
 
-void MultiCurlHttpFetcherAsync::ShutdownEventLoop(int fd, short event_type,
-                                                  void* arg) {
-  auto* self = reinterpret_cast<MultiCurlHttpFetcherAsync*>(arg);
-  if (!self->shutdown_requested_.HasBeenNotified()) {
-    return;
-  }
-
-  event_base_loopbreak(self->event_base_.get());
-  self->shutdown_complete_.Notify();
-}
-
-MultiCurlHttpFetcherAsync::~MultiCurlHttpFetcherAsync()
-    ABSL_LOCKS_EXCLUDED(in_loop_mu_, curl_handle_set_lock_) {
-  // Notify other threads about shutdown.
-  shutdown_requested_.Notify();
-  shutdown_complete_.WaitForNotification();
-  // We ensure that no other thread will lock callback_map_lock_ and in_loop_mu_
-  // here since no new requests are being accepted, or processed through
-  // the execution loop.
-  absl::MutexLock lock(&curl_handle_set_lock_);
-
-  // Execute all callbacks and clean up handles
-  for (auto& handle : curl_handle_set_) {
-    multi_curl_request_manager_.Remove(handle);
-    CurlRequestData* output;
-    curl_easy_getinfo(handle, CURLINFO_PRIVATE, &output);
-    std::unique_ptr<CurlRequestData> curl_request_data_ptr(output);
-    // Server is shutting down, so exiting gracefully.
-    if (output == nullptr) {
-      ABSL_LOG(ERROR) << "Curl Error: Pointer to Curl data lost";
-      continue;
-    }
-    std::move(output->done_callback)(
-        absl::InternalError("Request cancelled due to server shutdown."));
+  // Setup curl workers and their work queues.
+  curl_request_workers_.reserve(num_curl_workers_);
+  for (int i = 0; i < options.num_curl_workers; ++i) {
+    auto request_queue = std::make_unique<CurlRequestQueue>(
+        executor_, options.curl_queue_length, options.curl_max_wait_time_ms);
+    curl_request_workers_.push_back(std::make_unique<CurlRequestWorker>(
+        executor_, *request_queue, options.curlmopt_maxconnects,
+        options.curlmopt_max_total_connections,
+        options.curlmopt_max_host_connections));
+    request_queues_.emplace_back(std::move(request_queue));
   }
 }
 
@@ -270,8 +157,7 @@ void MultiCurlHttpFetcherAsync::FetchUrlsWithMetadata(
   }
 }
 
-std::unique_ptr<MultiCurlHttpFetcherAsync::CurlRequestData>
-MultiCurlHttpFetcherAsync::CreateCurlRequest(
+std::unique_ptr<CurlRequestData> MultiCurlHttpFetcherAsync::CreateCurlRequest(
     const HTTPRequest& request, int timeout_ms, int64_t keepalive_idle_sec,
     int64_t keepalive_interval_sec, OnDoneFetchUrlWithMetadata done_callback) {
   auto curl_request_data = std::make_unique<CurlRequestData>(
@@ -282,7 +168,6 @@ MultiCurlHttpFetcherAsync::CreateCurlRequest(
   curl_easy_setopt(req_handle, CURLOPT_URL, request.url.begin());
   curl_easy_setopt(req_handle, CURLOPT_WRITEDATA,
                    &curl_request_data->response_with_metadata.body);
-  curl_easy_setopt(req_handle, CURLOPT_PRIVATE, curl_request_data.get());
   curl_easy_setopt(req_handle, CURLOPT_FOLLOWLOCATION, 1);
   if (request.redirect_config.strict_http) {
     curl_easy_setopt(req_handle, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
@@ -307,7 +192,7 @@ MultiCurlHttpFetcherAsync::CreateCurlRequest(
     curl_easy_setopt(req_handle, CURLOPT_PROXY_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(req_handle, CURLOPT_PROXY_SSL_VERIFYHOST, 0L);
   } else {
-    curl_easy_setopt(req_handle, CURLOPT_CAINFO, ca_cert_.c_str());
+    curl_easy_setopt(req_handle, CURLOPT_CAINFO_BLOB, ca_cert_blob_.c_str());
   }
   // Set HTTP headers.
   if (!request.headers.empty()) {
@@ -317,45 +202,24 @@ MultiCurlHttpFetcherAsync::CreateCurlRequest(
   return curl_request_data;
 }
 
-void MultiCurlHttpFetcherAsync::ExecuteCurlRequest(
+void MultiCurlHttpFetcherAsync::ScheduleAsyncCurlRequest(
     std::unique_ptr<CurlRequestData> request) {
-  // If shutdown has been initiated while we were preparing/adding request.
-  if (shutdown_requested_.HasBeenNotified()) {
+  // Spreads the requests in a uniformly distributed (random) manner across
+  // the available queues/workers.
+  static std::random_device random_device;
+  static std::mt19937 generator(random_device());
+  std::uniform_int_distribution<int> distribute(0, num_curl_workers_ - 1);
+  int num_worker = distribute(generator);
+
+  auto& request_queue = request_queues_[num_worker];
+  absl::MutexLock lock(&request_queue->Mu());
+  if (request_queue->Full()) {
     std::move(request->done_callback)(
-        absl::InternalError("Client is shutting down."));
+        absl::ResourceExhaustedError("Request Queue Limit Exceeded."));
     return;
   }
-  // Check for errors from multi handle here and execute callback immediately.
-  auto* req_handle = request->req_handle;
-  CURLMcode mc = multi_curl_request_manager_.Add(req_handle);
-  switch (mc) {
-    case CURLM_CALL_MULTI_PERFORM:
-    case CURLM_OK:
-    case CURLM_ADDED_ALREADY:
-    case CURLM_RECURSIVE_API_CALL:
-    case CURLM_LAST:
-      Add(req_handle);
-      // Release request data ownership so it can be tracked
-      // completely through the curl easy handle. This will be manually cleaned
-      // when the request completes or when this class is destroyed.
-      request.release();  // NOLINT
-      return;
-    case CURLM_BAD_HANDLE:
-    case CURLM_BAD_EASY_HANDLE:
-    case CURLM_OUT_OF_MEMORY:
-    case CURLM_INTERNAL_ERROR:
-    case CURLM_BAD_SOCKET:
-    case CURLM_WAKEUP_FAILURE:
-    case CURLM_BAD_FUNCTION_ARGUMENT:
-    case CURLM_ABORTED_BY_CALLBACK:
-    case CURLM_UNRECOVERABLE_POLL:
-    case CURLM_UNKNOWN_OPTION:
-    default:
-      std::move(request->done_callback)(absl::InternalError(
-          absl::StrCat("Failed to invoke request via curl with error ",
-                       curl_multi_strerror(mc))));
-      return;
-  }
+
+  request_queue->Enqueue(std::move(request));
 }
 
 void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
@@ -377,9 +241,9 @@ void MultiCurlHttpFetcherAsync::FetchUrl(const HTTPRequest& request,
 void MultiCurlHttpFetcherAsync::FetchUrlWithMetadata(
     const HTTPRequest& request, int timeout_ms,
     OnDoneFetchUrlWithMetadata done_callback) {
-  ExecuteCurlRequest(CreateCurlRequest(request, timeout_ms, keepalive_idle_sec_,
-                                       keepalive_interval_sec_,
-                                       std::move(done_callback)));
+  ScheduleAsyncCurlRequest(
+      CreateCurlRequest(request, timeout_ms, keepalive_idle_sec_,
+                        keepalive_interval_sec_, std::move(done_callback)));
 }
 
 void MultiCurlHttpFetcherAsync::PutUrl(const HTTPRequest& http_request,
@@ -409,140 +273,7 @@ void MultiCurlHttpFetcherAsync::PutUrl(const HTTPRequest& http_request,
   curl_easy_setopt(request->req_handle, CURLOPT_READDATA, request->body.get());
   curl_easy_setopt(request->req_handle, CURLOPT_READFUNCTION, ReadCallback);
 
-  ExecuteCurlRequest(std::move(request));
+  ScheduleAsyncCurlRequest(std::move(request));
 }
 
-std::pair<absl::Status, void*> MultiCurlHttpFetcherAsync::GetResultFromMsg(
-    CURLMsg* msg) {
-  void* output;
-  absl::Status status;
-  curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &output);
-  if (msg->msg == CURLMSG_DONE) {
-    auto result_msg = curl_easy_strerror(msg->data.result);
-    switch (msg->data.result) {
-      case CURLE_OK: {
-        long http_code = 400;
-        curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &http_code);
-        if (http_code >= 400) {
-          char* request_url = nullptr;
-          curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL,
-                            &request_url);
-          status = absl::InternalError(absl::StrCat(
-              kFailCurl, " HTTP Code: ", http_code, "; ", request_url));
-        } else {
-          status = absl::OkStatus();
-        }
-      } break;
-      case CURLE_OPERATION_TIMEDOUT:
-        status = absl::DeadlineExceededError(result_msg);
-        break;
-      case CURLE_URL_MALFORMAT:
-        status = absl::InvalidArgumentError(result_msg);
-        break;
-      default:
-        status = absl::InternalError(result_msg);
-        break;
-    }
-  } else {
-    status = absl::InternalError(
-        absl::StrCat("Failed to read message via curl with error: ", msg->msg));
-  }
-  return std::make_pair(status, output);
-}
-
-void MultiCurlHttpFetcherAsync::PerformCurlUpdate()
-    ABSL_LOCKS_EXCLUDED(curl_handle_set_lock_) {
-  // Check for updates (provide computation for Libcurl to perform I/O).
-  int msgs_left = -1;
-  while (CURLMsg* msg = multi_curl_request_manager_.GetUpdate(&msgs_left)) {
-    // Get data for completed message.
-    auto [status, data_ptr] = GetResultFromMsg(msg);
-    multi_curl_request_manager_.Remove(msg->easy_handle);
-    // Must be called before the handle has been cleaned up.
-    // The cleanup happens at the end of the lambda in the next block when the
-    // std::unique_ptr<CurlRequestData> object goes out of scope.
-    Remove(msg->easy_handle);
-    // Execute callback in another thread.
-    executor_->Run([req_handle = msg->easy_handle, status = status,
-                    data_ptr = data_ptr]() mutable {
-      // If this happens, then we've effectively lost the reactor that made
-      // this call and this memory has leaked.
-      if (data_ptr == nullptr) {
-        ABSL_LOG(ERROR) << "Curl Error: Pointer to Curl data lost with status: "
-                        << status.message()
-                        << ". Memory for this call has leaked.";
-        return;
-      }
-      std::unique_ptr<CurlRequestData> curl_request_data_ptr(
-          static_cast<CurlRequestData*>(data_ptr));
-      if (!curl_request_data_ptr->response_headers.empty()) {
-        struct curl_header* curl_header_ptr;
-        for (std::string& header : curl_request_data_ptr->response_headers) {
-          if (header.empty()) {
-            continue;
-          }
-          CURLHcode header_result = curl_easy_header(
-              req_handle, &(header[0]),
-              /*first instance of header=*/0, CURLH_HEADER,
-              /*last request in case of redirects=*/-1, &curl_header_ptr);
-          if (header_result != 0) {
-            curl_request_data_ptr->response_with_metadata.headers.emplace(
-                std::move(header),
-                // https://curl.se/libcurl/c/libcurl-errors.html
-                absl::InternalError(absl::StrCat(
-                    "Error while fetching Curl header, CURLHcode: ",
-                    header_result)));
-          } else {
-            curl_request_data_ptr->response_with_metadata.headers.emplace(
-                std::move(header), curl_header_ptr->value);
-          }
-        }
-      }
-      if (curl_request_data_ptr->include_redirect_url) {
-        char* final_url;
-        curl_easy_getinfo(req_handle, CURLINFO_EFFECTIVE_URL, &final_url);
-        // final_url memory gets freed in curl_easy_cleanup.
-        // Must be copied to prevent double destruction by CURL and HTTPResponse
-        // destructor.
-        curl_request_data_ptr->response_with_metadata.final_url =
-            absl::StrCat(final_url);
-      }
-      // invoke callback for handle.
-      if (status.ok()) {
-        std::move(curl_request_data_ptr->done_callback)(
-            std::move(curl_request_data_ptr->response_with_metadata));
-      } else {
-        std::move(curl_request_data_ptr->done_callback)(status);
-      }
-      GetTraceFromCurl(req_handle);
-      // perform cleanup for handle.
-    });
-  }
-}
-void MultiCurlHttpFetcherAsync::Add(CURL* handle) {
-  // Add request handle to set if required for cleanup.
-  absl::MutexLock lock(&curl_handle_set_lock_);
-  curl_handle_set_.emplace(handle);
-}
-void MultiCurlHttpFetcherAsync::Remove(CURL* handle) {
-  absl::MutexLock lock(&curl_handle_set_lock_);
-  curl_handle_set_.erase(handle);
-}
-
-MultiCurlHttpFetcherAsync::CurlRequestData::CurlRequestData(
-    const std::vector<std::string>& headers, OnDoneFetchUrlWithMetadata on_done,
-    std::vector<std::string> response_header_keys, bool include_redirect_url)
-    : req_handle(curl_easy_init()),
-      done_callback(std::move(on_done)),
-      response_headers(std::move(response_header_keys)),
-      include_redirect_url(include_redirect_url) {
-  for (const auto& header : headers) {
-    headers_list_ptr = curl_slist_append(headers_list_ptr, header.c_str());
-  }
-}
-
-MultiCurlHttpFetcherAsync::CurlRequestData::~CurlRequestData() {
-  curl_slist_free_all(headers_list_ptr);
-  curl_easy_cleanup(req_handle);
-}
 }  // namespace privacy_sandbox::bidding_auction_servers

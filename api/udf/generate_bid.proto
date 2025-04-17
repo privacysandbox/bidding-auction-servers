@@ -157,19 +157,24 @@ message ProtectedAudienceBrowserSignals {
 }];
 
   int32 multi_bid_limit = 8 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
-      'A limit enforced by sellers on number of bids returned by each'
-      ' generateBid() execution With K-Anonymity integration, each generateBid()'
-      ' can return multiple bids instead of one, this is referred to as multi-bid'
-      ' generation. This limit is required to enforce a limit with multi-bid'
-      ' generation. For Protected Audience, the limit would be enforced on'
-      ' generateBid() execution per Interest Group. If the seller doesn\'t set'
-      ' the limit, a default would be set by the Bidding server.'
+      'The maximum number of bids that can be returned by this generateBid()'
+      ' execution. This limit is either specified by the seller, or a default'
+      ' value is used by the Bidding server. If any Interest Group receives'
+      ' more bids than the specified limit, all bids for that Interest Group'
+      ' are dropped by the Bidding server.'
 }];
 
   string prev_wins_ms = 9 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
       'Tuple of time-ad pairs for a previous win for the Interest Group that'
       ' occurred in the last "n" days. The time is specified in milliseconds'
       ' before the containing auctionBlob was requested.'
+}];
+
+  bool for_debugging_only_in_cooldown_or_lockout = 10 [(privacysandbox.apis.roma.app_api.v1.roma_field_annotation) = {description:
+      'Indicates whether the buyer is in cooldown period or the device is in'
+      ' lockout for downsampled event level debug reporting. Adtechs should'
+      ' only return debug URLs if this is set to false, otherwise the URLs will'
+      ' be ignored and creating these will be wasted compute.'
 }];
 }
 // (-- LINT.ThenChange(/api/bidding_auction_servers.proto:browser_signals_bidding) --)

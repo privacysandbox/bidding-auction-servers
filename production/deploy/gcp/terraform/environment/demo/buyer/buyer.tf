@@ -33,6 +33,7 @@ locals {
         max_replicas          = 5
         zones                 = null # Null signifies no zone preference.
         max_rate_per_instance = null # Null signifies no max.
+        use_intel_amx         = false
       }
       frontend = {
         machine_type          = "n2d-standard-64"
@@ -49,6 +50,7 @@ locals {
   # If you specify a certificate_map_id, you do not need to specify an ssl_certificate_id.
   frontend_domain_ssl_certificate_id = "" # Example: "projects/${local.gcp_project_id}/global/sslCertificates/bfe-${local.environment}"
   frontend_certificate_map_id        = "" # Example: "//certificatemanager.googleapis.com/projects/test/locations/global/certificateMaps/wildcard-cert-map"
+  frontend_ssl_policy_id             = "" # Example: "projects/${local.gcp_project_id}/global/sslPolicies/bfe-ssl-policy
   buyer_domain_name                  = "" # Example: bfe-gcp.com
   frontend_dns_zone                  = "" # Example: "bfe-gcp-com"
 
@@ -267,12 +269,56 @@ module "buyer" {
     # FETCHED_BUT_OPTIONAL: Call to KV server is made and must not fail. All interest groups are sent to generateBid() irrespective of whether they have bidding signals or not.
     # Any other value/REQUIRED (default): Call to KV server is made and must not fail. Only those interest groups are sent to generateBid() that have at least one bidding signals key for which non-empty bidding signals are fetched.
     BIDDING_SIGNALS_FETCH_MODE = "REQUIRED"
+
+    ###### [BEGIN] Libcurl parameters.
+    #
+    # Libcurl is used in frontend servers to fetch real time signals for BYOS
+    # KVs in the request path, as well as to fetch UDF blobs off the request
+    # path in the backend servers. The following params should be tuned based
+    # on the expected load to support, the capacity of the servers and expected
+    # size of data/signals/blob to be transfered.
+    #
+    # Number of curl workers to use in BFE/bidding to run transfers using curl
+    # handles. This number should be scaled based on number of vCPUs available
+    # to the instance. Note: 1. Each worker uses one thread. 2. Performance
+    # degradation has been observed when using more than 4 workers.
+    CURL_BFE_NUM_WORKERS     = 4
+    CURL_BIDDING_NUM_WORKERS = 1 # Recommended to keep it 1.
+    #
+    # Maximum wait time for a curl request to be allowed in the queue. After
+    # this time expires, the request is removed from the queue and the original
+    # request to the service will fail. Setting this value too low can lead to
+    # degraded performance in B&A stack under load since lower values increase
+    # lock contention.
+    CURL_BFE_QUEUE_MAX_WAIT_MS     = 1000
+    CURL_BIDDING_QUEUE_MAX_WAIT_MS = 2000
+    #
+    # Number of pending curl requests that have not yet been scheduled to run.
+    # This should be scaled depending on the stack capacity, intended QPS,
+    # max wait time limit imposed on the requests in the queue etc.
+    CURL_BFE_WORK_QUEUE_LENGTH     = 1000
+    CURL_BIDDING_WORK_QUEUE_LENGTH = 10 # Recommended to keep it 10.
+    #
+    # Constrains the size of the libcurl connection cache.
+    # 0 is default, means unlimited.
+    # See https://curl.se/libcurl/c/CURLMOPT_MAXCONNECTS.html.
+    CURLMOPT_MAXCONNECTS = 0
+    # Sets the maximum number of simultaneously open connections.
+    # 0 is default, means unlimited.
+    # See https://curl.se/libcurl/c/CURLMOPT_MAX_TOTAL_CONNECTIONS.html.
+    CURLMOPT_MAX_TOTAL_CONNECTIONS = 0
+    # Sets the maximum number of connections to a single host.
+    # 0 is default, means unlimited.
+    # See: https://curl.se/libcurl/c/CURLMOPT_MAX_HOST_CONNECTIONS.html.
+    CURLMOPT_MAX_HOST_CONNECTIONS = 0
+    #
+    ###### [END] Libcurl parameters.
   }, each.value.runtime_flag_override)
 
   frontend_domain_name               = local.buyer_domain_name
   frontend_dns_zone                  = local.frontend_dns_zone
   operator                           = local.buyer_operator
-  service_account_email              = ""    # Example: "terraform-sa@{local.gcp_project_id}.iam.gserviceaccount.com"
+  service_account_email              = ""    # Example: "bidding-auction-services@{local.gcp_project_id}.iam.gserviceaccount.com"
   vm_startup_delay_seconds           = 200   # Example: 200
   cpu_utilization_percent            = 0.6   # Example: 0.6
   use_confidential_space_debug_image = false # Example: false
@@ -301,6 +347,7 @@ module "buyer_frontend_load_balancing" {
 
   frontend_domain_ssl_certificate_id = local.frontend_domain_ssl_certificate_id
   frontend_certificate_map_id        = local.frontend_certificate_map_id
+  frontend_ssl_policy_id             = local.frontend_ssl_policy_id
   frontend_service_name              = "bfe"
   google_compute_backend_service_ids = {
     for buyer_key, buyer in module.buyer :
@@ -324,11 +371,23 @@ module "inference_dashboard" {
   [for k, v in local.buyer_header_experiment : k if length(v.match_rules) > 0]))
 }
 
+module "roma_dashboard" {
+  source = "../../services/dashboards/roma_dashboard"
+  environment = join("|", concat(
+    [for k, v in local.buyer_traffic_splits : k if v.traffic_weight > 0],
+  [for k, v in local.buyer_header_experiment : k if length(v.match_rules) > 0]))
+}
+
 module "k_anon_dashboard" {
   source = "../../services/dashboards/k_anon_dashboard"
   environment = join("|", concat(
     [for k, v in local.buyer_traffic_splits : k if v.traffic_weight > 0],
   [for k, v in local.buyer_header_experiment : k if length(v.match_rules) > 0]))
+}
+
+module "log_based_metric" {
+  source      = "../../services/log_based_metric"
+  environment = local.environment
 }
 
 # use below to perform an in-place upgrade from pre 4.2 to 4.2 and after, replace $ENV with $local.environment value

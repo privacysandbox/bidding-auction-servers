@@ -102,6 +102,7 @@ class BuyerFrontEndService final : public BuyerFrontEnd::CallbackService {
       protected_app_signals_bidding_async_client_;
   std::unique_ptr<KVAsyncClient> kv_async_client_;
   server_common::Executor& executor_;
+  RandomNumberGeneratorFactory rng_factory_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

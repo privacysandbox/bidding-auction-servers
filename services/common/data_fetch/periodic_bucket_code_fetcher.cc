@@ -1,11 +1,11 @@
 /*
- * Copyright 2024 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,9 @@
 #include <utility>
 #include <vector>
 
+#include <apis/privacysandbox/apis/parc/v0/parc_service.grpc.pb.h>
+#include <apis/privacysandbox/apis/parc/v0/parc_service.pb.h>
+
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -28,6 +31,7 @@
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/time/time.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "services/common/data_fetch/fetcher_interface.h"
 #include "services/common/data_fetch/version_util.h"
 #include "services/common/loggers/request_log_context.h"
@@ -35,35 +39,55 @@
 #include "src/core/interface/async_context.h"
 #include "src/core/interface/errors.h"
 #include "src/public/core/interface/execution_result.h"
-#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 #include "src/public/cpio/proto/blob_storage_service/v1/blob_storage_service.pb.h"
 #include "src/util/status_macro/status_macros.h"
 
-using ::google::cmrt::sdk::blob_storage_service::v1::BlobMetadata;
-using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest;
-using ::google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse;
-using ::google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataRequest;
-using ::google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataResponse;
+namespace privacy_sandbox::bidding_auction_servers {
 using ::google::scp::core::AsyncContext;
 using ::google::scp::core::ExecutionResult;
 using ::google::scp::core::errors::GetErrorMessage;
-using ::google::scp::cpio::BlobStorageClientFactory;
-using ::google::scp::cpio::BlobStorageClientInterface;
-
-namespace privacy_sandbox::bidding_auction_servers {
 
 PeriodicBucketCodeFetcher::PeriodicBucketCodeFetcher(
     absl::string_view bucket_name, absl::Duration fetch_period_ms,
     UdfCodeLoaderInterface* loader, server_common::Executor* executor,
-    WrapCodeForDispatch wrap_code,
-    BlobStorageClientInterface* blob_storage_client)
+    WrapCodeForDispatch wrap_code, BlobStorageClient* blob_storage_client)
     : PeriodicBucketFetcher(bucket_name, fetch_period_ms, executor,
                             blob_storage_client),
       wrap_code_(std::move(wrap_code)),
       loader_(*loader) {}
 
 absl::Status PeriodicBucketCodeFetcher::OnFetch(
-    const AsyncContext<GetBlobRequest, GetBlobResponse>& context) {
+    const privacysandbox::apis::parc::v0::GetBlobRequest blob_request,
+    const std::string blob_data) {
+  PS_ASSIGN_OR_RETURN(
+      const std::string version,
+      GetBucketBlobVersion(GetBucketName(),
+                           blob_request.blob_metadata().blob_name()),
+      _ << "Could not read blob name.");
+
+  if (blob_data.empty()) {
+    return absl::Status(absl::StatusCode::kNotFound,
+                        absl::StrCat("Blob missing data: ", version));
+  }
+  auto result_value = {blob_data};
+  std::string wrapped_code = wrap_code_(result_value);
+  // Construct the success log message before calling LoadSync so that we can
+  // move the code.
+  std::string success_log_message =
+      absl::StrCat("Current code loaded into Roma for version ", version, ":\n",
+                   wrapped_code);
+  PS_RETURN_IF_ERROR(loader_.LoadSync(version, std::move(wrapped_code)))
+      << "Roma failed to load blob.";
+
+  PS_VLOG(kSuccess) << success_log_message;
+  return absl::OkStatus();
+}
+
+absl::Status PeriodicBucketCodeFetcher::OnFetch(
+    const AsyncContext<
+        google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
+        google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&
+        context) {
   PS_ASSIGN_OR_RETURN(
       const std::string version,
       GetBucketBlobVersion(GetBucketName(),

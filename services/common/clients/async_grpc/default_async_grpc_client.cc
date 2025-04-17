@@ -25,7 +25,8 @@ namespace {
 grpc::SslCredentialsOptions GetDefaultSslCredentials(
     absl::string_view cert_path) {
   absl::StatusOr<std::string> roots_pem = GetFileContent(cert_path);
-  CHECK(roots_pem.ok()) << "Unable to read from: " << cert_path;
+  PS_CHECK_OK(roots_pem, SystemLogContext())
+      << "Unable to read from: " << cert_path;
   return {
       .pem_root_certs = *std::move(roots_pem),
   };

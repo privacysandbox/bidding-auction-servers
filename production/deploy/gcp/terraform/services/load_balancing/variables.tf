@@ -39,6 +39,12 @@ variable "gcp_project_id" {
   type        = string
 }
 
+variable "gcp_dns_zones_project_id" {
+  description = "The name of the Google Cloud project where DNS zones are managed."
+  type        = string
+  default     = null
+}
+
 variable "frontend_domain_name" {
   description = "Domain name for global external LB"
   type        = string
@@ -91,8 +97,6 @@ variable "collector_service_name" {
   type = string
 }
 
-
-
 variable "collector_service_port" {
   description = "The grpc port that receives traffic destined for the OpenTelemetry collector."
   type        = number
@@ -114,6 +118,7 @@ variable "region_config" {
       max_replicas          = number
       zones                 = list(string) # Use null to signify 'all zones'.
       max_rate_per_instance = number       # Use null to signify no max.
+      use_intel_amx         = bool
     })
     frontend = object({
       machine_type          = string

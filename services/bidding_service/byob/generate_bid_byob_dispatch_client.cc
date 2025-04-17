@@ -24,6 +24,7 @@
 namespace privacy_sandbox::bidding_auction_servers {
 
 using ::privacy_sandbox::server_common::byob::Mode;
+using ::privacy_sandbox::server_common::byob::ProcessRequestMetrics;
 using ::privacy_sandbox::server_common::byob::UdfBlob;
 
 absl::StatusOr<GenerateBidByobDispatchClient>
@@ -31,11 +32,7 @@ GenerateBidByobDispatchClient::Create(int num_workers) {
   PS_ASSIGN_OR_RETURN(
       auto byob_service,
       roma_service::ByobGenerateProtectedAudienceBidService<>::Create(
-          {
-              .lib_mounts = "",
-              .enable_seccomp_filter = true,
-          },
-          /*mode=*/Mode::kModeNsJailSandbox));
+          {}, /*mode=*/Mode::kModeNsJailSandbox));
   return GenerateBidByobDispatchClient(std::move(byob_service), num_workers);
 }
 
@@ -84,7 +81,9 @@ absl::Status GenerateBidByobDispatchClient::Execute(
       .GenerateProtectedAudienceBid(
           [callback = std::move(callback)](
               absl::StatusOr<roma_service::GenerateProtectedAudienceBidResponse>
-                  response) mutable {
+                  response,
+              absl::StatusOr<std::string_view> /*logs*/,  // NOLINT
+              ProcessRequestMetrics /*metrics*/) mutable {
             std::move(callback)(std::move(response));
           },
           request, /*metadata=*/{}, code_token_)

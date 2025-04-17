@@ -186,12 +186,20 @@ AdWithBid BuildNewAdWithBid(absl::string_view ad_url,
   bid.set_ad_cost(kAdCost);
   bid.set_modeling_signals(kModelingSignals);
 
-  if (options.enable_event_level_debug_reporting) {
+  if (options.enable_debug_reporting) {
     DebugReportUrls debug_report_urls;
-    debug_report_urls.set_auction_debug_win_url(
-        absl::StrCat(kTestBuyerDebugWinUrlPrefix, ad_url));
-    debug_report_urls.set_auction_debug_loss_url(
-        absl::StrCat(kTestBuyerDebugLossUrlPrefix, ad_url));
+    if (options.debug_win_url_failed_sampling) {
+      bid.set_debug_win_url_failed_sampling(true);
+    } else {
+      debug_report_urls.set_auction_debug_win_url(
+          absl::StrCat(kTestBuyerDebugWinUrlPrefix, ad_url));
+    }
+    if (options.debug_loss_url_failed_sampling) {
+      bid.set_debug_loss_url_failed_sampling(true);
+    } else {
+      debug_report_urls.set_auction_debug_loss_url(
+          absl::StrCat(kTestBuyerDebugLossUrlPrefix, ad_url));
+    }
     *bid.mutable_debug_report_urls() = debug_report_urls;
   }
   if (!options.buyer_reporting_id.empty()) {
@@ -224,7 +232,6 @@ AdWithBid BuildNewAdWithBid(absl::string_view ad_url,
 
 ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
     const std::string& ad_render_url, absl::optional<float> bid_value,
-    const bool enable_event_level_debug_reporting,
     absl::optional<absl::string_view> bid_currency) {
   ProtectedAppSignalsAdWithBid pas_ad_with_bid;
   pas_ad_with_bid.set_render(ad_render_url);
@@ -235,15 +242,6 @@ ProtectedAppSignalsAdWithBid BuildNewPASAdWithBid(
     pas_ad_with_bid.set_bid_currency(bid_currency.value());
   }
   pas_ad_with_bid.set_ad_cost(kAdCost);
-
-  if (enable_event_level_debug_reporting) {
-    DebugReportUrls debug_report_urls;
-    debug_report_urls.set_auction_debug_win_url(
-        "https://pas_test.com/debugWin?render=" + ad_render_url);
-    debug_report_urls.set_auction_debug_loss_url(
-        "https://pas_test.com/debugLoss?render=" + ad_render_url);
-    *pas_ad_with_bid.mutable_debug_report_urls() = debug_report_urls;
-  }
   return pas_ad_with_bid;
 }
 
@@ -561,9 +559,7 @@ std::vector<ProtectedAppSignalsAdWithBid> GetPASAdWithBidsInMultipleCurrencies(
                                  matched_left_to_add, ad_render_url,
                                  bid_currency);
     pas_ads_with_bids.push_back(BuildNewPASAdWithBid(
-        ad_render_url,
-        /*bid_value=*/1 + 0.001 * i,
-        /*enable_event_level_debug_reporting=*/false, bid_currency));
+        ad_render_url, /*bid_value=*/1 + 0.001 * i, bid_currency));
   }
   DCHECK_EQ(matched_left_to_add, 0);
   DCHECK_EQ(mismatched_left_to_add, 0);

@@ -19,3 +19,31 @@ output "google_compute_backend_service_id" {
 output "frontend_address" {
   value = module.networking.frontend_address
 }
+
+output "collector_endpoint" {
+  value = var.runtime_flags["COLLECTOR_ENDPOINT"]
+}
+
+output "mesh_id" {
+  value = module.networking.mesh.id
+}
+
+output "vpc_id" {
+  value = module.networking.network_id
+}
+
+output "regions" {
+  value = keys(var.region_config)
+}
+
+output "gcp_project_id" {
+  value = var.gcp_project_id
+}
+
+output "environment" {
+  value = var.environment
+}
+
+output "operator" {
+  value = var.operator
+}

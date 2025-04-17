@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("//:config.bzl", "IS_PROD_BUILD_DEFINES")
+load("//:config.bzl", "IS_PARC_BUILD_DEFINES", "IS_PROD_BUILD_DEFINES")
 
 package(default_visibility = [
     "//services/common/clients/buyer_frontend_server:__pkg__",
@@ -199,7 +199,7 @@ cc_library(
     name = "key_fetcher_utils",
     srcs = ["key_fetcher_utils.cc"],
     hdrs = ["key_fetcher_utils.h"],
-    local_defines = IS_PROD_BUILD_DEFINES,
+    defines = IS_PROD_BUILD_DEFINES + IS_PARC_BUILD_DEFINES,
     deps = [
         "//api:bidding_auction_servers_cc_proto",
         "//services/common:public_key_url_allowlist",
@@ -358,6 +358,7 @@ cc_library(
     ],
     deps = [
         "//api:bidding_auction_servers_cc_proto",
+        "//services/common/loggers:request_log_context",
         "//services/common/util:json_util",
         "@rapidjson",
     ],
@@ -378,12 +379,35 @@ cc_test(
 
 cc_library(
     name = "chaffing_utils",
+    srcs = [
+        "chaffing_utils.cc",
+    ],
     hdrs = ["chaffing_utils.h"],
     visibility = [
         "//services:__subpackages__",
         "//tools/secure_invoke:__subpackages__",
     ],
     deps = [
+        "//services/common/chaffing:moving_median_manager",
+        "//services/common/clients/async_grpc:request_config",
+        "//services/common/loggers:request_log_context",
+        "//services/common/util:status_utils",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "chaffing_utils_test",
+    size = "small",
+    srcs = [
+        "chaffing_utils_test.cc",
+    ],
+    deps = [
+        ":chaffing_utils",
+        "//services/common/chaffing:mock_moving_median_manager",
+        "//services/common/random:mock_rng",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
     ],
 )

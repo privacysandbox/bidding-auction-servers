@@ -40,7 +40,7 @@ constexpr SellerRejectionReason kTestSellerRejectionReason =
 constexpr char kTestRenderUrl[] = "https://render_url";
 constexpr char kTestComponentSeller[] = "component_seller_origin";
 constexpr char kTestTopLevelSeller[] = "top_level_seller_origin";
-constexpr char kTestAdComponentUrl_1[] = "https://compoennt_1";
+constexpr char kTestAdComponentUrl_1[] = "https://component_1";
 constexpr char kTestAdComponentUrl_2[] = "https://component_2";
 constexpr char kTestBidCurrency[] = "ABC";
 constexpr uint32_t kTestSellerDataVersion = 1989;
@@ -130,6 +130,20 @@ TEST(MakeBidMetadataTest, PopulatesExpectedReportingIds) {
             kTestSelectedReportingId);
 }
 
+TEST(MakeBidMetadataTest, PopulatesExpectedForDebuggingOnlyFlags) {
+  ForDebuggingOnlyFlags fdo_flags;
+  fdo_flags.set_in_cooldown_or_lockout(true);
+  std::string output = MakeBidMetadata(
+      kTestPublisher, kTestIGOwner, kTestRenderUrl, MakeMockAdComponentUrls(),
+      kTestTopLevelSeller, kTestBidCurrency, kTestSellerDataVersion,
+      /*reporting_ids=*/{}, fdo_flags);
+
+  const rapidjson::Document parsed_output = ParseJson(output);
+  CheckGenericOutput(parsed_output);
+  ASSERT_TRUE(parsed_output[kForDebuggingOnlyInCooldownOrLockout].IsBool());
+  EXPECT_TRUE(parsed_output[kForDebuggingOnlyInCooldownOrLockout].GetBool());
+}
+
 TEST(MapAuctionResultToAdWithBidMetadataTest, PopulatesExpectedValues) {
   AuctionResult auction_result = MakeARandomComponentAuctionResult(
       MakeARandomString(), kTestTopLevelSeller);
@@ -196,9 +210,8 @@ TEST(BuildScoreAdRequestTest, PopulatesExpectedValuesInDispatchRequest) {
   auto output = BuildScoreAdRequest(
       kTestRenderUrl, kTestAdMetadataJson, kTestScoringSignals, test_bid,
       std::make_shared<std::string>(kTestAuctionConfig), kTestBidMetadata,
-      log_context,
-      /*enable_adtech_code_logging = */ false,
-      /*enable_debug_reporting = */ false, kScoreAdBlobVersion);
+      log_context, /*enable_adtech_code_logging=*/false,
+      /*enable_debug_reporting=*/false, kScoreAdBlobVersion);
   ASSERT_TRUE(output.ok());
   EXPECT_EQ(output->id, kTestRenderUrl);
   EXPECT_EQ(output->version_string, kScoreAdBlobVersion);
@@ -225,9 +238,8 @@ TEST(BuildScoreAdRequestTest, HandlesAdsMetadataString) {
   auto output = BuildScoreAdRequest(
       kTestRenderUrl, ad_metadata_json, kTestScoringSignals, test_bid,
       std::make_shared<std::string>(kTestAuctionConfig), kTestBidMetadata,
-      log_context,
-      /*enable_adtech_code_logging = */ false,
-      /*enable_debug_reporting = */ false, kScoreAdBlobVersion);
+      log_context, /*enable_adtech_code_logging=*/false,
+      /*enable_debug_reporting=*/false, kScoreAdBlobVersion);
   auto observed_ad = JsonStringToValue(
       *output->input[ScoreArgIndex(ScoreAdArgs::kAdMetadata)]);
   CHECK_OK(observed_ad)
@@ -274,8 +286,8 @@ TEST(BuildScoreAdRequestTest, PopulatesExpectedValuesForAdWithBidMetadata) {
       MakeAnAdWithMetadata(test_bid),
       std::make_shared<std::string>(kTestAuctionConfig),
       scoring_signals.find(kTestRenderUrl)->second.GetString(),
-      /*enable_debug_reporting = */ false, log_context,
-      /*enable_adtech_code_logging = */ false, kTestBidMetadata,
+      /*enable_debug_reporting=*/false, log_context,
+      /*enable_adtech_code_logging=*/false, kTestBidMetadata,
       kScoreAdBlobVersion);
   ASSERT_TRUE(output.ok());
   EXPECT_EQ(output->id, kTestRenderUrl);
@@ -316,8 +328,8 @@ TEST(BuildScoreAdRequestTest,
       GetProtectedAppSignalsAdWithBidMetadata(kTestRenderUrl, test_bid),
       std::make_shared<std::string>(kTestAuctionConfig),
       scoring_signals.find(kTestRenderUrl)->second.GetString(),
-      /*enable_debug_reporting = */ false, log_context,
-      /*enable_adtech_code_logging = */ false, kTestBidMetadata,
+      /*enable_debug_reporting=*/false, log_context,
+      /*enable_adtech_code_logging=*/false, kTestBidMetadata,
       kScoreAdBlobVersion);
   ASSERT_TRUE(output.ok());
   EXPECT_EQ(output->id, kTestRenderUrl);
@@ -366,9 +378,8 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsInDispatchRequest) {
           kTestRenderUrl, kTestAdMetadataJson, kTestScoringSignals,
           MakeARandomNumber<float>(0.1, 10.1),
           std::make_shared<std::string>(kTestAuctionConfig), kTestBidMetadata,
-          log_context,
-          /*enable_adtech_code_logging = */ flag_1,
-          /*enable_debug_reporting = */ flag_2, kScoreAdBlobVersion);
+          log_context, /*enable_adtech_code_logging=*/flag_1,
+          /*enable_debug_reporting=*/flag_2, kScoreAdBlobVersion);
       ASSERT_TRUE(output.ok());
       EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)],
                 MakeFeatureFlagJson(flag_1, flag_2));
@@ -385,8 +396,8 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForAdWithBidMetadata) {
           MakeAnAdWithMetadata(MakeARandomNumber<float>(0.1, 10.1)),
           std::make_shared<std::string>(kTestAuctionConfig),
           scoring_signals.find(kTestRenderUrl)->second.GetString(),
-          /*enable_debug_reporting = */ flag_2, log_context,
-          /*enable_adtech_code_logging = */ flag_1, kTestBidMetadata,
+          /*enable_debug_reporting=*/flag_2, log_context,
+          /*enable_adtech_code_logging=*/flag_1, kTestBidMetadata,
           kScoreAdBlobVersion);
       ASSERT_TRUE(output.ok());
       EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)],
@@ -413,8 +424,8 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForPASAdWithBidMetadata) {
           GetProtectedAppSignalsAdWithBidMetadata(kTestRenderUrl),
           std::make_shared<std::string>(kTestAuctionConfig),
           scoring_signals.find(kTestRenderUrl)->second.GetString(),
-          /*enable_debug_reporting = */ flag_2, log_context,
-          /*enable_adtech_code_logging = */ flag_1, kTestBidMetadata,
+          /*enable_debug_reporting=*/flag_2, log_context,
+          /*enable_adtech_code_logging=*/flag_1, kTestBidMetadata,
           kScoreAdBlobVersion);
       ASSERT_TRUE(output.ok());
       EXPECT_EQ(*output->input[ScoreArgIndex(ScoreAdArgs::kFeatureFlags)],
@@ -423,32 +434,29 @@ TEST(BuildScoreAdRequestTest, PopulatesFeatureFlagsForPASAdWithBidMetadata) {
   }
 }
 
-TEST(ScoreAdsTest, ParsesScoreAdResponseRespectsDebugUrlLimits) {
-  std::string long_win_url(1024, 'A');
-  std::string long_loss_url(1025, 'B');
+TEST(ScoreAdsTest, ParsesScoreAdResponseRespectsDebugUrlSizeLimit) {
+  std::string long_win_url(65536, 'A');
+  std::string long_loss_url(65538, 'B');
   auto scored_ad = ParseJsonString(absl::Substitute(
       R"({
-                  "desirability" : 10,
-                  "allowComponentAuction" : false,
-                  "debugReportUrls": {
-                    "auctionDebugLossUrl": "$0",
-                    "auctionDebugWinUrl": "$1"
-                  }
-                })",
+          "desirability" : 10,
+          "allowComponentAuction" : false,
+          "debugReportUrls": {
+            "auctionDebugLossUrl": "$0",
+            "auctionDebugWinUrl": "$1"
+          }
+        })",
       long_loss_url, long_win_url));
   CHECK_OK(scored_ad);
-  int64_t current_all_debug_urls_chars = 0;
   auto parsed_response = ScoreAdResponseJsonToProto(
       *scored_ad, /*max_allowed_size_debug_url_chars=*/65536,
-      /*max_allowed_size_all_debug_urls_chars=*/1024,
-      /*device_component_auction=*/false, current_all_debug_urls_chars);
+      /*device_component_auction=*/false);
   CHECK_OK(parsed_response);
-  std::cerr << " parsed response: \n" << parsed_response->DebugString() << "\n";
   EXPECT_TRUE(parsed_response->has_debug_report_urls());
   EXPECT_FALSE(
       parsed_response->debug_report_urls().auction_debug_win_url().empty());
   EXPECT_EQ(parsed_response->debug_report_urls().auction_debug_win_url().size(),
-            1024);
+            65536);
   EXPECT_TRUE(
       parsed_response->debug_report_urls().auction_debug_loss_url().empty());
 }

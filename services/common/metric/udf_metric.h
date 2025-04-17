@@ -40,7 +40,7 @@ void CustomMetricCallBack(
   const std::string& payload = wrapper.io_proto.input_string();
   auto roma_request_context = wrapper.metadata.GetRomaRequestContext();
   auto metric_context = (*roma_request_context)->GetMetricContext();
-  CHECK_OK(metric_context);
+  PS_CHECK_OK(metric_context, (*roma_request_context)->GetLogContext());
   server_common::metrics::BatchUDFMetric metrics;
   absl::Status result =
       google::protobuf::util::JsonStringToMessage(payload, &metrics);

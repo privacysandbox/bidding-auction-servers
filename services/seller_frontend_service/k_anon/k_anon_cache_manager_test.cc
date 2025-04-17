@@ -28,10 +28,11 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "grpc/event_engine/event_engine.h"
+#include "grpc/grpc.h"
 #include "include/gtest/gtest.h"
-#include "services/common/test/mocks.h"
+#include "services/common/cache/cache.h"
+#include "services/common/clients/k_anon_server/k_anon_client_mock.h"
 #include "services/common/test/utils/test_init.h"
-#include "services/seller_frontend_service/cache/cache.h"
 #include "services/seller_frontend_service/k_anon/k_anon_cache_manager_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

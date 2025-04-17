@@ -302,5 +302,20 @@ TEST(SerializeJsonArrayDocToVector, ComplainsOnNonArrayType) {
   EXPECT_FALSE(output.ok()) << output.status();
 }
 
+TEST(BiddingSignalsToMapTest, ConvertsSignalsToMap) {
+  std::string json_str = R"JSON({"top": {"key1": "sig1", "key2": "sig2"}})JSON";
+  const auto document = ParseJsonString(json_str);
+  ASSERT_TRUE(document.ok()) << document.status();
+
+  std::string top_key = "top";
+  absl::flat_hash_map<std::string, std::string> ret =
+      BiddingSignalsToMap((*document)[top_key.c_str()]);
+  ASSERT_EQ(ret.size(), 2);
+  ASSERT_TRUE(ret.contains("key1"));
+  ASSERT_TRUE(ret.contains("key2"));
+  EXPECT_EQ(ret["key1"], "\"sig1\"");
+  EXPECT_EQ(ret["key2"], "\"sig2\"");
+}
+
 }  // namespace
 }  // namespace privacy_sandbox::bidding_auction_servers

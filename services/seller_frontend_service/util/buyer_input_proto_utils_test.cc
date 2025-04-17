@@ -185,6 +185,17 @@ TEST(BuyerInputProtoUtilsTest, ToPrevWinsMs) {
   EXPECT_EQ(*actual, expected);
 }
 
+TEST(BuyerInputProtoUtilsTest, ToPrevWinsMs_InvalidInputs) {
+  std::string invalid_json = R"JSON(foo)JSON";
+  ASSERT_FALSE(ToPrevWinsMs(invalid_json).ok());
+
+  std::string not_array = R"JSON({"key":"value"})JSON";
+  ASSERT_FALSE(ToPrevWinsMs(not_array).ok());
+
+  std::string unexpected_prev_wins_format = R"JSON([123,"ad_render_id_1"])JSON";
+  ASSERT_FALSE(ToPrevWinsMs(unexpected_prev_wins_format).ok());
+}
+
 // This test uses proto reflection to set every field on a BuyerInput proto to
 // a random value, and then runs it through ToBuyerInputForBidding() to verify
 // every field is mapped between the BuyerInput and BuyerInputForBidding protos.
@@ -203,8 +214,9 @@ TEST(BuyerInputProtoUtilsTest, ToBuyerInputForBidding) {
     }
   }
 
+  std::string input_str = buyer_input.DebugString();
   BuyerInputForBidding buyer_input_for_bidding =
-      ToBuyerInputForBidding(buyer_input);
+      ToBuyerInputForBidding(std::move(buyer_input));
   for (auto& ig : *buyer_input_for_bidding.mutable_interest_groups()) {
     if (ig.has_browser_signals()) {
       // Verify prev_wins is converted to prev_wins_ms, and then clear the field
@@ -214,7 +226,7 @@ TEST(BuyerInputProtoUtilsTest, ToBuyerInputForBidding) {
     }
   }
 
-  EXPECT_EQ(buyer_input.DebugString(), buyer_input_for_bidding.DebugString());
+  EXPECT_EQ(input_str, buyer_input_for_bidding.DebugString());
 }
 
 BuyerInputForBidding GenerateBuyerInputForBidding() {

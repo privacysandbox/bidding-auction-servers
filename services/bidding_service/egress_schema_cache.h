@@ -24,8 +24,8 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/cddl_spec_cache.h"
-#include "services/bidding_service/constants.h"
 #include "services/bidding_service/egress_features/egress_feature.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

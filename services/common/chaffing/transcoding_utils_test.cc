@@ -68,6 +68,29 @@ TEST(TranscodingUtilsTest, VerifySuccessfulEncodeDecode_Gzip) {
   EXPECT_EQ(decoded_payload->version, 0);
 }
 
+TEST(TranscodingUtilsTest,
+     VerifySuccessfulEncodeDecode_Gzip_WithMinimumPayloadSize) {
+  GetBidsRequest::GetBidsRawRequest raw_request;
+  raw_request.set_is_chaff(true);
+  raw_request.mutable_log_context()->set_generation_id("testGenerationId");
+
+  int minimum_request_size = 1000;
+  absl::StatusOr<std::string> encoded_payload = EncodeAndCompressGetBidsPayload(
+      raw_request, CompressionType::kGzip, minimum_request_size);
+  ASSERT_TRUE(encoded_payload.ok());
+  ASSERT_EQ(encoded_payload->size(),
+            minimum_request_size + kTotalMetadataSizeBytes);
+
+  auto decoded_payload =
+      DecodeGetBidsPayload<GetBidsRequest::GetBidsRawRequest>(*encoded_payload);
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+
+  google::protobuf::util::MessageDifferencer differencer;
+  EXPECT_TRUE(differencer.Equals(decoded_payload->get_bids_proto, raw_request));
+  EXPECT_EQ(decoded_payload->compression_type, CompressionType::kGzip);
+  EXPECT_EQ(decoded_payload->version, 0);
+}
+
 }  // namespace
 
 }  // namespace privacy_sandbox::bidding_auction_servers

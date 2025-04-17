@@ -39,6 +39,17 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "generate_bids_reactor_benchmarks_util",
+    testonly = True,
+    hdrs = ["generate_bids_reactor_benchmarks_util.h"],
+    deps = [
+        "//services/common/encryption:key_fetcher_factory",
+        "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/test:random",
+    ],
+)
+
 cc_binary(
     name = "generate_bids_reactor_benchmarks",
     testonly = True,
@@ -49,17 +60,30 @@ cc_binary(
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
     deps = [
+        ":generate_bids_reactor_benchmarks_util",
         "//services/bidding_service:generate_bids_reactor",
         "//services/bidding_service/benchmarking:bidding_no_op_logger",
-        "//services/common/clients/code_dispatcher:v8_dispatch_client",
-        "//services/common/encryption:key_fetcher_factory",
-        "//services/common/encryption:mock_crypto_client_wrapper",
         "//services/common/test:mocks",
-        "//services/common/test:random",
         "//services/common/test/utils:test_init",
         "@com_google_benchmark//:benchmark",
         "@com_google_benchmark//:benchmark_main",
-        "@google_privacysandbox_servers_common//src/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
+    ],
+)
+
+cc_binary(
+    name = "generate_bids_binary_reactor_benchmarks",
+    testonly = True,
+    srcs = [
+        "generate_bids_binary_reactor_benchmarks.cc",
+    ],
+    linkopts = [
+        "-Wl,-rpath,\\$$ORIGIN/../lib",
+    ],
+    deps = [
+        ":generate_bids_reactor_benchmarks_util",
+        "//services/bidding_service:generate_bids_binary_reactor",
+        "//services/common/test/utils:test_init",
+        "@com_google_benchmark//:benchmark",
+        "@com_google_benchmark//:benchmark_main",
     ],
 )
