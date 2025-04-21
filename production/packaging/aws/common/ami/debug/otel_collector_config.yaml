@@ -60,7 +60,7 @@ exporters:
     s3uploader:
       region: 'us-west-1'
       s3_bucket: 'bna-test-perfgate'
-      s3_prefix: 'e2e-build'
+      s3_prefix: 'e2e-build/$KOKORO_ID'
       s3_partition: 'minute'
 
 service:

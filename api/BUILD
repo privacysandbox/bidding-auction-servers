@@ -101,3 +101,25 @@ cc_proto_builder_library(
     cc_proto_library_deps = [":k_anon_query_cc_proto"],
     proto = ["**"],
 )
+
+proto_library(
+    name = "attestation_proto",
+    srcs = ["attestation.proto"],
+)
+
+proto_descriptor_set(
+    name = "attestation_descriptor_set",
+    deps = [":attestation_proto"],
+)
+
+cc_proto_library(
+    name = "attestation_cc_proto",
+    deps = [":attestation_proto"],
+)
+
+buf_lint_test(
+    name = "attestation_proto_lint",
+    size = "small",
+    config = ":buf.yaml",
+    targets = [":attestation_proto"],
+)

@@ -15,23 +15,22 @@
 #ifndef SERVICES_COMMON_CLIENTS_HTTP_MULTI_CURL_REQUEST_MANAGER_H_
 #define SERVICES_COMMON_CLIENTS_HTTP_MULTI_CURL_REQUEST_MANAGER_H_
 
+#include <memory>
+
 #include <event2/event.h>
 #include <event2/event_struct.h>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/functional/any_invocable.h"
-#include "absl/synchronization/mutex.h"
+#include "absl/status/status.h"
+#include "absl/synchronization/notification.h"
 #include "curl/multi.h"
+#include "services/common/clients/http/curl_request_data.h"
+#include "services/common/util/event.h"
+#include "services/common/util/event_base.h"
+#include "src/concurrent/executor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-
-struct SocketInfo {
-  // Socket file descriptor.
-  curl_socket_t sock_fd;
-  // Last activity recorded on the descriptor.
-  int activity;
-  // Event type monitored by libevent's event loop.
-  struct event tracked_event;
-};
 
 // This class provides a thread-safe interface around the Curl Multi Interface
 // for sharing HTTP resources (connections and TLS session) across
@@ -40,66 +39,97 @@ struct SocketInfo {
 class MultiCurlRequestManager final {
  public:
   // Initializes the Curl Multi session.
-  explicit MultiCurlRequestManager(struct event_base* event_base,
-                                   const long curlmopt_maxconnects,
+  explicit MultiCurlRequestManager(const long curlmopt_maxconnects,
                                    const long curlmopt_max_total_connections,
-                                   const long curlmopt_max_host_connections);
-
-  // Configures the request manager with the callback to invoke upon updates
-  // to easy handle as well as the timer event to use to trigger transfer on
-  // handles.
-  void Configure(absl::AnyInvocable<void()> update_easy_handles_callback,
-                 struct event* timer_event);
-  // This is the callback associated with the timer event which is an input
-  // to `Configure` method above.
-  static void MultiTimerCallback(int fd, short what, void* arg);
-  // This callback is invoked by libcurl when it wants to notify B&A about
-  // sockets that B&A should monitor for activity.
-  static int OnLibcurlSocketUpdate(CURL* easy_handle, curl_socket_t sock_fd,
-                                   int activity, void* data,
-                                   void* socket_info_pointer);
-  // This callback is invoked by libevent when it detects transfer (read/write)
-  // on sockets that libevent was monitoring on behalf of B&A.
-  static void OnLibeventSocketActivity(int fd, short kind, void* data);
+                                   const long curlmopt_max_host_connections,
+                                   server_common::Executor& executor);
 
   // Cleans up the curl mutli session. Please make sure all easy handles
   // related to this multi session are manually cleaned up before this runs.
   ~MultiCurlRequestManager();
 
-  // This method is used to perform I/O work for all/any easy handles
-  // related to this multi handle, as a wrapper around curl_multi_perform.
-  // It returns any messages from the individual transfers, and acts as a
-  // wrapper around the curl_multi_info_read curl method.
-  // msgs_left: Output parameter for the number of remaining messages after
-  // this function was called.
-  CURLMsg* GetUpdate(int* msgs_left) ABSL_LOCKS_EXCLUDED(request_manager_mu_);
-
-  // Add a new curl easy handle to the multi session, and starts the request
-  // by calling curl_multi_perform.
-  CURLMcode Add(CURL* curl_handle) ABSL_LOCKS_EXCLUDED(request_manager_mu_);
-
-  // Remove a curl easy handle from the multi session by calling
-  // curl_multi_remove_handle.
-  CURLMcode Remove(CURL* curl_handle) ABSL_LOCKS_EXCLUDED(request_manager_mu_);
-
   // MultiCurlRequestManager is neither copyable nor movable.
   MultiCurlRequestManager(const MultiCurlRequestManager&) = delete;
   MultiCurlRequestManager& operator=(const MultiCurlRequestManager&) = delete;
+
+  // Adds the request to curl multi request manager. If the addition fails,
+  // then executes the callback, else stores the request handle.
+  void StartProcessing(std::unique_ptr<CurlRequestData> request);
 
  private:
   void UpsertSocketInLibevent(curl_socket_t sock_fd, int activity,
                               SocketInfo* socket_info);
   void AddSocketToLibevent(curl_socket_t sock, int activity, void* data);
+
+  // Signals successful start of event loop.
+  static void StartedEventLoop(int fd, short event_type, void* arg);
+
+  // Callback for the event loop to check whether shutdown has triggered.
+  static void ShutdownEventLoop(int fd, short event_type, void* arg);
+
+  // Callback when the event loop is ready to start processing the request.
+  static void OnProcessingStarted(int fd, short event_type, void* arg);
+
+  // This is the callback associated with the timer event which is an input
+  // to `Configure` method above.
+  static void MultiTimerCallback(int fd, short what, void* arg);
+
+  // This callback is invoked by libcurl when it wants to notify B&A about
+  // sockets that B&A should monitor for activity.
+  static int OnLibcurlSocketUpdate(CURL* easy_handle, curl_socket_t sock_fd,
+                                   int activity, void* data,
+                                   void* socket_info_pointer);
+
+  // This callback is invoked by libevent when it detects transfer (read/write)
+  // on sockets that libevent was monitoring on behalf of B&A.
+  static void OnLibeventSocketActivity(int fd, short kind, void* data);
+
+  // Adds a new curl easy handle to the multi session, and starts the request
+  // by calling curl_multi_perform.
+  CURLMcode Add(CURL* curl_handle);
+
+  // Removes a curl easy handle from the multi session by calling
+  // curl_multi_remove_handle.
+  std::unique_ptr<CurlRequestData> Remove(CURL* curl_handle);
+
+  // Performs the fetch and handles the response from libcurl. It checks if
+  // the req_manager is done performing the fetch. This method provides
+  // computation to the underlying Curl Multi to perform I/O and polls for
+  // a response. Once the Curl multi interface indicates that a response is
+  // available, it schedules the callback on the executor_.
+  // Only a single thread can execute this function at a time since it requires
+  // the acquisition of the in_loop_mu_ mutex.
+  void PerformCurlUpdate();
+
+  // Map from easy handle pointer to curl request data. This is used to ensure
+  // proper cleanup (even in case of errors where the curl transfer fails).
+  absl::flat_hash_map<CURL*, std::unique_ptr<CurlRequestData>>
+      easy_curl_request_data_;
   // No. of handles still running updated by curl_multi_perform.
   // This can be used to delay destruction till all easy handles related to this
   // multi have completed running.
   int running_handles_;
-  // Mutex for ensuring thread safe access of curl multi session.
-  absl::Mutex request_manager_mu_;
   // Actual curl multi session pointer.
   CURLM* request_manager_;
-  absl::AnyInvocable<void()> update_easy_handles_callback_;
-  struct event_base* event_base_ = nullptr;
+  EventBase event_base_;
+  // Activates on event loop start and signals that event loop has successfully
+  // started.
+  Event eventloop_started_event_;
+  // This event is registered with the event loop and fires every second to
+  // check if the fetcher has been stopped and if so, the callback registered
+  // for this event will also stop the event loop.
+  Event shutdown_timer_event_;
+  // A timer event controlled by multi libcurl stack to orchestrate the request
+  // processing.
+  Event multi_timer_event_;
+
+  // Notification to sync the caller with the event loop start.
+  absl::Notification eventloop_started_;
+
+  // Synchronizes the status of shutdown for destructor and execution loop.
+  absl::Notification shutdown_complete_;
+
+  server_common::Executor& executor_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

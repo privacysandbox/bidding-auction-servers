@@ -28,5 +28,5 @@ variable "domain" {
 variable "service_account_name" {
   type        = string
   description = "The name of the service account to create."
-  default     = ""
+  default     = "bidding-auction-services"
 }

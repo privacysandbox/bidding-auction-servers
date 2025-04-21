@@ -39,6 +39,7 @@ repos:
   - id: check-merge-conflict
   - id: check-yaml
     entry: check-yaml --allow-multiple-documents
+    exclude: production/deploy/azure/terraform/components/tls/tls-chart
   - id: check-json
   - id: check-symlinks
   - id: check-added-large-files

@@ -17,16 +17,40 @@
 #ifndef SERVICES_SELLER_FRONTEND_SERVICE_UTIL_CHAFFING_UTILS_H_
 #define SERVICES_SELLER_FRONTEND_SERVICE_UTIL_CHAFFING_UTILS_H_
 
+#include <random>
 #include <vector>
 
 #include "absl/strings/string_view.h"
+#include "services/common/chaffing/moving_median_manager.h"
+#include "services/common/clients/async_grpc/request_config.h"
+#include "services/common/loggers/request_log_context.h"
+#include "services/common/util/status_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
+
+// Chaffing V1 constants.
+inline constexpr int kMinChaffRequestSizeBytes = 9'000;
+inline constexpr int kMaxChaffRequestSizeBytes = 95'000;
+
+// Chaffing V2 constants.
+inline constexpr size_t kChaffingV2MovingMedianWindowSize = 10'000;
+inline constexpr int kChaffingV2UnfilledWindowRequestSizeBytes = 100'000;
+inline constexpr float kChaffingV2SamplingProbablility = 0.1;
 
 struct InvokedBuyers {
   std::vector<absl::string_view> chaff_buyer_names;
   std::vector<absl::string_view> non_chaff_buyer_names;
 };
+
+RequestConfig GetChaffingV1GetBidsRequestConfig(bool is_chaff_request,
+                                                RandomNumberGenerator& rng);
+
+RequestConfig GetChaffingV2GetBidsRequestConfig(
+    absl::string_view buyer_name, bool is_chaff_request,
+    const MovingMedianManager& moving_median_manager, RequestContext context);
+
+// Returns whether chaffing should be skipped based on the provided RNG.
+bool ShouldSkipChaffing(size_t num_buyers, RandomNumberGenerator& rng);
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 

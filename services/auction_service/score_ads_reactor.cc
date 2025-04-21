@@ -104,14 +104,6 @@ inline void UpdateHighestScoringOtherBidMap(
   highest_scoring_other_bids_map.at(owner).add_values()->set_number_value(bid);
 }
 
-inline long DebugReportUrlsLength(const ScoreAdsResponse::AdScore& ad_score) {
-  if (!ad_score.has_debug_report_urls()) {
-    return 0;
-  }
-  return ad_score.debug_report_urls().auction_debug_win_url().length() +
-         ad_score.debug_report_urls().auction_debug_loss_url().length();
-}
-
 // If the bid's original currency matches the seller currency, the
 // incomingBidInSellerCurrency must be unchanged by scoreAd(). If it is
 // changed, reject the bid.
@@ -412,6 +404,8 @@ ScoreAdsReactor::ScoreAdsReactor(
           runtime_config.max_allowed_size_debug_url_bytes),
       max_allowed_size_all_debug_urls_chars_(
           kBytesMultiplyer * runtime_config.max_allowed_size_all_debug_urls_kb),
+      debug_reporting_sampling_upper_bound_(
+          runtime_config.debug_reporting_sampling_upper_bound),
       auction_scope_(GetAuctionScope(raw_request_)),
       enable_report_win_url_generation_(
           runtime_config.enable_report_win_url_generation &&
@@ -427,16 +421,20 @@ ScoreAdsReactor::ScoreAdsReactor(
           runtime_config.buyers_with_report_win_enabled),
       protected_app_signals_buyers_with_report_win_enabled_(
           runtime_config.protected_app_signals_buyers_with_report_win_enabled) {
-  CHECK_OK([this]() {
-    PS_ASSIGN_OR_RETURN(metric_context_,
-                        metric::AuctionContextMap()->Remove(request_));
-    if (log_context_.is_consented()) {
-      metric_context_->SetConsented(raw_request_.log_context().generation_id());
-    } else if (log_context_.is_prod_debug()) {
-      metric_context_->SetConsented(kProdDebug.data());
-    }
-    return absl::OkStatus();
-  }()) << "AuctionContextMap()->Get(request) should have been called";
+  PS_CHECK_OK(
+      [this]() {
+        PS_ASSIGN_OR_RETURN(metric_context_,
+                            metric::AuctionContextMap()->Remove(request_));
+        if (log_context_.is_consented()) {
+          metric_context_->SetConsented(
+              raw_request_.log_context().generation_id());
+        } else if (log_context_.is_prod_debug()) {
+          metric_context_->SetConsented(kProdDebug.data());
+        }
+        return absl::OkStatus();
+      }(),
+      log_context_)
+      << "AuctionContextMap()->Get(request) should have been called";
 
   if (runtime_config.use_per_request_udf_versioning &&
       !raw_request_.score_ad_version().empty()) {
@@ -459,6 +457,7 @@ void ScoreAdsReactor::BuildScoreAdRequestForComponentGhostWinners(
     AuctionResult& auction_result,
     std::vector<DispatchRequest>& dispatch_requests,
     RomaRequestSharedContext& shared_context) {
+  PS_VLOG(8, log_context_) << __func__;
   for (auto& ghost_winner : *auction_result.mutable_k_anon_ghost_winners()) {
     if (!ghost_winner.has_ghost_winner_for_top_level_auction()) {
       continue;
@@ -486,12 +485,34 @@ void ScoreAdsReactor::BuildScoreAdRequestForComponentGhostWinners(
           << dispatch_request.status();
       continue;
     }
-    // TODO(b/398916952): Add support for PAS ghost winners
-    auto [unused_it, inserted] = ad_data_.try_emplace(
-        dispatch_request->id, MapKAnonGhostWinnerToAdWithBidMetadata(
-                                  ghost_winner.owner(), ghost_winner.ig_name(),
-                                  ghost_winner_for_top_level_auction));
-    if (!inserted) {
+
+    bool insertion_success = false;
+    switch (ghost_winner_for_top_level_auction.ad_type()) {
+      case AdType::AD_TYPE_PROTECTED_AUDIENCE_AD: {
+        auto [unused_it, inserted] = ad_data_.try_emplace(
+            dispatch_request->id,
+            MapKAnonGhostWinnerToAdWithBidMetadata(
+                ghost_winner.owner(), ghost_winner.ig_name(),
+                ghost_winner_for_top_level_auction));
+        insertion_success = inserted;
+        break;
+      }
+      case AdType::AD_TYPE_PROTECTED_APP_SIGNALS_AD: {
+        auto [unused_it, inserted] = protected_app_signals_ad_data_.try_emplace(
+            dispatch_request->id,
+            MapKAnonGhostWinnerToProtectedAppSignalsAdWithBidMetadata(
+                ghost_winner.owner(), ghost_winner_for_top_level_auction));
+        insertion_success = inserted;
+        break;
+      }
+      default:
+        PS_VLOG(kNoisyWarn, log_context_)
+            << "Skipped ghost winner ad with unknown ad type "
+            << ghost_winner_for_top_level_auction.DebugString();
+        continue;
+    }
+
+    if (!insertion_success) {
       PS_VLOG(kNoisyWarn, log_context_)
           << "Component ghost winner ScoreAd Request id "
           << "conflict detected: " << dispatch_request->id;
@@ -501,6 +522,9 @@ void ScoreAdsReactor::BuildScoreAdRequestForComponentGhostWinners(
                   1, metric::kAuctionScoreAdsFailedToInsertDispatchRequest));
       continue;
     }
+    PS_VLOG(kDispatch, log_context_)
+        << "Created scoring request for component ghost winner: "
+        << ghost_winner_for_top_level_auction;
     ad_k_anon_join_cand_.try_emplace(
         dispatch_request->id,
         std::move(*ghost_winner.mutable_k_anon_join_candidates()));
@@ -705,7 +729,7 @@ void ScoreAdsReactor::PopulateProtectedAudienceDispatchRequests(
                         ad->interest_group_owner(), ad->render(),
                         ad->ad_components(), raw_request_.top_level_seller(),
                         ad->bid_currency(), raw_request_.seller_data_version(),
-                        reporting_id_param),
+                        reporting_id_param, raw_request_.fdo_flags()),
         code_version_);
     if (!dispatch_request.ok()) {
       PS_VLOG(kNoisyWarn, log_context_)
@@ -829,8 +853,18 @@ void ScoreAdsReactor::Execute() {
   benchmarking_logger_->BuildInputBegin();
   std::shared_ptr<std::string> auction_config =
       BuildAuctionConfig(raw_request_);
-  bool enable_debug_reporting = enable_seller_debug_url_generation_ &&
-                                raw_request_.enable_debug_reporting();
+
+  // Debug urls are collected from scoreAd() and PerformDebugReporting() is
+  // called only when:
+  // i) The server has enabled debug url generation, and
+  // ii) The request has enabled debug reporting, and
+  // iii) The seller is not in cooldown or lockout if downsampling is enabled.
+  bool enable_debug_reporting =
+      enable_seller_debug_url_generation_ &&
+      raw_request_.enable_debug_reporting() &&
+      !(raw_request_.fdo_flags().enable_sampled_debug_reporting() &&
+        raw_request_.fdo_flags().in_cooldown_or_lockout());
+
   std::vector<DispatchRequest> dispatch_requests;
   RomaRequestSharedContext shared_context =
       RomaSharedContextWithMetric<ScoreAdsRequest>(
@@ -889,7 +923,7 @@ void ScoreAdsReactor::Execute() {
   if (dispatch_requests.empty()) {
     // Internal error so that this is not propagated back to ad server.
     FinishWithStatus(::grpc::Status(grpc::StatusCode::INTERNAL,
-                                    kNoAdsWithValidScoringSignals));
+                                    kNoAdsWithValidDispatchRequests));
     return;
   }
   absl::Time start_js_execution_time = absl::Now();
@@ -1068,8 +1102,8 @@ void ScoreAdsReactor::PerformPrivateAggregationReporting(
       // since base_values is initialized outside the loop and
       // we need to re-initiliaze the reject_reason for this Ad.
       base_values.reject_reason.reset();
-      const auto& ig_owner = ad_it->second->interest_group_owner();
-      const auto& ig_name = ad_it->second->interest_group_name();
+      absl::string_view ig_owner = ad_it->second->interest_group_owner();
+      absl::string_view ig_name = ad_it->second->interest_group_name();
 
       // Get rejection reason from rejection_reason_map, which is keyed on
       // interest_group_owner and interest_group_name.
@@ -1248,7 +1282,6 @@ std::vector<ScoredAdData> ScoreAdsReactor::CollectValidRomaResponses(
     const std::vector<absl::StatusOr<DispatchResponse>>& responses) {
   std::vector<ScoredAdData> valid_scored_ads;
   valid_scored_ads.reserve(responses.size());
-  int64_t current_all_debug_urls_chars = 0;
   for (int index = 0; index < responses.size(); ++index) {
     const auto& response = responses[index];
     if (!response.ok()) {
@@ -1304,8 +1337,7 @@ std::vector<ScoredAdData> ScoreAdsReactor::CollectValidRomaResponses(
 
     auto ad_score = ScoreAdResponseJsonToProto(
         *response_json, max_allowed_size_debug_url_chars_,
-        max_allowed_size_all_debug_urls_chars_,
-        IsComponentAuction(auction_scope_), current_all_debug_urls_chars);
+        IsComponentAuction(auction_scope_));
 
     if (!ad_score.ok()) {
       LogWarningForBadResponse(ad_score.status(), *response,
@@ -1328,7 +1360,6 @@ std::vector<ScoredAdData> ScoreAdsReactor::CollectValidRomaResponses(
       }
     }
 
-    current_all_debug_urls_chars += DebugReportUrlsLength(*ad_score);
     ScoredAdData scored_ad_data = {
         .ad_score = *std::move(ad_score),
         .response_json = *std::move(response_json),
@@ -1393,6 +1424,8 @@ ScoringData ScoreAdsReactor::FindWinningAd(
 
   int index = 0;
   int end = parsed_ads.size();
+  PS_VLOG(kDispatch, log_context_)
+      << "Finding winner in " << end << " parsed ads.";
   while (index < end) {
     auto& parsed_ad = parsed_ads[index];
 
@@ -1420,9 +1453,11 @@ ScoringData ScoreAdsReactor::FindWinningAd(
           metric_context_->AccumulateMetric<metric::kAuctionBidRejectedCount>(
               1, ToSellerRejectionReasonString(
                      ad_rejection_reason->rejection_reason())));
+      PS_VLOG(kNoisyInfo, log_context_)
+          << "Skipping bid with rejection reason "
+          << ad_rejection_reason->rejection_reason();
       *scoring_data.ad_rejection_reasons.Add() =
           *std::move(ad_rejection_reason);
-
       // Move the rejected ad towards the end of the vector.
       // Don't enhance index becuase we can have a potentially valid ad on this
       // index after swap.
@@ -2031,76 +2066,273 @@ void ScoreAdsReactor::PerformDebugReporting() {
     raw_response_.mutable_ad_score()->clear_debug_report_urls();
     return;
   }
+  if (raw_request_.fdo_flags().enable_sampled_debug_reporting()) {
+    PerformSampledDebugReporting();
+  } else {
+    PerformUnsampledDebugReporting();
+  }
+  // Clear debug urls in ad_score now that they have been pinged or added to the
+  // response. This reduces the payload size.
+  raw_response_.mutable_ad_score()->clear_debug_report_urls();
+}
+
+void ScoreAdsReactor::PerformSampledDebugReporting() {
+  if (IsComponentAuction(auction_scope_)) {
+    PerformSampledDebugReportingForComponentAuction();
+    return;
+  }
+
+  // Single-seller auction.
+  long current_size_all_debug_urls_chars = 0;
+  bool put_seller_in_cooldown = false;
+  bool cooldown_is_for_debug_win = false;
+
+  // Iterate over all ads.
+  for (const auto& [id, ad_score] : ad_scores_) {
+    absl::string_view ig_owner = ad_score->interest_group_owner();
+    absl::string_view ig_name = ad_score->interest_group_name();
+    bool is_winning_ig = (ig_owner == post_auction_signals_.winning_ig_owner &&
+                          ig_name == post_auction_signals_.winning_ig_name);
+
+    // Consider the debug win url for the winning ad, and the debug loss url for
+    // the losing ad.
+    absl::string_view debug_url =
+        is_winning_ig ? ad_score->debug_report_urls().auction_debug_win_url()
+                      : ad_score->debug_report_urls().auction_debug_loss_url();
+    if (debug_url.empty()) {
+      continue;
+    }
+
+    // Case 1. Debug url passes sampling and is added to the response. Skip all
+    // other ads since there is a limit of one debug url per adtech in
+    // single-seller auctions.
+    if (DebugUrlPassesSampling(debug_reporting_sampling_upper_bound_)) {
+      AddSellerDebugReportToResponse(
+          debug_url, /*is_win_report=*/is_winning_ig,
+          /*is_component_win=*/false, current_size_all_debug_urls_chars,
+          GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
+                                             post_auction_signals_));
+      return;
+    }
+
+    // Case 2. Debug url is not selected during sampling. The adtech needs to be
+    // put in cooldown for calling the forDebuggingOnly API.
+    put_seller_in_cooldown = true;
+    cooldown_is_for_debug_win = is_winning_ig;
+  }
+
+  // If no debug url was selected during sampling, add a corresponding debug
+  // report with an empty url to pass cooldown information to the client.
+  if (put_seller_in_cooldown) {
+    AddSellerDebugReportToResponse(
+        "", /*is_win_report=*/cooldown_is_for_debug_win,
+        /*is_component_win=*/false, current_size_all_debug_urls_chars);
+  }
+}
+
+void ScoreAdsReactor::PerformSampledDebugReportingForComponentAuction() {
+  long current_size_all_debug_urls_chars = 0;
+
+  // Early exit condition variables:
+  //
+  // 1. Handled the debug win url for the component auction winning ad.
+  bool win_url_checked = false;
+  // 2. Found a debug loss url that was selected during sampling and added to
+  // the response (there is a limit of max one debug loss url per adtech).
+  bool loss_url_selected = false;
+  // 3. Found a debug loss url for a losing ad, guaranteeing that the adtech
+  // needs to be put in cooldown.
+  bool put_seller_in_cooldown_for_confirmed_loss = false;
+
+  // Iterate over all ads.
+  for (const auto& [id, ad_score] : ad_scores_) {
+    // Early exit.
+    if (win_url_checked && loss_url_selected &&
+        put_seller_in_cooldown_for_confirmed_loss) {
+      break;
+    }
+    absl::string_view ig_owner = ad_score->interest_group_owner();
+    absl::string_view ig_name = ad_score->interest_group_name();
+    bool is_winning_ig = (ig_owner == post_auction_signals_.winning_ig_owner &&
+                          ig_name == post_auction_signals_.winning_ig_name);
+
+    // Sample debug win url for component auction winning ad.
+    if (is_winning_ig) {
+      SampleDebugWinReportForComponentAuctionWinner(
+          current_size_all_debug_urls_chars);
+      win_url_checked = true;
+    }
+
+    // Sample debug loss url for all ads (since component auction winning ad can
+    // still lose in the top-level auction).
+    SampleDebugLossReportForComponentAuctionAd(
+        *ad_score, is_winning_ig, loss_url_selected,
+        put_seller_in_cooldown_for_confirmed_loss,
+        current_size_all_debug_urls_chars);
+  }
+
+  // If a confirmed debug loss url was selected during sampling, add a
+  // corresponding debug report with an empty url to pass cooldown information
+  // to the client.
+  if (put_seller_in_cooldown_for_confirmed_loss) {
+    AddSellerDebugReportToResponse("", /*is_win_report=*/false,
+                                   /*is_component_win=*/false,
+                                   current_size_all_debug_urls_chars);
+  }
+}
+
+void ScoreAdsReactor::SampleDebugWinReportForComponentAuctionWinner(
+    long& current_size_all_debug_urls_chars) {
+  const ScoreAdsResponse::AdScore& winning_ad_score = raw_response_.ad_score();
+  absl::string_view debug_win_url =
+      winning_ad_score.debug_report_urls().auction_debug_win_url();
+  if (debug_win_url.empty()) {
+    return;
+  }
+
+  // Sample the debug win url and add it to the response if selected.
+  if (DebugUrlPassesSampling(debug_reporting_sampling_upper_bound_)) {
+    AddSellerDebugReportToResponse(
+        debug_win_url, /*is_win_report=*/true, /*is_component_win=*/true,
+        current_size_all_debug_urls_chars,
+        GetPlaceholderDataForInterestGroup(
+            winning_ad_score.interest_group_owner(),
+            winning_ad_score.interest_group_name(), post_auction_signals_));
+    return;
+  }
+
+  // If not selected, add a corresponding debug report with an empty url to
+  // pass the cooldown information to the client.
+  AddSellerDebugReportToResponse("", /*is_win_report=*/true,
+                                 /*is_component_win=*/true,
+                                 current_size_all_debug_urls_chars);
+}
+
+void ScoreAdsReactor::SampleDebugLossReportForComponentAuctionAd(
+    const ScoreAdsResponse::AdScore& ad_score, bool is_winning_ig,
+    bool& loss_url_selected, bool& put_seller_in_cooldown_for_confirmed_loss,
+    long& current_size_all_debug_urls_chars) {
+  absl::string_view debug_loss_url =
+      ad_score.debug_report_urls().auction_debug_loss_url();
+  if (debug_loss_url.empty()) {
+    return;
+  }
+
+  // If no debug loss url has been selected yet, and this one passes sampling,
+  // add this to the response. No more debug loss urls can be selected now.
+  if (!loss_url_selected &&
+      DebugUrlPassesSampling(debug_reporting_sampling_upper_bound_)) {
+    AddSellerDebugReportToResponse(
+        debug_loss_url, /*is_win_report=*/false,
+        /*is_component_win=*/is_winning_ig, current_size_all_debug_urls_chars,
+        GetPlaceholderDataForInterestGroup(ad_score.interest_group_owner(),
+                                           ad_score.interest_group_name(),
+                                           post_auction_signals_));
+    loss_url_selected = true;
+    return;
+  }
+
+  // If this debug loss url is for the component auction winning ad and did
+  // not get selected, add a corresponding debug report with an empty url to the
+  // response. This will enable the client to put the adtech in cooldown if this
+  // ad goes on to lose in the top-level auction.
+  if (is_winning_ig) {
+    AddSellerDebugReportToResponse("", /*is_win_report=*/false,
+                                   /*is_component_win=*/true,
+                                   current_size_all_debug_urls_chars);
+    return;
+  }
+
+  // If this debug loss url is for a losing ad and did not get selected, this
+  // is a confirmed loss url that will put the adtech in cooldown.
+  put_seller_in_cooldown_for_confirmed_loss = true;
+}
+
+void ScoreAdsReactor::PerformUnsampledDebugReporting() {
+  // Iterate over all ads.
   for (const auto& [id, ad_score] : ad_scores_) {
     if (!ad_score->has_debug_report_urls()) {
       continue;
     }
-    absl::string_view debug_url = "";
-    bool is_winning_ig = false;
-    const auto& ig_owner = ad_score->interest_group_owner();
-    const auto& ig_name = ad_score->interest_group_name();
-    if (ig_owner == post_auction_signals_.winning_ig_owner &&
-        ig_name == post_auction_signals_.winning_ig_name) {
-      debug_url = ad_score->debug_report_urls().auction_debug_win_url();
-      is_winning_ig = true;
-    } else {
-      debug_url = ad_score->debug_report_urls().auction_debug_loss_url();
-    }
-    if (debug_url.empty()) {
-      continue;
-    }
+    absl::string_view ig_owner = ad_score->interest_group_owner();
+    absl::string_view ig_name = ad_score->interest_group_name();
+    bool is_winning_ig = (ig_owner == post_auction_signals_.winning_ig_owner &&
+                          ig_name == post_auction_signals_.winning_ig_name);
+
+    // For component auction winning ad, skip seller debug pings and instead
+    // add both win and loss debug reports to the response.
     if (is_winning_ig && IsComponentAuction(auction_scope_)) {
-      // Populate both win and loss debug urls for component auction winner.
-      PopulateDebugReportUrlsForComponentAuctionWinner();
-      // Don't send debug ping from the server for component auction winner.
+      PerformUnsampledDebugReportingForComponentAuctionWinner();
       continue;
     }
-    absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)> done_callback =
-        [](absl::StatusOr<absl::string_view> result) {};  // NOLINT
-    if (PS_VLOG_IS_ON(5)) {
-      done_callback = [ig_owner, ig_name](
-                          // NOLINTNEXTLINE
-                          absl::StatusOr<absl::string_view> result) mutable {
-        if (result.ok()) {
-          PS_VLOG(5) << "Performed debug reporting for:" << ig_owner
-                     << ", interest_group: " << ig_name;
-        } else {
-          PS_VLOG(5) << "Error while performing debug reporting for:"
-                     << ig_owner << ", interest_group: " << ig_name
-                     << ", status:" << result.status();
-        }
-      };
-    }
-    const HTTPRequest http_request = CreateDebugReportingHttpRequest(
-        debug_url,
-        GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
-                                           post_auction_signals_),
-        is_winning_ig);
-    async_reporter_.DoReport(http_request, std::move(done_callback));
-  }
-  if (auction_scope_ == AuctionScope::AUCTION_SCOPE_SINGLE_SELLER) {
-    // Clear debug urls in response since debug pings were already sent above
-    // for single-seller auctions.
-    raw_response_.mutable_ad_score()->clear_debug_report_urls();
+
+    // For all other ads, send debug pings from the server.
+    absl::string_view debug_url =
+        is_winning_ig ? ad_score->debug_report_urls().auction_debug_win_url()
+                      : ad_score->debug_report_urls().auction_debug_loss_url();
+    SendDebugReportingPing(async_reporter_, debug_url, ig_owner, ig_name,
+                           is_winning_ig, post_auction_signals_);
   }
 }
 
-void ScoreAdsReactor::PopulateDebugReportUrlsForComponentAuctionWinner() {
+void ScoreAdsReactor::
+    PerformUnsampledDebugReportingForComponentAuctionWinner() {
+  long current_size_all_debug_urls_chars = 0;
+  const ScoreAdsResponse::AdScore& winning_ad_score = raw_response_.ad_score();
   DebugReportingPlaceholder placeholder_data =
       GetPlaceholderDataForInterestGroup(
-          raw_response_.ad_score().interest_group_owner(),
-          raw_response_.ad_score().interest_group_name(),
-          post_auction_signals_);
-  auto* debug_report_urls =
-      raw_response_.mutable_ad_score()->mutable_debug_report_urls();
-  debug_report_urls->set_auction_debug_win_url(
-      CreateDebugReportingUrlForInterestGroup(
-          raw_response_.ad_score().debug_report_urls().auction_debug_win_url(),
-          placeholder_data, /*is_winning_interest_group=*/true));
-  debug_report_urls->set_auction_debug_loss_url(
-      CreateDebugReportingUrlForInterestGroup(
-          raw_response_.ad_score().debug_report_urls().auction_debug_loss_url(),
-          placeholder_data, /*is_winning_interest_group=*/true));
+          winning_ad_score.interest_group_owner(),
+          winning_ad_score.interest_group_name(), post_auction_signals_);
+
+  // Add debug win url for component auction winning ad to response if present.
+  absl::string_view debug_win_url =
+      winning_ad_score.debug_report_urls().auction_debug_win_url();
+  if (!debug_win_url.empty()) {
+    AddSellerDebugReportToResponse(debug_win_url, /*is_win_report=*/true,
+                                   /*is_component_win=*/true,
+                                   current_size_all_debug_urls_chars,
+                                   placeholder_data);
+  }
+
+  // Add debug loss url for component auction winning ad to response if present.
+  absl::string_view debug_loss_url =
+      winning_ad_score.debug_report_urls().auction_debug_loss_url();
+  if (!debug_loss_url.empty()) {
+    AddSellerDebugReportToResponse(debug_loss_url, /*is_win_report=*/false,
+                                   /*is_component_win=*/true,
+                                   current_size_all_debug_urls_chars,
+                                   placeholder_data);
+  }
+}
+
+void ScoreAdsReactor::AddSellerDebugReportToResponse(
+    absl::string_view debug_url, bool is_win_report, bool is_component_win,
+    long& current_size_all_debug_urls_chars,
+    std::optional<DebugReportingPlaceholder> placeholder_data) {
+  // Skip debug url if total size of all debug urls in response exceeds max
+  // allowed total size.
+  if (debug_url.size() + current_size_all_debug_urls_chars >
+      max_allowed_size_all_debug_urls_chars_) {
+    // TODO(b/399172783): Add debug_url_failure_count metric to indicate status
+    // as kDebugUrlRejectedForExceedingTotalSize.
+    return;
+  }
+  current_size_all_debug_urls_chars += debug_url.size();
+
+  // The debug url is for the winning interest group if it is a debug win url,
+  // or if it is a debug loss url for the component auction winner.
+  bool is_winning_ig = is_win_report || is_component_win;
+
+  // Add debug report object to the response.
+  auto* debug_report =
+      raw_response_.mutable_seller_debug_reports()->add_reports();
+  debug_report->set_url((placeholder_data.has_value())
+                            ? CreateDebugReportingUrlForInterestGroup(
+                                  debug_url, *placeholder_data, is_winning_ig)
+                            : debug_url);
+  debug_report->set_is_seller_report(true);
+  debug_report->set_is_win_report(is_win_report);
+  debug_report->set_is_component_win(is_component_win);
 }
 
 void ScoreAdsReactor::EncryptAndFinishOK() {

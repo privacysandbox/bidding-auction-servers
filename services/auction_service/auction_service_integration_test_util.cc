@@ -14,37 +14,23 @@
 
 #include "services/auction_service/auction_service_integration_test_util.h"
 
-#include <memory>
-#include <string>
-#include <thread>
-#include <utility>
 #include <vector>
 
-#include "absl/random/random.h"
 #include "absl/strings/str_format.h"
 #include "google/protobuf/text_format.h"
-#include "gtest/gtest.h"
-#include "services/auction_service/auction_constants.h"
-#include "services/auction_service/auction_service.h"
-#include "services/auction_service/benchmarking/score_ads_benchmarking_logger.h"
 #include "services/auction_service/benchmarking/score_ads_no_op_logger.h"
-#include "services/auction_service/code_wrapper/buyer_reporting_test_constants.h"
 #include "services/auction_service/code_wrapper/buyer_reporting_udf_wrapper.h"
-#include "services/auction_service/code_wrapper/seller_code_wrapper.h"
 #include "services/auction_service/code_wrapper/seller_udf_wrapper.h"
-#include "services/auction_service/code_wrapper/seller_udf_wrapper_test_constants.h"
 #include "services/auction_service/udf_fetcher/adtech_code_version_util.h"
-#include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/encryption/mock_crypto_client_wrapper.h"
-#include "services/common/metric/server_definition.h"
 #include "services/common/test/mocks.h"
-#include "services/common/test/random.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 namespace {
+
 using ::google::protobuf::TextFormat;
 using AdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata;
@@ -52,11 +38,8 @@ using ProtectedAppSignalsAdWithBidMetadata =
     ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata;
 using ::testing::AnyNumber;
 
-constexpr absl::string_view kKeyId = "key_id";
 constexpr absl::string_view kSecret = "secret";
-constexpr absl::string_view kTestConsentToken = "testConsentToken";
 constexpr absl::string_view kEurosIsoCode = "EUR";
-constexpr absl::string_view kPublisherHostname = "fenceStreetJournal.com";
 constexpr absl::string_view kEgressPayload =
     "{\"features\": [{\"type\": \"boolean-feature\", \"value\": true}, "
     "{\"type\": \"unsigned-integer-feature\", \"value\": 127}]}";
@@ -90,13 +73,12 @@ AdWithBidMetadata GetTestAdWithBidMetadata(
                               .test_buyer_reporting_signals.modeling_signals);
   ad.set_join_count(
       test_score_ads_request_config.test_buyer_reporting_signals.join_count);
-  ad.set_interest_group_name(
-      test_score_ads_request_config.test_buyer_reporting_signals
-          .interest_group_name);
+  ad.set_interest_group_name(test_score_ads_request_config.interest_group_name);
   ad.set_interest_group_owner(
-      test_score_ads_request_config.interest_group_owner.c_str());
+      test_score_ads_request_config.interest_group_owner);
   ad.set_render(absl::StrFormat(
-      "%s/ads", test_score_ads_request_config.interest_group_owner));
+      "%s/ads?id=%s", test_score_ads_request_config.interest_group_owner,
+      MakeARandomString()));
   ad.set_recency(
       test_score_ads_request_config.test_buyer_reporting_signals.recency);
   ad.set_data_version(
@@ -106,67 +88,6 @@ AdWithBidMetadata GetTestAdWithBidMetadata(
     ad.set_k_anon_status(*test_score_ads_request_config.k_anon_status);
   }
   return ad;
-}
-
-ScoreAdsRequest BuildScoreAdsRequest(
-    const TestScoreAdsRequestConfig& test_score_ads_request_config,
-    const std::vector<ScoreAdsRequest::ScoreAdsRawRequest::AdWithBidMetadata>&
-        ads) {
-  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
-  std::string trusted_scoring_signals =
-      R"json({"renderUrls":{"placeholder_url":[123])json";
-  for (const auto& ad : ads) {
-    if (!test_score_ads_request_config.test_buyer_reporting_signals
-             .buyer_signals.empty()) {
-      raw_request.mutable_per_buyer_signals()->try_emplace(
-          ad.interest_group_owner(),
-          test_score_ads_request_config.test_buyer_reporting_signals
-              .buyer_signals);
-    }
-    std::string ad_signal = absl::StrFormat(
-        "\"%s\":%s", ad.render(), R"JSON(["short", "test", "signal"])JSON");
-    absl::StrAppend(&trusted_scoring_signals,
-                    absl::StrFormat(", %s", ad_signal));
-    *raw_request.mutable_ad_bids()->Add() = ad;
-  }
-  absl::StrAppend(&trusted_scoring_signals,
-                  R"json(},"adComponentRenderUrls":{}})json");
-  raw_request.set_scoring_signals(trusted_scoring_signals);
-  if (test_score_ads_request_config.enable_debug_reporting) {
-    raw_request.set_enable_debug_reporting(
-        test_score_ads_request_config.enable_debug_reporting);
-  }
-  raw_request.set_seller("http://seller.com");
-  raw_request.set_publisher_hostname(kPublisherHostname);
-  raw_request.set_auction_signals(
-      test_score_ads_request_config.test_buyer_reporting_signals
-          .auction_signals);
-  raw_request.mutable_consented_debug_config()->set_is_consented(
-      test_score_ads_request_config.is_consented);
-  raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
-  // top_level_seller is expected to be set only for component auctions
-  if (!test_score_ads_request_config.top_level_seller.empty()) {
-    raw_request.set_top_level_seller(
-        test_score_ads_request_config.top_level_seller);
-  }
-  raw_request.set_seller_data_version(
-      test_score_ads_request_config.seller_data_version);
-  const auto& component_auction_data =
-      test_score_ads_request_config.component_auction_data;
-  // component_seller is expected to be set only for top level auctions.
-  if (!component_auction_data.test_component_seller.empty()) {
-    auto auction_result = MakeARandomComponentAuctionResultWithReportingUrls(
-        component_auction_data);
-    *raw_request.mutable_component_auction_results()->Add() =
-        std::move(auction_result);
-  }
-  if (test_score_ads_request_config.enforce_kanon) {
-    raw_request.set_enforce_kanon(*test_score_ads_request_config.enforce_kanon);
-  }
-  ScoreAdsRequest request;
-  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
-  request.set_key_id(kKeyId);
-  return request;
 }
 
 ProtectedAppSignalsAdWithBidMetadata GetTestAdWithBidMetadataForPAS(
@@ -180,59 +101,13 @@ ProtectedAppSignalsAdWithBidMetadata GetTestAdWithBidMetadataForPAS(
       test_score_ads_request_config.test_buyer_reporting_signals.ad_cost);
   ad.set_modeling_signals(test_score_ads_request_config
                               .test_buyer_reporting_signals.modeling_signals);
-  ad.set_owner(test_score_ads_request_config.test_buyer_reporting_signals
-                   .interest_group_name);
-  ad.set_owner(test_score_ads_request_config.interest_group_owner.c_str());
+  ad.set_owner(test_score_ads_request_config.interest_group_name);
+  ad.set_owner(test_score_ads_request_config.interest_group_owner);
   ad.set_render(absl::StrFormat(
       "%s/ads", test_score_ads_request_config.interest_group_owner));
   ad.set_egress_payload(kEgressPayload);
   ad.set_temporary_unlimited_egress_payload(kTemporaryUnlimitedEgressPayload);
   return ad;
-}
-
-ScoreAdsRequest BuildScoreAdsRequestForPAS(
-    const TestScoreAdsRequestConfig& test_score_ads_request_config,
-    const std::vector<ScoreAdsRequest::ScoreAdsRawRequest::
-                          ProtectedAppSignalsAdWithBidMetadata>& ads) {
-  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
-  std::string trusted_scoring_signals =
-      R"json({"renderUrls":{"placeholder_url":[123])json";
-  for (const auto& ad : ads) {
-    raw_request.mutable_per_buyer_signals()->try_emplace(
-        ad.owner(), test_score_ads_request_config.test_buyer_reporting_signals
-                        .buyer_signals);
-    std::string ad_signal = absl::StrFormat(
-        "\"%s\":%s", ad.render(), R"JSON(["short", "test", "signal"])JSON");
-    absl::StrAppend(&trusted_scoring_signals,
-                    absl::StrFormat(", %s", ad_signal));
-    *raw_request.mutable_protected_app_signals_ad_bids()->Add() = ad;
-  }
-  absl::StrAppend(&trusted_scoring_signals,
-                  R"json(},"adComponentRenderUrls":{}})json");
-  raw_request.set_scoring_signals(trusted_scoring_signals);
-  if (test_score_ads_request_config.enable_debug_reporting) {
-    raw_request.set_enable_debug_reporting(
-        test_score_ads_request_config.enable_debug_reporting);
-  }
-  raw_request.set_seller("http://seller.com");
-  raw_request.set_publisher_hostname(kPublisherHostname);
-  raw_request.set_auction_signals(
-      test_score_ads_request_config.test_buyer_reporting_signals
-          .auction_signals);
-  raw_request.mutable_consented_debug_config()->set_is_consented(
-      test_score_ads_request_config.is_consented);
-  raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
-  // top_level_seller is expected to be set only for component auctions
-  if (!test_score_ads_request_config.top_level_seller.empty()) {
-    raw_request.set_top_level_seller(
-        test_score_ads_request_config.top_level_seller);
-  }
-  raw_request.set_seller_data_version(
-      test_score_ads_request_config.seller_data_version);
-  ScoreAdsRequest request;
-  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
-  request.set_key_id(kKeyId);
-  return request;
 }
 
 void SetupMockCryptoClientWrapper(MockCryptoClientWrapper& crypto_client) {
@@ -355,7 +230,7 @@ void RunTestScoreAds(
   TrustedServersConfigClient config_client({});
   config_client.SetOverride(kTrue, TEST_MODE);
   auto key_fetcher_manager =
-      CreateKeyFetcherManager(config_client, /* public_key_fetcher= */ nullptr);
+      CreateKeyFetcherManager(config_client, /*public_key_fetcher=*/nullptr);
   AuctionService service(
       std::move(score_ads_reactor_factory), std::move(key_fetcher_manager),
       std::move(crypto_client), auction_service_runtime_config);
@@ -405,6 +280,114 @@ TestComponentAuctionResultData GenerateTestComponentAuctionResultData() {
       .test_component_interaction_reporting_url = kTestInteractionReportingUrl};
 }
 
+ScoreAdsRequest BuildScoreAdsRequest(
+    const TestScoreAdsRequestConfig& test_score_ads_request_config) {
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  std::string trusted_scoring_signals =
+      R"json({"renderUrls":{"placeholder_url":[123])json";
+  for (int i = 0; i < test_score_ads_request_config.desired_ad_count; i++) {
+    auto ad = GetTestAdWithBidMetadata(test_score_ads_request_config);
+    if (!test_score_ads_request_config.test_buyer_reporting_signals
+             .buyer_signals.empty()) {
+      raw_request.mutable_per_buyer_signals()->try_emplace(
+          ad.interest_group_owner(),
+          test_score_ads_request_config.test_buyer_reporting_signals
+              .buyer_signals);
+    }
+    std::string ad_signal = absl::StrFormat(
+        "\"%s\":%s", ad.render(), R"JSON(["short", "test", "signal"])JSON");
+    absl::StrAppend(&trusted_scoring_signals,
+                    absl::StrFormat(", %s", ad_signal));
+    *raw_request.mutable_ad_bids()->Add() = ad;
+  }
+  absl::StrAppend(&trusted_scoring_signals,
+                  R"json(},"adComponentRenderUrls":{}})json");
+  if (test_score_ads_request_config.generate_scoring_signals) {
+    raw_request.set_scoring_signals(trusted_scoring_signals);
+  }
+  raw_request.set_enable_debug_reporting(
+      test_score_ads_request_config.enable_debug_reporting);
+  raw_request.mutable_fdo_flags()->set_enable_sampled_debug_reporting(
+      test_score_ads_request_config.enable_sampled_debug_reporting);
+  raw_request.mutable_fdo_flags()->set_in_cooldown_or_lockout(
+      test_score_ads_request_config.in_cooldown_or_lockout);
+  raw_request.set_seller(test_score_ads_request_config.seller);
+  // top_level_seller is expected to be set only for component auctions
+  if (!test_score_ads_request_config.top_level_seller.empty()) {
+    raw_request.set_top_level_seller(
+        test_score_ads_request_config.top_level_seller);
+  }
+  raw_request.set_publisher_hostname(kPublisherHostname);
+  raw_request.set_auction_signals(
+      test_score_ads_request_config.test_buyer_reporting_signals
+          .auction_signals);
+  raw_request.mutable_consented_debug_config()->set_is_consented(
+      test_score_ads_request_config.is_consented);
+  raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
+  raw_request.set_seller_data_version(
+      test_score_ads_request_config.seller_data_version);
+  const auto& component_auction_data =
+      test_score_ads_request_config.component_auction_data;
+  // component_seller is expected to be set only for top level auctions.
+  if (!component_auction_data.test_component_seller.empty()) {
+    auto auction_result = MakeARandomComponentAuctionResultWithReportingUrls(
+        component_auction_data);
+    *raw_request.mutable_component_auction_results()->Add() =
+        std::move(auction_result);
+  }
+  if (test_score_ads_request_config.enforce_kanon) {
+    raw_request.set_enforce_kanon(*test_score_ads_request_config.enforce_kanon);
+  }
+  ScoreAdsRequest request;
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  request.set_key_id(kKeyId);
+  return request;
+}
+
+ScoreAdsRequest BuildScoreAdsRequestForPAS(
+    const TestScoreAdsRequestConfig& test_score_ads_request_config) {
+  ScoreAdsRequest::ScoreAdsRawRequest raw_request;
+  std::string trusted_scoring_signals =
+      R"json({"renderUrls":{"placeholder_url":[123])json";
+  for (int i = 0; i < test_score_ads_request_config.desired_ad_count; i++) {
+    auto ad = GetTestAdWithBidMetadataForPAS(test_score_ads_request_config);
+    raw_request.mutable_per_buyer_signals()->try_emplace(
+        ad.owner(), test_score_ads_request_config.test_buyer_reporting_signals
+                        .buyer_signals);
+    std::string ad_signal = absl::StrFormat(
+        "\"%s\":%s", ad.render(), R"JSON(["short", "test", "signal"])JSON");
+    absl::StrAppend(&trusted_scoring_signals,
+                    absl::StrFormat(", %s", ad_signal));
+    *raw_request.mutable_protected_app_signals_ad_bids()->Add() = ad;
+  }
+  absl::StrAppend(&trusted_scoring_signals,
+                  R"json(},"adComponentRenderUrls":{}})json");
+  if (test_score_ads_request_config.generate_scoring_signals) {
+    raw_request.set_scoring_signals(trusted_scoring_signals);
+  }
+  raw_request.set_enable_debug_reporting(
+      test_score_ads_request_config.enable_debug_reporting);
+  raw_request.set_seller(test_score_ads_request_config.seller);
+  // top_level_seller is expected to be set only for component auctions
+  if (!test_score_ads_request_config.top_level_seller.empty()) {
+    raw_request.set_top_level_seller(
+        test_score_ads_request_config.top_level_seller);
+  }
+  raw_request.set_publisher_hostname(kPublisherHostname);
+  raw_request.set_auction_signals(
+      test_score_ads_request_config.test_buyer_reporting_signals
+          .auction_signals);
+  raw_request.mutable_consented_debug_config()->set_is_consented(
+      test_score_ads_request_config.is_consented);
+  raw_request.mutable_consented_debug_config()->set_token(kTestConsentToken);
+  raw_request.set_seller_data_version(
+      test_score_ads_request_config.seller_data_version);
+  ScoreAdsRequest request;
+  *request.mutable_request_ciphertext() = raw_request.SerializeAsString();
+  request.set_key_id(kKeyId);
+  return request;
+}
+
 void LoadAndRunScoreAdsForPA(
     const AuctionServiceRuntimeConfig& runtime_config,
     const TestScoreAdsRequestConfig& test_score_ads_request_config,
@@ -412,10 +395,7 @@ void LoadAndRunScoreAdsForPA(
     ScoreAdsResponse& response) {
   V8Dispatcher dispatcher;
   V8DispatchClient dispatch_client(dispatcher);
-  AdWithBidMetadata test_ad =
-      GetTestAdWithBidMetadata(test_score_ads_request_config);
-  ScoreAdsRequest request =
-      BuildScoreAdsRequest(test_score_ads_request_config, {test_ad});
+  ScoreAdsRequest request = BuildScoreAdsRequest(test_score_ads_request_config);
   LoadPABuyerAndSellerCode(request, dispatcher, runtime_config, buyer_udf,
                            seller_udf);
   RunTestScoreAds(dispatch_client, request, runtime_config, response);
@@ -428,12 +408,11 @@ void LoadAndRunScoreAdsForPAS(
     ScoreAdsResponse& response) {
   V8Dispatcher dispatcher;
   V8DispatchClient dispatch_client(dispatcher);
-  ProtectedAppSignalsAdWithBidMetadata test_ad =
-      GetTestAdWithBidMetadataForPAS(test_score_ads_request_config);
   ScoreAdsRequest request =
-      BuildScoreAdsRequestForPAS(test_score_ads_request_config, {test_ad});
+      BuildScoreAdsRequestForPAS(test_score_ads_request_config);
   LoadPASBuyerAndSellerCode(request, dispatcher, runtime_config, buyer_udf,
                             seller_udf);
   RunTestScoreAds(dispatch_client, request, runtime_config, response);
 }
+
 }  // namespace privacy_sandbox::bidding_auction_servers

@@ -61,7 +61,8 @@ CreateTopLevelScoreAdsRawRequest(
     const SelectAdRequest::AuctionConfig& auction_config,
     std::variant<ProtectedAudienceInput, ProtectedAuctionInput>&
         protected_auction_input,
-    std::vector<AuctionResult>& component_auction_results);
+    std::vector<AuctionResult>& component_auction_results,
+    bool enable_kanon = false, int num_allowed_ghost_winners = 0);
 
 // Encodes, compresses and encrypts AdScore and bidding groups map
 // as auction_result_ciphertext.

@@ -28,6 +28,7 @@
 #include "include/gmock/gmock.h"
 #include "include/gtest/gtest.h"
 #include "rapidjson/document.h"
+#include "src/concurrent/event_engine_executor.h"
 #include "src/logger/request_context_logger.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

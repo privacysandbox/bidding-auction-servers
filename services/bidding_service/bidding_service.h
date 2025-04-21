@@ -24,7 +24,7 @@
 #include "services/bidding_service/base_generate_bids_reactor.h"
 #include "services/bidding_service/egress_schema_cache.h"
 #include "services/common/clients/async_grpc/default_async_grpc_client.h"
-#include "services/common/clients/http/multi_curl_http_fetcher_async.h"
+#include "services/common/clients/http/multi_curl_http_fetcher_async_no_queue.h"
 #include "services/common/clients/kv_server/kv_async_client.h"
 #include "src/concurrent/event_engine_executor.h"
 #include "src/core/lib/event_engine/default_event_engine.h"

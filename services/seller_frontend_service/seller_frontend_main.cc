@@ -16,6 +16,8 @@
 #include <memory>
 #include <string>
 
+#include <apis/privacysandbox/apis/parc/v0/parc_service.grpc.pb.h>
+
 #include "absl/container/flat_hash_map.h"
 #include "absl/debugging/failure_signal_handler.h"
 #include "absl/debugging/symbolize.h"
@@ -32,12 +34,15 @@
 #include "grpcpp/health_check_service_interface.h"
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/common/aliases.h"
+#include "services/common/chaffing/moving_median_manager.h"
+#include "services/common/clients/config/parc_parameter_client.h"
 #include "services/common/clients/config/trusted_server_config_client.h"
 #include "services/common/clients/config/trusted_server_config_client_util.h"
 #include "services/common/constants/common_service_flags.h"
 #include "services/common/encryption/crypto_client_factory.h"
 #include "services/common/encryption/key_fetcher_factory.h"
 #include "services/common/telemetry/configure_telemetry.h"
+#include "services/common/util/map_utils.h"
 #include "services/common/util/signal_handler.h"
 #include "services/common/util/tcmalloc_utils.h"
 #include "services/seller_frontend_service/k_anon/k_anon_cache_manager.h"
@@ -154,6 +159,14 @@ ABSL_FLAG(std::optional<bool>, enable_k_anon_query_cache, true,
 ABSL_FLAG(
     std::optional<bool>, enable_buyer_caching, std::nullopt,
     "Enable caching for which buyers are invoked for a particular request");
+ABSL_FLAG(std::optional<int>, curl_sfe_num_workers, 2,
+          "Number of threads to use to run transfers over curl handles");
+ABSL_FLAG(std::optional<int>, curl_sfe_queue_max_wait_ms, 1000,
+          "Maximum amount of time (in milliseconds) to wait for curl request "
+          "processing");
+ABSL_FLAG(std::optional<int>, curl_sfe_work_queue_length, 5000,
+          "Maximum number of outstanding curl requests that are allowed to "
+          "wait for processing");
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -312,10 +325,17 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
   config_client.SetFlag(FLAGS_enable_k_anon_query_cache,
                         ENABLE_K_ANON_QUERY_CACHE);
   config_client.SetFlag(FLAGS_enable_buyer_caching, ENABLE_BUYER_CACHING);
-  if (absl::GetFlag(FLAGS_init_config_client)) {
-    PS_RETURN_IF_ERROR(config_client.Init(config_param_prefix)).LogError()
-        << "Config client failed to initialize.";
-  }
+  config_client.SetFlag(FLAGS_parc_addr, PARC_ADDR);
+  config_client.SetFlag(FLAGS_enable_chaffing_v2, ENABLE_CHAFFING_V2);
+  config_client.SetFlag(FLAGS_curl_sfe_num_workers, CURL_SFE_NUM_WORKERS);
+  config_client.SetFlag(FLAGS_curl_sfe_queue_max_wait_ms,
+                        CURL_SFE_QUEUE_MAX_WAIT_MS);
+  config_client.SetFlag(FLAGS_curl_sfe_work_queue_length,
+                        CURL_SFE_WORK_QUEUE_LENGTH);
+
+  PS_RETURN_IF_ERROR(
+      MaybeInitConfigClient(absl::GetFlag(FLAGS_init_config_client),
+                            config_client, config_param_prefix));
 
   // Set verbosity
   server_common::log::SetGlobalPSVLogLevel(
@@ -325,7 +345,7 @@ absl::StatusOr<TrustedServersConfigClient> GetConfigClient(
       config_client.GetBooleanParameter(ENABLE_PROTECTED_AUDIENCE);
   const bool enable_protected_app_signals =
       config_client.GetBooleanParameter(ENABLE_PROTECTED_APP_SIGNALS);
-  CHECK(enable_protected_audience || enable_protected_app_signals)
+  PS_CHECK(enable_protected_audience || enable_protected_app_signals)
       << "Neither Protected Audience nor Protected App Signals support "
          "enabled.";
   PS_LOG(INFO) << "Protected Audience support enabled on the service: "
@@ -412,6 +432,7 @@ absl::Status RunServer() {
           config_client.GetBooleanParameter(CREATE_NEW_EVENT_ENGINE)
               ? grpc_event_engine::experimental::CreateEventEngine()
               : grpc_event_engine::experimental::GetDefaultEventEngine());
+  ScheduleTcmallocProcessBackgroundAction(executor.get());
   if (absl::GetFlag(FLAGS_enable_kanon)) {
     PS_LOG(INFO) << "K-Anon is enabled on the service; instantiating the "
                     "k-anon cache manager";
@@ -430,7 +451,7 @@ absl::Status RunServer() {
   }
 
   std::unique_ptr<Cache<std::string, InvokedBuyers>> invoked_buyers_cache;
-  if (absl::GetFlag(FLAGS_enable_buyer_caching)) {
+  if (config_client.GetBooleanParameter(ENABLE_BUYER_CACHING)) {
     static auto cache_stringify_func = [](const std::string& generation_id,
                                           const InvokedBuyers& invoked_buyers) {
       return absl::StrCat(
@@ -450,12 +471,25 @@ absl::Status RunServer() {
       std::unique_ptr<server_common::PublicKeyFetcherInterface>
           public_key_fetcher,
       CreateSfePublicKeyFetcher(config_client, *buyer_server_hosts_map));
+
+  std::unique_ptr<MovingMedianManager> moving_median_manager;
+  if (config_client.GetBooleanParameter(ENABLE_CHAFFING_V2)) {
+    absl::flat_hash_set<absl::string_view> string_view_key_set =
+        KeySet(*buyer_server_hosts_map);
+    absl::flat_hash_set<std::string> string_key_set(string_view_key_set.begin(),
+                                                    string_view_key_set.end());
+    moving_median_manager = std::make_unique<MovingMedianManager>(
+        string_key_set, kChaffingV2MovingMedianWindowSize,
+        kChaffingV2SamplingProbablility);
+  }
+
   SellerFrontEndService seller_frontend_service(
       &config_client,
       CreateKeyFetcherManager(config_client, std::move(public_key_fetcher)),
       CreateCryptoClient(),
       GetReportWinMapFromSellerCodeFetchConfig(code_fetch_proto),
-      std::move(k_anon_cache_manager), std::move(invoked_buyers_cache));
+      std::move(k_anon_cache_manager), std::move(invoked_buyers_cache),
+      std::move(moving_median_manager));
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
   ServerBuilder builder;
@@ -485,8 +519,9 @@ absl::Status RunServer() {
 
   if (config_client.HasParameter(HEALTHCHECK_PORT) &&
       !config_client.GetStringParameter(HEALTHCHECK_PORT).empty()) {
-    CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
-          config_client.GetStringParameter(PORT))
+    PS_CHECK(config_client.GetStringParameter(HEALTHCHECK_PORT) !=
+                 config_client.GetStringParameter(PORT),
+             SystemLogContext())
         << "Healthcheck port must be unique.";
     builder.AddListeningPort(
         absl::StrCat("0.0.0.0:",
@@ -521,7 +556,12 @@ int main(int argc, char** argv) {
   privacysandbox::server_common::SetRLimits({
       .enable_core_dumps = PS_ENABLE_CORE_DUMPS,
   });
-  absl::FailureSignalHandlerOptions options = {.call_previous_handler = true};
+  absl::FailureSignalHandlerOptions options = {
+      .call_previous_handler = true,
+      .writerfn =
+          privacy_sandbox::bidding_auction_servers::WriteFailureMessage};
+  privacy_sandbox::bidding_auction_servers::extra_signal_writerfn =
+      options.writerfn;
   absl::InstallFailureSignalHandler(options);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();
@@ -532,15 +572,17 @@ int main(int argc, char** argv) {
   cpio_options.log_option = google::scp::cpio::LogOption::kConsoleLog;
 
   if (init_config_client) {
-    CHECK(google::scp::cpio::Cpio::InitCpio(cpio_options).Successful())
+    PS_CHECK(google::scp::cpio::Cpio::InitCpio(cpio_options).Successful())
         << "Failed to initialize CPIO library.";
   }
 
-  CHECK_OK(privacy_sandbox::bidding_auction_servers::RunServer())
+  PS_CHECK_OK(privacy_sandbox::bidding_auction_servers::RunServer(),
+              privacy_sandbox::bidding_auction_servers::SystemLogContext())
       << "Failed to run server ";
 
   if (init_config_client) {
-    CHECK(google::scp::cpio::Cpio::ShutdownCpio(cpio_options).Successful())
+    PS_CHECK(google::scp::cpio::Cpio::ShutdownCpio(cpio_options).Successful(),
+             privacy_sandbox::bidding_auction_servers::SystemLogContext())
         << "Failed to shutdown CPIO library.";
   }
 

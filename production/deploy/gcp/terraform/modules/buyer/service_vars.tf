@@ -45,6 +45,7 @@ variable "region_config" {
       max_replicas          = number
       zones                 = list(string) # Use null to signify 'all zones'.
       max_rate_per_instance = number       # Use null to signify no max.
+      use_intel_amx         = bool
     })
     frontend = object({
       machine_type          = string
@@ -139,4 +140,10 @@ variable "enable_tee_container_log_redirect" {
   description = "If true, redirect the TEE container logs to the VM's serial port."
   type        = bool
   default     = true
+}
+
+variable "gcp_dns_zones_project_id" {
+  description = "The name of the Google Cloud project where DNS zones are managed."
+  type        = string
+  default     = null
 }

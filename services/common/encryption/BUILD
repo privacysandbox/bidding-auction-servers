@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("//:config.bzl", "IS_PROD_BUILD_DEFINES")
+load("//:config.bzl", "IS_PARC_BUILD_DEFINES", "IS_PROD_BUILD_DEFINES")
 
 package(
     default_visibility = [
@@ -30,22 +30,24 @@ cc_library(
     hdrs = [
         "key_fetcher_factory.h",
     ],
-    copts =
-        select(
-            {
-                "@google_privacysandbox_servers_common//:aws_instance": [
-                    "-DCLOUD_PLATFORM_AWS=1",
-                ],
-                "@google_privacysandbox_servers_common//:gcp_instance": [
-                    "-DCLOUD_PLATFORM_GCP=1",
-                ],
-                "@google_privacysandbox_servers_common//:local_instance": [
-                    "-DCLOUD_PLATFORM_LOCAL=1",
-                ],
-            },
-            no_match_error = "Please build for GCP, AWS, or local.",
-        ),
-    local_defines = IS_PROD_BUILD_DEFINES,
+    defines = select(
+        {
+            "@google_privacysandbox_servers_common//:aws_instance": [
+                "CLOUD_PLATFORM_AWS=1",
+            ],
+            "@google_privacysandbox_servers_common//:azure_instance": [
+                "CLOUD_PLATFORM_AZURE=1",
+            ],
+            "@google_privacysandbox_servers_common//:gcp_instance": [
+                "CLOUD_PLATFORM_GCP=1",
+            ],
+            "@google_privacysandbox_servers_common//:local_instance": [
+                "CLOUD_PLATFORM_LOCAL=1",
+            ],
+        },
+        no_match_error = "Please build for GCP, AWS, Azure, or local.",
+    ),
+    local_defines = IS_PROD_BUILD_DEFINES + IS_PARC_BUILD_DEFINES,
     visibility = ["//visibility:public"],
     deps = [
         "//services/common:public_key_url_allowlist",
@@ -60,6 +62,7 @@ cc_library(
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:private_key_fetcher",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher:public_key_fetcher",
         "@google_privacysandbox_servers_common//src/errors:retry",
+        "@rapidjson",
     ],
 )
 

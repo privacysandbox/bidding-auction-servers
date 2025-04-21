@@ -42,12 +42,16 @@ absl::string_view GetGenerationId(
 void SelectAuctionResultReactor::SetLoggingContextWithProtectedAuctionInput() {
   std::visit(
       [this](auto& protected_input) mutable {
-        is_sampled_for_debug_ = SetGeneratorAndSample(
-            config_client_.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
-            /*chaffing_enabled=*/false,
+        bool is_debug_eligible =
             request_->client_type() == CLIENT_TYPE_ANDROID &&
-                protected_input.enable_unlimited_egress(),
-            protected_input.generation_id(), generator_);
+            protected_input.enable_unlimited_egress();
+        rng_ =
+            CreateRng(config_client_.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
+                      /* chaffing_enabled= */ false, is_debug_eligible,
+                      protected_input.generation_id(), rng_factory_);
+        is_sampled_for_debug_ = ShouldSample(
+            config_client_.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
+            is_debug_eligible, *rng_);
 
         if (config_client_.GetBooleanParameter(CONSENT_ALL_REQUESTS)) {
           ModifyConsent(*protected_input.mutable_consented_debug_config());
@@ -103,7 +107,8 @@ void SelectAuctionResultReactor::ScoreAds(
   std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> raw_request =
       CreateTopLevelScoreAdsRawRequest(request_->auction_config(),
                                        protected_auction_input_,
-                                       component_auction_results);
+                                       component_auction_results, enable_kanon_,
+                                       kNumAllowedChromeGhostWinners);
   raw_request->set_is_sampled_for_debug(is_sampled_for_debug_);
   PS_VLOG(kOriginated, log_context_) << "\nScoreAdsRawRequest:\n"
                                      << raw_request->DebugString();
@@ -195,7 +200,10 @@ void SelectAuctionResultReactor::OnScoreAdsDone(
       }
 
       std::unique_ptr<KAnonAuctionResultData> kanon_data = nullptr;
-      if (enable_kanon_ && has_ghost_winners) {
+      if (enable_kanon_ && (has_ghost_winners || !score_ad_response->ad_score()
+                                                      .k_anon_join_candidate()
+                                                      .ad_render_url_hash()
+                                                      .empty())) {
         kanon_data =
             std::make_unique<KAnonAuctionResultData>(GetKAnonAuctionResultData(
                 has_winner ? score_ad_response->mutable_ad_score() : nullptr,
@@ -343,6 +351,12 @@ void SelectAuctionResultReactor::Execute() {
           request_, seller_domain_, request_generation_id_,
           *clients_.crypto_client_ptr_, clients_.key_fetcher_manager_,
           error_accumulator_, log_context_);
+  if ((request_->component_auction_results_size() -
+       component_auction_results.size()) > 0) {
+    LogIfError(
+        metric_context_->AccumulateMetric<metric::kSfeErrorCountByErrorCode>(
+            1, metric::kSfeInvalidComponentAuctionInputs));
+  }
 
   // No valid auction results found.
   if (component_auction_results.empty()) {
@@ -381,7 +395,8 @@ void SelectAuctionResultReactor::OnCancel() { client_contexts_.CancelAll(); }
 SelectAuctionResultReactor::SelectAuctionResultReactor(
     grpc::CallbackServerContext* context, const SelectAdRequest* request,
     SelectAdResponse* response, const ClientRegistry& clients,
-    const TrustedServersConfigClient& config_client, bool enable_cancellation,
+    const TrustedServersConfigClient& config_client,
+    const RandomNumberGeneratorFactory& rng_factory, bool enable_cancellation,
     bool enable_buyer_private_aggregate_reporting,
     int per_adtech_paapi_contributions_limit, bool enable_kanon)
     : request_context_(context),
@@ -391,13 +406,14 @@ SelectAuctionResultReactor::SelectAuctionResultReactor(
           !request_->protected_auction_ciphertext().empty()),
       clients_(clients),
       config_client_(config_client),
+      rng_factory_(rng_factory),
       log_context_({}, server_common::ConsentedDebugConfiguration(),
                    [this]() { return response_->mutable_debug_info(); }),
       error_accumulator_(&log_context_),
       enable_cancellation_(enable_cancellation),
       enable_kanon_(enable_kanon) {
   seller_domain_ = config_client_.GetStringParameter(SELLER_ORIGIN_DOMAIN);
-  CHECK_OK([this]() {
+  PS_CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::SfeContextMap()->Remove(request_));
     return absl::OkStatus();

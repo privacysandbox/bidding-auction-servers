@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES", "IS_PROD_BUILD_DEFINES")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES", "IS_PARC_BUILD_DEFINES", "IS_PROD_BUILD_DEFINES")
 
 cc_library(
     name = "runtime_flags",
@@ -108,6 +108,7 @@ cc_test(
         "//services/buyer_frontend_service/util:buyer_frontend_test_utils",
         "//services/common/chaffing:transcoding_utils",
         "//services/common/encryption:mock_crypto_client_wrapper",
+        "//services/common/random:mock_rng",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:proto_utils",
@@ -125,7 +126,7 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
-    local_defines = ENABLE_CORE_DUMPS_DEFINES + IS_PROD_BUILD_DEFINES,
+    local_defines = ENABLE_CORE_DUMPS_DEFINES + IS_PROD_BUILD_DEFINES + IS_PARC_BUILD_DEFINES,
     malloc = "@com_google_tcmalloc//tcmalloc",
     visibility = ["//visibility:public"],
     deps = [
@@ -181,6 +182,7 @@ cc_test(
         "@com_google_absl//absl/log:scoped_mock_log",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/encryption/key_fetcher/mock:mock_key_fetcher_manager",
     ],
 )

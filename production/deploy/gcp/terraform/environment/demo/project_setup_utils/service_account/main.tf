@@ -16,6 +16,7 @@
 variable "service_account_name" {
   type        = string
   description = "The name of the service account to create."
+  default     = "bidding-auction-services"
 }
 
 variable "project_id" {

@@ -49,24 +49,18 @@ BuildProtectedAudienceBidRequest(RawRequest& raw_request, bool logging_enabled,
 
 void UpdateProtectedAudienceBidRequest(
     roma_service::GenerateProtectedAudienceBidRequest& bid_request,
-    const RawRequest& raw_request, IGForBidding& ig_for_bidding) {
+    const RawRequest& raw_request, IGForBidding& ig_for_bidding,
+    int32_t multi_bid_limit) {
   // Populate interest group.
   roma_service::ProtectedAudienceInterestGroup* interest_group =
       bid_request.mutable_interest_group();
   *interest_group->mutable_name() = std::move(*ig_for_bidding.mutable_name());
-  *interest_group->mutable_trusted_bidding_signals_keys() = {
-      std::make_move_iterator(
-          ig_for_bidding.mutable_trusted_bidding_signals_keys()->begin()),
-      std::make_move_iterator(
-          ig_for_bidding.mutable_trusted_bidding_signals_keys()->end())};
-  *interest_group->mutable_ad_render_ids() = {
-      std::make_move_iterator(ig_for_bidding.mutable_ad_render_ids()->begin()),
-      std::make_move_iterator(ig_for_bidding.mutable_ad_render_ids()->end())};
-  *interest_group->mutable_ad_component_render_ids() = {
-      std::make_move_iterator(
-          ig_for_bidding.mutable_ad_component_render_ids()->begin()),
-      std::make_move_iterator(
-          ig_for_bidding.mutable_ad_component_render_ids()->end())};
+  interest_group->mutable_trusted_bidding_signals_keys()->Swap(
+      ig_for_bidding.mutable_trusted_bidding_signals_keys());
+  interest_group->mutable_ad_render_ids()->Swap(
+      ig_for_bidding.mutable_ad_render_ids());
+  interest_group->mutable_ad_component_render_ids()->Swap(
+      ig_for_bidding.mutable_ad_component_render_ids());
   *interest_group->mutable_user_bidding_signals() =
       std::move(*ig_for_bidding.mutable_user_bidding_signals());
   *bid_request.mutable_trusted_bidding_signals() =
@@ -102,64 +96,60 @@ void UpdateProtectedAudienceBidRequest(
     *browser_signals->mutable_prev_wins_ms() =
         std::move(*ig_for_bidding.mutable_browser_signals_for_bidding()
                        ->mutable_prev_wins_ms());
-    browser_signals->set_multi_bid_limit(raw_request.multi_bid_limit() > 0
-                                             ? raw_request.multi_bid_limit()
-                                             : kDefaultMultiBidLimit);
+    browser_signals->set_multi_bid_limit(multi_bid_limit);
+    browser_signals->set_for_debugging_only_in_cooldown_or_lockout(
+        raw_request.fdo_flags().in_cooldown_or_lockout());
   }
 }
 
 std::vector<AdWithBid> ParseProtectedAudienceBids(
     google::protobuf::RepeatedPtrField<roma_service::ProtectedAudienceBid>&
         bids,
-    absl::string_view ig_name, bool debug_reporting_enabled) {
+    absl::string_view ig_name, bool collect_debug_reporting_urls) {
   // Reserve memory to prevent reallocation.
   std::vector<AdWithBid> ads_with_bids;
-  if (bids.size() == 0) {
-    return ads_with_bids;
-  }
-  ads_with_bids.reserve(1);
+  ads_with_bids.reserve(bids.size());
 
-  // TODO(b/371250031): Iterate through every roma_service::ProtectedAudienceBid
-  // and build corresponding AdWithBid when K-anon is enabled.
-  roma_service::ProtectedAudienceBid& bid = bids[0];
-  AdWithBid ad_with_bid;
-  *ad_with_bid.mutable_ad()->mutable_string_value() =
-      std::move(*bid.mutable_ad());
-  ad_with_bid.set_bid(bid.bid());
-  *ad_with_bid.mutable_render() = std::move(*bid.mutable_render());
-  *ad_with_bid.mutable_ad_components() = {
-      std::make_move_iterator(bid.mutable_ad_components()->begin()),
-      std::make_move_iterator(bid.mutable_ad_components()->end())};
-  ad_with_bid.set_allow_component_auction(bid.allow_component_auction());
-  ad_with_bid.set_interest_group_name(
-      ig_name);  // Cannot move since it can be shared by multiple bids
-  ad_with_bid.set_ad_cost(bid.ad_cost());
-  if (bid.has_debug_report_urls() && debug_reporting_enabled) {
-    *(ad_with_bid.mutable_debug_report_urls()
-          ->mutable_auction_debug_win_url()) =
-        std::move(
-            *bid.mutable_debug_report_urls()->mutable_auction_debug_win_url());
-    *(ad_with_bid.mutable_debug_report_urls()
-          ->mutable_auction_debug_loss_url()) =
-        std::move(
-            *bid.mutable_debug_report_urls()->mutable_auction_debug_loss_url());
+  // Iterate through every roma_service::ProtectedAudienceBid and build
+  // corresponding AdWithBid.
+  for (roma_service::ProtectedAudienceBid& bid : bids) {
+    AdWithBid ad_with_bid;
+    *ad_with_bid.mutable_ad()->mutable_string_value() =
+        std::move(*bid.mutable_ad());
+    ad_with_bid.set_bid(bid.bid());
+    *ad_with_bid.mutable_render() = std::move(*bid.mutable_render());
+    ad_with_bid.mutable_ad_components()->Swap(bid.mutable_ad_components());
+    ad_with_bid.set_allow_component_auction(bid.allow_component_auction());
+    ad_with_bid.set_interest_group_name(
+        ig_name);  // Cannot move since it can be shared by multiple bids
+    ad_with_bid.set_ad_cost(bid.ad_cost());
+    if (bid.has_debug_report_urls() && collect_debug_reporting_urls) {
+      *(ad_with_bid.mutable_debug_report_urls()
+            ->mutable_auction_debug_win_url()) =
+          std::move(*bid.mutable_debug_report_urls()
+                         ->mutable_auction_debug_win_url());
+      *(ad_with_bid.mutable_debug_report_urls()
+            ->mutable_auction_debug_loss_url()) =
+          std::move(*bid.mutable_debug_report_urls()
+                         ->mutable_auction_debug_loss_url());
+    }
+    ad_with_bid.set_modeling_signals(bid.modeling_signals());
+    *ad_with_bid.mutable_bid_currency() =
+        std::move(*bid.mutable_bid_currency());
+    if (!bid.mutable_buyer_reporting_id()->empty()) {
+      *ad_with_bid.mutable_buyer_reporting_id() =
+          std::move(*bid.mutable_buyer_reporting_id());
+    }
+    if (!bid.mutable_buyer_and_seller_reporting_id()->empty()) {
+      *ad_with_bid.mutable_buyer_and_seller_reporting_id() =
+          std::move(*bid.mutable_buyer_and_seller_reporting_id());
+    }
+    if (!bid.mutable_selected_buyer_and_seller_reporting_id()->empty()) {
+      *ad_with_bid.mutable_selected_buyer_and_seller_reporting_id() =
+          std::move(*bid.mutable_selected_buyer_and_seller_reporting_id());
+    }
+    ads_with_bids.emplace_back(std::move(ad_with_bid));
   }
-  ad_with_bid.set_modeling_signals(bid.modeling_signals());
-  *ad_with_bid.mutable_bid_currency() = std::move(*bid.mutable_bid_currency());
-  if (!bid.mutable_buyer_reporting_id()->empty()) {
-    *ad_with_bid.mutable_buyer_reporting_id() =
-        std::move(*bid.mutable_buyer_reporting_id());
-  }
-  if (!bid.mutable_buyer_and_seller_reporting_id()->empty()) {
-    *ad_with_bid.mutable_buyer_and_seller_reporting_id() =
-        std::move(*bid.mutable_buyer_and_seller_reporting_id());
-  }
-  if (!bid.mutable_selected_buyer_and_seller_reporting_id()->empty()) {
-    *ad_with_bid.mutable_selected_buyer_and_seller_reporting_id() =
-        std::move(*bid.mutable_selected_buyer_and_seller_reporting_id());
-  }
-  ads_with_bids.emplace_back(std::move(ad_with_bid));
-
   return ads_with_bids;
 }
 
@@ -227,20 +217,36 @@ GenerateBidsBinaryReactor::GenerateBidsBinaryReactor(
                             OnAllBidsDone(any_successful_bid);
                           }),
       roma_timeout_duration_(StringMsToAbslDuration(roma_timeout_ms_)),
+      multi_bid_limit_(raw_request_.multi_bid_limit() > 0
+                           ? raw_request_.multi_bid_limit()
+                           : kDefaultMultiBidLimit),
       auction_scope_(
           raw_request_.top_level_seller().empty()
               ? AuctionScope::AUCTION_SCOPE_SINGLE_SELLER
               : AuctionScope::AUCTION_SCOPE_DEVICE_COMPONENT_MULTI_SELLER) {
-  CHECK_OK([this]() {
-    PS_ASSIGN_OR_RETURN(metric_context_,
-                        metric::BiddingContextMap()->Remove(request_));
-    if (log_context_.is_consented()) {
-      metric_context_->SetConsented(raw_request_.log_context().generation_id());
-    } else if (log_context_.is_prod_debug()) {
-      metric_context_->SetConsented(kProdDebug.data());
-    }
-    return absl::OkStatus();
-  }()) << "BiddingContextMap()->Get(request) should have been called";
+  PS_CHECK_OK(
+      [this]() {
+        PS_ASSIGN_OR_RETURN(metric_context_,
+                            metric::BiddingContextMap()->Remove(request_));
+        if (log_context_.is_consented()) {
+          metric_context_->SetConsented(
+              raw_request_.log_context().generation_id());
+        } else if (log_context_.is_prod_debug()) {
+          metric_context_->SetConsented(kProdDebug.data());
+        }
+        return absl::OkStatus();
+      }(),
+      log_context_)
+      << "BiddingContextMap()->Get(request) should have been called";
+  debug_urls_validation_config_ = {
+      .max_allowed_size_debug_url_chars =
+          runtime_config.max_allowed_size_debug_url_bytes,
+      .max_allowed_size_all_debug_urls_chars =
+          kBytesMultiplyer * runtime_config.max_allowed_size_all_debug_urls_kb,
+      .enable_sampled_debug_reporting =
+          raw_request_.fdo_flags().enable_sampled_debug_reporting(),
+      .debug_reporting_sampling_upper_bound =
+          runtime_config.debug_reporting_sampling_upper_bound};
 }
 
 void GenerateBidsBinaryReactor::Execute() {
@@ -289,16 +295,19 @@ void GenerateBidsBinaryReactor::ExecuteForInterestGroup(
   // Populate bid request for given interest group.
   UpdateProtectedAudienceBidRequest(
       bid_request, raw_request_,
-      *raw_request_.mutable_interest_group_for_bidding(ig_index));
+      *raw_request_.mutable_interest_group_for_bidding(ig_index),
+      multi_bid_limit_);
   const std::string ig_name = bid_request.interest_group().name();
   const bool logging_enabled = bid_request.server_metadata().logging_enabled();
-  const bool debug_reporting_enabled =
-      bid_request.server_metadata().debug_reporting_enabled();
+  const bool collect_debug_reporting_urls =
+      bid_request.server_metadata().debug_reporting_enabled() &&
+      !(raw_request_.fdo_flags().enable_sampled_debug_reporting() &&
+        raw_request_.fdo_flags().in_cooldown_or_lockout());
   // Make asynchronous execute call using the BYOB client.
   PS_VLOG(kNoisyInfo) << "Starting UDF execution for IG: " << ig_name;
   absl::Status execute_status = byob_client_->Execute(
       bid_request, roma_timeout_duration_,
-      [this, ig_index, ig_name, logging_enabled, debug_reporting_enabled](
+      [this, ig_index, ig_name, logging_enabled, collect_debug_reporting_urls](
           absl::StatusOr<roma_service::GenerateProtectedAudienceBidResponse>
               bid_response_status) mutable {
         // Error response.
@@ -336,7 +345,7 @@ void GenerateBidsBinaryReactor::ExecuteForInterestGroup(
         if (!bid_response.IsInitialized() || bid_response.bids_size() == 0) {
           PS_LOG(INFO, log_context_)
               << "Execution of GenerateProtectedAudienceBid request for IG "
-              << ig_name << "returned an empty response";
+              << ig_name << " returned an empty response";
           async_task_tracker_.TaskCompleted(TaskStatus::EMPTY_RESPONSE);
           return;
         }
@@ -348,8 +357,16 @@ void GenerateBidsBinaryReactor::ExecuteForInterestGroup(
         }
         // Populate list of AdsWithBids for this interest group from the bid
         // response returned by UDF.
-        ads_with_bids_by_ig_[ig_index] = ParseProtectedAudienceBids(
-            *bid_response.mutable_bids(), ig_name, debug_reporting_enabled);
+        if (bid_response.bids_size() > multi_bid_limit_) {
+          PS_LOG(ERROR, log_context_)
+              << "Execution of GenerateProtectedAudienceBid request for IG "
+              << ig_name
+              << " returned more bids than the allowed multi_bid_limit";
+        } else if (bid_response.bids_size() > 0) {
+          ads_with_bids_by_ig_[ig_index] =
+              ParseProtectedAudienceBids(*bid_response.mutable_bids(), ig_name,
+                                         collect_debug_reporting_urls);
+        }
         // Print log messages if present if logging enabled.
         if (logging_enabled && bid_response.has_log_messages()) {
           HandleLogMessages(ig_name, bid_response.log_messages(), log_context_);
@@ -426,14 +443,9 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
           ++rejected_component_bid_count;
         }
       } else {
-        DebugUrlsSize debug_urls_size = TrimAndReturnDebugUrlsSize(
-            ad_with_bid, max_allowed_size_debug_url_chars_,
-            max_allowed_size_all_debug_urls_chars_, total_debug_urls_chars,
-            log_context_);
-        total_debug_urls_count += (debug_urls_size.win_url_chars > 0) +
-                                  (debug_urls_size.loss_url_chars > 0);
-        total_debug_urls_chars +=
-            debug_urls_size.win_url_chars + debug_urls_size.loss_url_chars;
+        total_debug_urls_count += ValidateBuyerDebugUrls(
+            ad_with_bid, total_debug_urls_chars, debug_urls_validation_config_,
+            log_context_, metric_context_.get());
         *raw_response_.add_bids() = std::move(ad_with_bid);
       }
     }
@@ -454,8 +466,8 @@ void GenerateBidsBinaryReactor::OnAllBidsDone(bool any_successful_bids) {
         metric_context_->LogUpDownCounter<metric::kBiddingBidRejectedCount>(
             rejected_component_bid_count));
   }
-  LogIfError(metric_context_->LogUpDownCounter<metric::kBiddingDebugUrlCount>(
-      total_debug_urls_count));
+  LogIfError(metric_context_->AccumulateMetric<metric::kBiddingDebugUrlCount>(
+      total_debug_urls_count, kBuyerDebugUrlSentToSeller));
   LogIfError(metric_context_->LogHistogram<metric::kBiddingDebugUrlsSizeBytes>(
       static_cast<double>(total_debug_urls_chars)));
   EncryptResponseAndFinish(grpc::Status::OK);

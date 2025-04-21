@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES", "IS_PROD_BUILD_DEFINES")
+load("//:config.bzl", "ENABLE_CORE_DUMPS_DEFINES", "IS_PARC_BUILD_DEFINES", "IS_PROD_BUILD_DEFINES")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -56,6 +56,7 @@ cc_library(
         "//api:k_anon_query_cc_proto",
         "//services/common:aliases",
         "//services/common:feature_flags",
+        "//services/common/chaffing:moving_median_manager",
         "//services/common/clients/auction_server:async_client",
         "//services/common/clients/buyer_frontend_server:buyer_frontend_async_client",
         "//services/common/clients/buyer_frontend_server:buyer_frontend_async_client_factory",
@@ -68,6 +69,7 @@ cc_library(
         "//services/common/constants:user_error_strings",
         "//services/common/loggers:build_input_process_response_benchmarking_logger",
         "//services/common/metric:server_definition",
+        "//services/common/random:rng",
         "//services/common/reporters:async_reporter",
         "//services/common/test/utils:cbor_test_utils",
         "//services/common/util:async_task_tracker",
@@ -90,6 +92,7 @@ cc_library(
         "//services/seller_frontend_service/private_aggregation:private_aggregation_helper",
         "//services/seller_frontend_service/providers:seller_frontend_providers",
         "//services/seller_frontend_service/util:buyer_input_proto_utils",
+        "//services/seller_frontend_service/util:chaffing_utils",
         "//services/seller_frontend_service/util:encryption_util",
         "//services/seller_frontend_service/util:framing_utils",
         "//services/seller_frontend_service/util:key_fetcher_utils",
@@ -139,16 +142,19 @@ cc_binary(
     linkopts = [
         "-Wl,-rpath,\\$$ORIGIN/../lib",
     ],
-    local_defines = ENABLE_CORE_DUMPS_DEFINES + IS_PROD_BUILD_DEFINES,
+    local_defines = ENABLE_CORE_DUMPS_DEFINES + IS_PROD_BUILD_DEFINES + IS_PARC_BUILD_DEFINES,
     malloc = "@com_google_tcmalloc//tcmalloc",
     deps = [
         ":seller_frontend_service",
         "//services/auction_service/udf_fetcher:auction_code_fetch_config_cc_proto",
         "//services/common:aliases",
+        "//services/common/chaffing:moving_median_manager",
         "//services/common/clients/config:config_client_util",
+        "//services/common/clients/config:parc_parameter_client",
         "//services/common/encryption:crypto_client_factory",
         "//services/common/encryption:key_fetcher_factory",
         "//services/common/telemetry:configure_telemetry",
+        "//services/common/util:map_utils",
         "//services/common/util:signal_handler",
         "//services/common/util:tcmalloc_utils",
         "//services/seller_frontend_service:report_win_map",
@@ -181,7 +187,9 @@ cc_test(
         "//api:bidding_auction_servers_cc_proto",
         "//api:bidding_auction_servers_cc_proto_builder",
         "//services/common:feature_flags",
+        "//services/common/chaffing:mock_moving_median_manager",
         "//services/common/private_aggregation:private_aggregation_post_auction_util",
+        "//services/common/random:mock_rng",
         "//services/common/test:mocks",
         "//services/common/test:random",
         "//services/common/test/utils:test_init",

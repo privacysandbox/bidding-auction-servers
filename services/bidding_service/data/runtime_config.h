@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "services/bidding_service/constants.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -80,6 +80,10 @@ struct BiddingServiceRuntimeConfig {
   bool use_per_request_schema_versioning = false;
   std::string default_egress_schema_version = kDefaultEgressSchemaId;
   std::string default_unlimited_egress_schema_version = kDefaultEgressSchemaId;
+
+  // Each debug url has a 1/n chance of being selected when sampling is enabled.
+  // This flag defines the value of n.
+  int debug_reporting_sampling_upper_bound = 1000;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

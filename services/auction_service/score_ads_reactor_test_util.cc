@@ -108,6 +108,8 @@ ScoreAdsRequest::ScoreAdsRawRequest BuildRawRequest(
   output.set_scoring_signals(options.scoring_signals);
   output.set_publisher_hostname(options.publisher_hostname);
   output.set_enable_debug_reporting(options.enable_debug_reporting);
+  output.mutable_fdo_flags()->set_enable_sampled_debug_reporting(
+      options.enable_sampled_debug_reporting);
   output.set_seller_currency(options.seller_currency);
   output.set_top_level_seller(options.top_level_seller);
   output.set_seller(kTestSeller);
@@ -135,6 +137,8 @@ ScoreAdsRequest::ScoreAdsRawRequest BuildProtectedAppSignalsRawRequest(
   output.set_scoring_signals(options.scoring_signals);
   output.set_publisher_hostname(options.publisher_hostname);
   output.set_enable_debug_reporting(options.enable_debug_reporting);
+  output.mutable_fdo_flags()->set_enable_sampled_debug_reporting(
+      options.enable_sampled_debug_reporting);
   output.set_seller_currency(options.seller_currency);
   output.set_top_level_seller(options.top_level_seller);
   output.set_seller(kTestSeller);

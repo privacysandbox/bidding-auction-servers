@@ -25,6 +25,7 @@
 #include "absl/flags/flag.h"
 #include "api/bidding_auction_servers.grpc.pb.h"
 #include "services/common/aliases.h"
+#include "services/common/chaffing/moving_median_manager.h"
 #include "services/common/clients/auction_server/scoring_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client.h"
 #include "services/common/clients/buyer_frontend_server/buyer_frontend_async_client_factory.h"
@@ -50,7 +51,7 @@ static inline absl::flat_hash_map<std::string, server_common::CloudPlatform>
 ParseSellerCloudPlarformMap(absl::string_view seller_platforms_map_json) {
   auto seller_cloud_platform_parse_status =
       ParseSellerToCloudPlatformInMap(seller_platforms_map_json);
-  CHECK_OK(seller_cloud_platform_parse_status);
+  PS_CHECK_OK(seller_cloud_platform_parse_status, SystemLogContext());
   return *seller_cloud_platform_parse_status;
 }
 
@@ -68,6 +69,7 @@ struct ClientRegistry {
   std::unique_ptr<AsyncReporter> reporting;
   std::unique_ptr<KAnonCacheManagerInterface> k_anon_cache_manager;
   std::unique_ptr<InvokedBuyersCache> invoked_buyers_cache;
+  std::unique_ptr<MovingMedianManager> moving_median_manager;
 };
 
 // SellerFrontEndService implements business logic to orchestrate requests
@@ -85,7 +87,8 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
       ReportWinMap report_win_map,
       std::unique_ptr<KAnonCacheManagerInterface> k_anon_cache_manager =
           nullptr,
-      std::unique_ptr<InvokedBuyersCache> invoked_buyers_cache = nullptr)
+      std::unique_ptr<InvokedBuyersCache> invoked_buyers_cache = nullptr,
+      std::unique_ptr<MovingMedianManager> moving_median_manager = nullptr)
       : config_client_(*config_client),
         key_fetcher_manager_(std::move(key_fetcher_manager)),
         crypto_client_(std::move(crypto_client)),
@@ -118,7 +121,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
           absl::StatusOr<absl::flat_hash_map<std::string, BuyerServiceEndpoint>>
               ig_owner_to_bfe_domain_map = ParseIgOwnerToBfeDomainMap(
                   config_client_.GetStringParameter(BUYER_SERVER_HOSTS));
-          CHECK_OK(ig_owner_to_bfe_domain_map);
+          PS_CHECK_OK(ig_owner_to_bfe_domain_map, SystemLogContext());
           return std::make_unique<BuyerFrontEndAsyncClientFactory>(
               *ig_owner_to_bfe_domain_map, key_fetcher_manager_.get(),
               crypto_client_.get(),
@@ -157,7 +160,8 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
             std::make_unique<AsyncReporter>(
                 std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get())),
             std::move(k_anon_cache_manager),
-        },
+            std::move(invoked_buyers_cache),
+            std::move(moving_median_manager)},
         enable_cancellation_(absl::GetFlag(FLAGS_enable_cancellation)),
         enable_kanon_(absl::GetFlag(FLAGS_enable_kanon)),
         report_win_map_(std::move(report_win_map)),
@@ -249,6 +253,7 @@ class SellerFrontEndService final : public SellerFrontEnd::CallbackService {
   ReportWinMap report_win_map_;
   const bool enable_buyer_private_aggregate_reporting_;
   int per_adtech_paapi_contributions_limit_;
+  RandomNumberGeneratorFactory rng_factory_;
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

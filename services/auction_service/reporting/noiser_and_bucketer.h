@@ -11,18 +11,14 @@
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
+
 #ifndef SERVICES_AUCTION_SERVICE_REPORTING_NOISER_AND_BUCKETER_H_
 #define SERVICES_AUCTION_SERVICE_REPORTING_NOISER_AND_BUCKETER_H_
 
-#include <cstdint>
-
-#include "absl/random/random.h"
 #include "absl/status/statusor.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
-// Generates a 64 bit unsigned random integer within [0,max).
-absl::StatusOr<uint64_t> RandGenerator(uint64_t max);
 uint8_t BucketJoinCount(int32_t join_count);
 uint8_t BucketRecency(long recency);
 
@@ -41,6 +37,7 @@ absl::StatusOr<uint8_t> NoiseAndBucketJoinCount(int32_t join_count);
 // noise.
 // Returns values in the range 0-31, inclusive.
 absl::StatusOr<uint8_t> NoiseAndBucketRecency(long recency);
+
 }  // namespace privacy_sandbox::bidding_auction_servers
 
 #endif  // SERVICES_AUCTION_SERVICE_REPORTING_NOISER_AND_BUCKETER_H_

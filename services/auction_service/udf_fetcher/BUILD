@@ -139,6 +139,7 @@ cc_library(
         "//services/auction_service/code_wrapper:seller_udf_wrapper",
         "//services/auction_service/data:runtime_config",
         "//services/common/clients/code_dispatcher:v8_dispatcher",
+        "//services/common/data_fetch:blob_storage_client",
         "//services/common/data_fetch:periodic_bucket_code_fetcher",
         "//services/common/data_fetch:periodic_code_fetcher",
         "//services/common/data_fetch:version_util",

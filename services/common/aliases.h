@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "absl/strings/string_view.h"
-#include "services/seller_frontend_service/cache/cache.h"
+#include "services/common/cache/cache.h"
 #include "services/seller_frontend_service/util/chaffing_utils.h"
 
 namespace privacy_sandbox::bidding_auction_servers {

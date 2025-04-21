@@ -37,7 +37,7 @@ inline GenerateBidsReactorFactory GetProtectedAudienceByobReactorFactory(
              server_common::KeyFetcherManagerInterface* key_fetcher_manager,
              CryptoClientWrapperInterface* crypto_client,
              const BiddingServiceRuntimeConfig& runtime_config) {
-    CHECK(runtime_config.is_protected_audience_enabled);
+    PS_CHECK(runtime_config.is_protected_audience_enabled, SystemLogContext());
     auto generate_bids_binary_reactor =
         std::make_unique<GenerateBidsBinaryReactor>(
             context, byob_client, request, response, key_fetcher_manager,

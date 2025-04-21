@@ -153,13 +153,14 @@ absl::StatusOr<rapidjson::Document> AddComponentSignals(
 
 // Create bid metadata json string but doesn't close the json object
 // for adding more fields.
-std::string MakeOpenBidMetadataJson(
+std::string StartMakingBidMetadataJson(
     absl::string_view publisher_hostname,
     absl::string_view interest_group_owner, absl::string_view render_url,
     const google::protobuf::RepeatedPtrField<std::string>&
         ad_component_render_urls,
     absl::string_view bid_currency, const uint32_t seller_data_version,
-    ReportingIdsParamForBidMetadata reporting_ids = {}) {
+    ReportingIdsParamForBidMetadata reporting_ids = {},
+    std::optional<ForDebuggingOnlyFlags> fdo_flags = std::nullopt) {
   std::string bid_metadata = "{";
   if (!interest_group_owner.empty()) {
     absl::StrAppend(&bid_metadata, R"JSON(")JSON", kIGOwnerPropertyForScoreAd,
@@ -213,40 +214,36 @@ std::string MakeOpenBidMetadataJson(
         reporting_ids.selected_buyer_and_seller_reporting_id.value(),
         R"JSON(",)JSON");
   }
+  if (fdo_flags) {
+    absl::StrAppend(&bid_metadata, R"JSON(")JSON",
+                    kForDebuggingOnlyInCooldownOrLockout, R"JSON(":)JSON",
+                    fdo_flags->in_cooldown_or_lockout() ? "true" : "false",
+                    R"JSON(,)JSON");
+  }
   return bid_metadata;
 }
 
-// Gets the debug reporting URL (either win or loss URL) if the URL will not
-// exceed the caps set within here.
+// Gets the debug reporting url (either win or loss url) if its size does not
+// exceed the max allowed size per url.
 inline absl::string_view GetDebugUrlIfInLimit(
     const std::string& url_type, const rapidjson::Value& debug_reporting_urls,
-    int max_allowed_size_debug_url_chars,
-    int max_allowed_size_all_debug_urls_chars,
-    int current_all_debug_urls_chars) {
+    int max_allowed_size_debug_url_chars) {
   auto debug_url_it = debug_reporting_urls.FindMember(url_type.c_str());
   if (debug_url_it == debug_reporting_urls.MemberEnd() ||
       !debug_url_it->value.IsString()) {
     return "";
   }
-
   absl::string_view debug_url = debug_url_it->value.GetString();
   int url_length = debug_url.length();
-  if (url_length <= max_allowed_size_debug_url_chars &&
-      url_length + current_all_debug_urls_chars <=
-          max_allowed_size_all_debug_urls_chars) {
-    PS_VLOG(8) << "Included the " << url_type << ": " << debug_url
-               << " with length: " << url_length
-               << ", previous total length: " << current_all_debug_urls_chars
-               << ", new total length: "
-               << current_all_debug_urls_chars + url_length;
+  if (url_length <= max_allowed_size_debug_url_chars) {
+    PS_VLOG(8) << "Included " << url_type << ": " << debug_url
+               << " with length: " << url_length;
     return debug_url;
-  } else {
-    PS_VLOG(8) << "Skipping " << url_type << " of length: " << url_length
-               << ", since it will cause the new running total to become: "
-               << current_all_debug_urls_chars + url_length
-               << " (which surpasses the limit: "
-               << max_allowed_size_all_debug_urls_chars << ")";
   }
+  // TODO(b/399172783): Add debug_url_failure_count metric to indicate status as
+  // kDebugUrlRejectedForExceedingSize.
+  PS_VLOG(8) << "Skipped " << url_type << ": " << debug_url
+             << " with length: " << url_length;
   return "";
 }
 
@@ -286,11 +283,12 @@ std::string MakeBidMetadata(
         ad_component_render_urls,
     absl::string_view top_level_seller, absl::string_view bid_currency,
     const uint32_t seller_data_version,
-    ReportingIdsParamForBidMetadata reporting_ids) {
-  std::string bid_metadata =
-      MakeOpenBidMetadataJson(publisher_hostname, interest_group_owner,
-                              render_url, ad_component_render_urls,
-                              bid_currency, seller_data_version, reporting_ids);
+    ReportingIdsParamForBidMetadata reporting_ids,
+    std::optional<ForDebuggingOnlyFlags> fdo_flags) {
+  std::string bid_metadata = StartMakingBidMetadataJson(
+      publisher_hostname, interest_group_owner, render_url,
+      ad_component_render_urls, bid_currency, seller_data_version,
+      reporting_ids, std::move(fdo_flags));
   // Only add top level seller to bid metadata if it's non empty.
   if (!top_level_seller.empty()) {
     absl::StrAppend(&bid_metadata, R"JSON(")JSON",
@@ -309,7 +307,7 @@ std::string MakeBidMetadataForTopLevelAuction(
         ad_component_render_urls,
     absl::string_view component_seller, absl::string_view bid_currency,
     const uint32_t seller_data_version) {
-  std::string bid_metadata = MakeOpenBidMetadataJson(
+  std::string bid_metadata = StartMakingBidMetadataJson(
       publisher_hostname, interest_group_owner, render_url,
       ad_component_render_urls, bid_currency, seller_data_version);
   absl::StrAppend(&bid_metadata, R"JSON(")JSON",
@@ -502,9 +500,7 @@ ParseAdRejectionReason(const rapidjson::Document& score_ad_resp,
 
 absl::StatusOr<ScoreAdsResponse::AdScore> ScoreAdResponseJsonToProto(
     const rapidjson::Document& score_ad_resp,
-    int max_allowed_size_debug_url_chars,
-    int64_t max_allowed_size_all_debug_urls_chars,
-    bool device_component_auction, int64_t& current_all_debug_urls_chars) {
+    int max_allowed_size_debug_url_chars, bool device_component_auction) {
   ScoreAdsResponse::AdScore score_ads_response;
   // Default value.
   score_ads_response.set_allow_component_auction(false);
@@ -589,27 +585,21 @@ absl::StatusOr<ScoreAdsResponse::AdScore> ScoreAdResponseJsonToProto(
     return score_ads_response;
   }
 
+  // Populate debug urls in response after checking them against the max allowed
+  // size per url. The check for max allowed total size of all urls will be
+  // performed in the reactor callback, only for cases where debug urls are sent
+  // back to SFE (component auction winner / sampling).
   DebugReportUrls debug_report_urls;
   const auto& debug_reporting_urls = debug_report_urls_itr->value;
-
-  absl::string_view win_debug_url = GetDebugUrlIfInLimit(
+  debug_report_urls.set_auction_debug_win_url(GetDebugUrlIfInLimit(
       kAuctionDebugWinUrlPropertyForScoreAd, debug_reporting_urls,
-      max_allowed_size_debug_url_chars, max_allowed_size_all_debug_urls_chars,
-      current_all_debug_urls_chars);
-  if (!win_debug_url.empty()) {
-    debug_report_urls.set_auction_debug_win_url(win_debug_url);
-    current_all_debug_urls_chars += win_debug_url.size();
-  }
-  absl::string_view loss_debug_url = GetDebugUrlIfInLimit(
+      max_allowed_size_debug_url_chars));
+  debug_report_urls.set_auction_debug_loss_url(GetDebugUrlIfInLimit(
       kAuctionDebugLossUrlPropertyForScoreAd, debug_reporting_urls,
-      max_allowed_size_debug_url_chars, max_allowed_size_all_debug_urls_chars,
-      current_all_debug_urls_chars);
-  if (!loss_debug_url.empty()) {
-    debug_report_urls.set_auction_debug_loss_url(loss_debug_url);
-    current_all_debug_urls_chars += loss_debug_url.size();
-  }
+      max_allowed_size_debug_url_chars));
   *score_ads_response.mutable_debug_report_urls() =
       std::move(debug_report_urls);
+
   return score_ads_response;
 }
 
@@ -697,6 +687,23 @@ std::unique_ptr<AdWithBidMetadata> MapKAnonGhostWinnerToAdWithBidMetadata(
   ad->set_interest_group_owner(owner);
   ad->set_allocated_bid_currency(ghost_winner.release_bid_currency());
   ad->set_k_anon_status(false);
+  return ad;
+}
+
+std::unique_ptr<
+    ScoreAdsRequest::ScoreAdsRawRequest::ProtectedAppSignalsAdWithBidMetadata>
+MapKAnonGhostWinnerToProtectedAppSignalsAdWithBidMetadata(
+    absl::string_view owner,
+    AuctionResult::KAnonGhostWinner::GhostWinnerForTopLevelAuction&
+        ghost_winner) {
+  auto ad = std::make_unique<ProtectedAppSignalsAdWithBidMetadata>();
+  ad->set_bid(ghost_winner.modified_bid());
+  ad->set_allocated_render(ghost_winner.release_ad_render_url());
+  ad->set_owner(owner);
+  ad->set_allocated_bid_currency(ghost_winner.release_bid_currency());
+  ad->set_k_anon_status(false);
+  // Do not set egress payload since that will be included
+  // in the component reporting signals.
   return ad;
 }
 

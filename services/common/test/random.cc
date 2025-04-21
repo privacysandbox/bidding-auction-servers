@@ -856,8 +856,8 @@ BuyerInputForBidding MakeARandomBuyerInputForBidding() {
   std::unique_ptr<BuyerInput::InterestGroup> ig =
       MakeARandomInterestGroup(/*for_android=*/false);
   BuyerInputForBidding::InterestGroupForBidding ig_for_bidding =
-      ToInterestGroupForBidding(*ig.get());
-  *buyer_input.mutable_interest_groups()->Add() = ig_for_bidding;
+      ToInterestGroupForBidding(std::move(*ig));
+  *buyer_input.mutable_interest_groups()->Add() = std::move(ig_for_bidding);
   return buyer_input;
 }
 

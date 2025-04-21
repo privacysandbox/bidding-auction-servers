@@ -28,6 +28,7 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "//services/common/loggers:request_log_context",
         "@com_google_absl//absl/status:statusor",
         "@rapidjson",
     ],
@@ -195,6 +196,30 @@ cc_library(
 )
 
 cc_library(
+    name = "random_number_generator",
+    srcs = ["random_number_generator.cc"],
+    hdrs = [
+        "random_number_generator.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/status:statusor",
+        "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
+    ],
+)
+
+cc_test(
+    name = "random_number_generator_test",
+    size = "small",
+    srcs = ["random_number_generator_test.cc"],
+    deps = [
+        ":random_number_generator",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "reporting_util",
     srcs = ["reporting_util.cc"],
     hdrs = [
@@ -205,7 +230,9 @@ cc_library(
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/loggers:request_log_context",
+        "//services/common/reporters:async_reporter",
         "//services/common/util:json_util",
+        "//services/common/util:random_number_generator",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
@@ -439,8 +466,11 @@ cc_library(
         "tcmalloc_utils.h",
     ],
     deps = [
+        ":event",
+        ":event_base",
         "//services/common/loggers:request_log_context",
         "@com_google_tcmalloc//tcmalloc:malloc_extension",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
     ],
 )
 
@@ -591,5 +621,69 @@ cc_library(
         ":constants",
         "@google_privacysandbox_servers_common//src/logger:request_context_logger",
         "@libevent//:event",
+    ],
+)
+
+cc_library(
+    name = "blob_storage_client_utils",
+    srcs = select({
+        "//:parc_enabled": ["blob_storage_client_parc_utils.cc"],
+        "//conditions:default": ["blob_storage_client_cpio_utils.cc"],
+    }),
+    hdrs = ["blob_storage_client_utils.h"],
+    deps = [
+        "//services/common/clients/config:parc_service_grpc_proto",
+        "//services/common/constants:common_service_flags",
+        "//services/common/data_fetch:blob_storage_client",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/strings",
+        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
+    ],
+)
+
+cc_library(
+    name = "map_utils",
+    hdrs = [
+        "map_utils.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+    ],
+)
+
+cc_test(
+    name = "map_utils_test",
+    size = "small",
+    srcs = [
+        "map_utils_test.cc",
+    ],
+    deps = [
+        ":map_utils",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "status_utils",
+    hdrs = [
+        "status_utils.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+cc_test(
+    name = "status_utils_test",
+    size = "small",
+    srcs = [
+        "status_utils_test.cc",
+    ],
+    deps = [
+        ":status_utils",
+        # "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
     ],
 )

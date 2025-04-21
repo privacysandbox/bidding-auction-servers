@@ -136,6 +136,40 @@ cc_test(
 )
 
 cc_library(
+    name = "tensorflow_proto_parser",
+    srcs = ["tensorflow_proto_parser.cc"],
+    hdrs = [
+        "tensorflow_proto_parser.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@inference_common//proto:inference_payload_cc_proto",
+        "@inference_common//proto:inference_sidecar_cc_proto",
+        "@inference_common//utils:error",
+        "@inference_common//utils:request_proto_parser",
+        "@org_tensorflow//tensorflow/core:framework",
+    ],
+)
+
+cc_test(
+    name = "tensorflow_proto_parser_test",
+    size = "small",
+    srcs = ["tensorflow_proto_parser_test.cc"],
+    deps = [
+        ":tensorflow_proto_parser",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@inference_common//proto:inference_payload_cc_proto",
+        "@inference_common//proto:inference_sidecar_cc_proto",
+    ],
+)
+
+cc_library(
     name = "tensorflow",
     srcs = ["tensorflow.cc"],
     hdrs = ["tensorflow.h"],

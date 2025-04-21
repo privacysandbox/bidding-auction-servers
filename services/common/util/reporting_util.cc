@@ -194,6 +194,38 @@ PostAuctionSignals GeneratePostAuctionSignals(
           made_highest_scoring_other_bid};
 }
 
+void SendDebugReportingPing(const AsyncReporter& async_reporter,
+                            absl::string_view debug_url,
+                            absl::string_view ig_owner,
+                            absl::string_view ig_name, bool is_winning_ig,
+                            const PostAuctionSignals& post_auction_signals) {
+  if (debug_url.empty()) {
+    return;
+  }
+  absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)> done_callback =
+      [](const absl::StatusOr<absl::string_view>& result) {};
+  if (server_common::log::PS_VLOG_IS_ON(5)) {
+    done_callback =
+        [ig_owner,
+         ig_name](const absl::StatusOr<absl::string_view>& result) mutable {
+          if (result.ok()) {
+            PS_VLOG(5) << "Performed debug reporting for: " << ig_owner
+                       << ", interest_group: " << ig_name;
+          } else {
+            PS_VLOG(5) << "Error while performing debug reporting for: "
+                       << ig_owner << ", interest_group: " << ig_name
+                       << ", status:" << result.status();
+          }
+        };
+  }
+  const HTTPRequest http_request = CreateDebugReportingHttpRequest(
+      debug_url,
+      GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
+                                         post_auction_signals),
+      is_winning_ig);
+  async_reporter.DoReport(http_request, std::move(done_callback));
+}
+
 HTTPRequest CreateDebugReportingHttpRequest(
     absl::string_view url, const DebugReportingPlaceholder& placeholder_data,
     bool is_winning_interest_group) {

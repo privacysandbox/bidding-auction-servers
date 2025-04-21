@@ -58,6 +58,8 @@ cc_library(
     deps = [
         "//api:bidding_auction_servers_cc_proto",
         "//services/common/loggers:request_log_context",
+        "//services/common/metric:server_definition",
+        "//services/common/util:reporting_util",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
     ],

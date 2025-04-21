@@ -76,6 +76,10 @@ ABSL_FLAG(std::optional<bool>, enable_debug_reporting, std::nullopt,
           "Set to true to send a request to an SFE server with "
           "debug reporting enabled for this request");
 
+ABSL_FLAG(std::optional<bool>, enable_sampled_debug_reporting, std::nullopt,
+          "Set to true to send a request to an SFE server with "
+          "sampled debug reporting enabled for this request");
+
 ABSL_FLAG(std::optional<bool>, enable_debug_info, std::nullopt,
           "Set to true to send a request to an SFE server with "
           "DebugInfo enabled for this request");

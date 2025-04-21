@@ -14,30 +14,34 @@
  * limitations under the License.
  */
 
-#ifndef SERVICES_COMMON_CODE_FETCH_PERIODIC_BUCKET_FETCHER_H_
-#define SERVICES_COMMON_CODE_FETCH_PERIODIC_BUCKET_FETCHER_H_
+#ifndef SERVICES_COMMON_DATA_FETCH_PERIODIC_BUCKET_FETCHER_H_
+#define SERVICES_COMMON_DATA_FETCH_PERIODIC_BUCKET_FETCHER_H_
 
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
+#include <apis/privacysandbox/apis/parc/v0/parc_service.grpc.pb.h>
+#include <apis/privacysandbox/apis/parc/v0/parc_service.pb.h>
+
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "services/common/data_fetch/fetcher_interface.h"
+#include "services/common/data_fetch/periodic_bucket_fetcher_metrics.h"
 #include "src/concurrent/executor.h"
-#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
 class PeriodicBucketFetcher : public FetcherInterface {
  public:
-  explicit PeriodicBucketFetcher(
-      absl::string_view bucket_name, absl::Duration fetch_period_ms,
-      server_common::Executor* executor,
-      google::scp::cpio::BlobStorageClientInterface* blob_storage_client);
+  explicit PeriodicBucketFetcher(absl::string_view bucket_name,
+                                 absl::Duration fetch_period_ms,
+                                 server_common::Executor* executor,
+                                 BlobStorageClient* blob_storage_client);
 
   ~PeriodicBucketFetcher() { End(); }
 
@@ -53,30 +57,29 @@ class PeriodicBucketFetcher : public FetcherInterface {
   void End() override;
 
  protected:
-  // Callback that handles a GetBlob fetch result.
+  absl::string_view GetBucketName() { return bucket_name_; }
+
+  // Callback that handles a GetBlob fetch result when fetch using PARC.
+  virtual absl::Status OnFetch(
+      const privacysandbox::apis::parc::v0::GetBlobRequest blob_request,
+      const std::string blob_data) = 0;
+
+  // Callback that handles a GetBlob fetch result when fetch using CPIO.
   virtual absl::Status OnFetch(
       const google::scp::core::AsyncContext<
           google::cmrt::sdk::blob_storage_service::v1::GetBlobRequest,
           google::cmrt::sdk::blob_storage_service::v1::GetBlobResponse>&
           context) = 0;
 
-  absl::string_view GetBucketName() { return bucket_name_; }
-
- private:
   // Performs bucket fetching with BlobStorageClient and loads code blob into
   // Roma. Synchronous; only returns after attempting to load each fetched code
   // blob.
   void PeriodicBucketFetchSync();
 
-  // List the blobs in bucket_name_.
-  absl::StatusOr<
-      google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataResponse>
-  ListBlobsSync();
-
   const std::string bucket_name_;
   absl::Duration fetch_period_ms_;
   server_common::Executor& executor_;
-  google::scp::cpio::BlobStorageClientInterface& blob_storage_client_;
+  BlobStorageClient& blob_storage_client_;
 
   // Keeps track of the next task to be performed on the executor.
   absl::optional<server_common::TaskId> task_id_;
@@ -85,8 +88,18 @@ class PeriodicBucketFetcher : public FetcherInterface {
   absl::Mutex some_load_success_mu_;
   // Notified when 1 blob is successfully loaded.
   bool some_load_success_ ABSL_GUARDED_BY(some_load_success_mu_) = false;
+
+ private:
+  // List the blobs in bucket_name_ for PARC.
+  absl::StatusOr<privacysandbox::apis::parc::v0::ListBlobsMetadataResponse>
+  ListBlobsSyncParc();
+
+  // List the blobs in bucket_name_ for CPIO.
+  absl::StatusOr<
+      google::cmrt::sdk::blob_storage_service::v1::ListBlobsMetadataResponse>
+  ListBlobsSyncCpio();
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 
-#endif  // SERVICES_COMMON_CODE_FETCH_PERIODIC_BUCKET_FETCHER_H_
+#endif  // SERVICES_COMMON_DATA_FETCH_PERIODIC_BUCKET_FETCHER_H_

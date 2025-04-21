@@ -16,16 +16,6 @@ load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 
 package(default_visibility = ["//visibility:public"])
 
-string_flag(
-    name = "instance",
-    build_setting_default = "aws",
-    values = [
-        "gcp",
-        "aws",
-        "local",
-    ],
-)
-
 genrule(
     name = "precommit-hooks",
     outs = ["run_precommit_hooks.bin"],
@@ -110,6 +100,31 @@ config_setting(
         ":build_flavor": "non_prod",
     },
     visibility = ["//visibility:public"],
+)
+
+string_flag(
+    name = "enable_parc",
+    build_setting_default = "false",
+    values = [
+        "false",
+        "true",
+    ],
+)
+
+config_setting(
+    name = "parc_disabled",
+    flag_values = {
+        ":enable_parc": "false",
+    },
+    visibility = ["//:__subpackages__"],
+)
+
+config_setting(
+    name = "parc_enabled",
+    flag_values = {
+        ":enable_parc": "true",
+    },
+    visibility = ["//:__subpackages__"],
 )
 
 string_flag(

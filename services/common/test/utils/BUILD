@@ -73,6 +73,7 @@ cc_library(
     hdrs = ["test_utils.h"],
     deps = [
         "//api:bidding_auction_servers_cc_grpc_proto",
+        "//services/common/chaffing:transcoding_utils",
         "//services/common/test:random",
     ],
 )

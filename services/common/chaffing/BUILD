@@ -40,3 +40,49 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_library(
+    name = "moving_median",
+    srcs = ["moving_median.cc"],
+    hdrs = ["moving_median.h"],
+    deps = [
+        "//services/common/random:rng",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_test(
+    name = "moving_median_test",
+    srcs = ["moving_median_test.cc"],
+    deps = [
+        ":moving_median",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "moving_median_manager",
+    srcs = ["moving_median_manager.cc"],
+    hdrs = ["moving_median_manager.h"],
+    deps = [
+        ":moving_median",
+        "//services/common/random:rng",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "mock_moving_median_manager",
+    hdrs = ["mock_moving_median_manager.h"],
+    deps = [
+        ":moving_median_manager",
+        "@com_google_googletest//:gtest",
+    ],
+)

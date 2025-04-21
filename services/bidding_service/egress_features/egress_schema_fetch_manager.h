@@ -28,10 +28,10 @@
 #include "services/bidding_service/egress_features/egress_schema_bucket_fetcher.h"
 #include "services/bidding_service/egress_schema_cache.h"
 #include "services/bidding_service/egress_schema_fetch_config.pb.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/data_fetch/fetcher_interface.h"
 #include "src/concurrent/executor.h"
-#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -100,8 +100,7 @@ class EgressSchemaFetchManager {
     // All of the following fields must outlive EgressSchemaFetchManager.
     server_common::Executor* executor;
     HttpFetcherAsync* http_fetcher_async;
-    std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-        blob_storage_client;
+    std::unique_ptr<BlobStorageClient> blob_storage_client;
 
     // May be moved from after calling EgressSchemaFetchManager::Init.
     // CDDL caches will be initialized on Init.

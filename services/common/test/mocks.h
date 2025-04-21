@@ -47,7 +47,6 @@
 #include "services/common/clients/code_dispatcher/v8_dispatch_client.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
-#include "services/common/clients/k_anon_server/k_anon_client.h"
 #include "services/common/concurrent/local_cache.h"
 #include "services/common/providers/async_provider.h"
 #include "services/common/reporters/async_reporter.h"
@@ -591,19 +590,6 @@ class MockAsyncProvider : public AsyncProvider<Params, Provision> {
            on_done,
        absl::Duration timeout, RequestContext context),
       (const, override));
-};
-
-class MockKAnonClient : public KAnonGrpcClientInterface {
- public:
-  MockKAnonClient() = default;
-  MOCK_METHOD(
-      absl::Status, Execute,
-      (std::unique_ptr<ValidateHashesRequest> request,
-       absl::AnyInvocable<
-           void(absl::StatusOr<std::unique_ptr<ValidateHashesResponse>>) &&>
-           on_done,
-       absl::Duration timeout),
-      (override));
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

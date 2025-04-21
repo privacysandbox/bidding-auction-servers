@@ -33,14 +33,16 @@ using google::scp::core::test::EqualsProto;
 SelectAdResponse RunRequest(const TrustedServersConfigClient& config_client,
                             const ClientRegistry& clients,
                             const SelectAdRequest& request,
+                            const RandomNumberGeneratorFactory& rng_factory =
+                                RandomNumberGeneratorFactory(),
                             bool enable_kanon = false) {
   grpc::CallbackServerContext context;
   SelectAdResponse response;
   SelectAuctionResultReactor reactor(
-      &context, &request, &response, clients, config_client,
-      /*enable_cancellation=*/false,
-      /*enable_buyer_private_aggregate_reporting=*/true,
-      /*per_adtech_paapi_contributions_limit=*/100, enable_kanon);
+      &context, &request, &response, clients, config_client, rng_factory,
+      /* enable_cancellation= */ false,
+      /* enable_buyer_private_aggregate_reporting= */ true,
+      /* per_adtech_paapi_contributions_limit= */ 100, enable_kanon);
   reactor.Execute();
   return response;
 }
@@ -409,6 +411,7 @@ TYPED_TEST(SelectAuctionResultReactorTest,
                             std::make_unique<MockAsyncReporter>(
                                 std::make_unique<MockHttpFetcherAsync>())};
   auto response = RunRequest(this->config_, clients, this->request_,
+                             RandomNumberGeneratorFactory(),
                              /*enable_kanon=*/true);
   scoring_done.WaitForNotification();
   // Conversion from ad score to auction result ciphertext will be

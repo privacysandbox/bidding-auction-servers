@@ -37,7 +37,7 @@ class Event {
                  Callback event_callback, void* arg,
                  int priority = kNumEventPriorities / 2,
                  struct timeval* event_timeout = nullptr,
-                 OnDelete on_delete = nullptr);
+                 OnDelete on_delete = nullptr, bool add_to_loop = true);
   struct event* get();
   virtual ~Event();
 

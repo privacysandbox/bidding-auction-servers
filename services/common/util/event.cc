@@ -20,12 +20,15 @@ namespace privacy_sandbox::bidding_auction_servers {
 
 Event::Event(struct event_base* base, evutil_socket_t fd, short event_type,
              Event::Callback event_callback, void* arg, int priority,
-             struct timeval* event_timeout, OnDelete on_delete)
+             struct timeval* event_timeout, OnDelete on_delete,
+             bool add_to_loop)
     : priority_(priority),
       event_(event_new(base, fd, event_type, event_callback, arg)),
       on_delete_(std::move(on_delete)) {
   event_priority_set(event_, priority_);
-  event_add(event_, event_timeout);
+  if (add_to_loop) {
+    event_add(event_, event_timeout);
+  }
 }
 
 struct event* Event::get() { return event_; }

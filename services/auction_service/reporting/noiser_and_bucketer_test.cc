@@ -11,9 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 #include "services/auction_service/reporting/noiser_and_bucketer.h"
 
-#include <cmath>
 #include <limits>
 
 #include "absl/container/flat_hash_set.h"
@@ -52,41 +52,6 @@ TEST(NoiseAndMaskModelingSignals, NoisesModelingSignals) {
                                 /*min=*/kMin,
                                 /*max=*/kMax);
   }
-}
-
-TEST(RandGenerator, RandGeneratorIsUniform) {
-  // Verify that RandGenerator has a uniform distribution.
-  // A degenerate case for such an implementation is e.g. a top of
-  // range that is 2/3rds of the way to MAX_UINT64, in which case the
-  // bottom half of the range would be twice as likely to occur as the
-  // top half. Calculus shows that the largest
-  // measurable delta is when the top of the range is 3/4ths of the
-  // way, so that's what we use in the test.
-  constexpr uint64_t kTopOfRange =
-      (std::numeric_limits<uint64_t>::max() / 4ULL) * 3ULL;
-  constexpr double kExpectedAverage = static_cast<double>(kTopOfRange) / 2.0;
-  constexpr double kAllowedVariance = kExpectedAverage / 50.0;  // +/- 2%
-  constexpr int kMinAttempts = 1000;
-  constexpr int kMaxAttempts = 1000000;
-
-  double cumulative_average = 0.0;
-  int count = 0;
-  while (count < kMaxAttempts) {
-    uint64_t value = RandGenerator(kTopOfRange).value();
-    cumulative_average = (count * cumulative_average + value) / (count + 1);
-
-    // Don't quit too quickly for things to start converging, or we may have
-    // a false positive.
-    if (count > kMinAttempts &&
-        kExpectedAverage - kAllowedVariance < cumulative_average &&
-        cumulative_average < kExpectedAverage + kAllowedVariance) {
-      break;
-    }
-    ++count;
-  }
-
-  ASSERT_LT(count, kMaxAttempts) << "Expected average was " << kExpectedAverage
-                                 << ", average ended at " << cumulative_average;
 }
 
 TEST(NoiserAndBucketerTest, JoinCount) {

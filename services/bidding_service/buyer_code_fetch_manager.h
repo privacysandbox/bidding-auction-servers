@@ -24,6 +24,7 @@
 #include "absl/strings/string_view.h"
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
 #include "services/bidding_service/data/runtime_config.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "services/common/clients/code_dispatcher/udf_code_loader_interface.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/data_fetch/periodic_bucket_code_fetcher.h"
@@ -66,8 +67,7 @@ class BuyerCodeFetchManager {
   explicit BuyerCodeFetchManager(
       server_common::Executor* executor, HttpFetcherAsync* http_fetcher,
       UdfCodeLoaderInterface* loader,
-      std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-          blob_storage_client,
+      std::unique_ptr<BlobStorageClient> blob_storage_client,
       const bidding_service::BuyerCodeFetchConfig& udf_config,
       bool enable_protected_audience, bool enable_protected_app_signals)
       : executor_(*executor),
@@ -123,8 +123,7 @@ class BuyerCodeFetchManager {
   server_common::Executor& executor_;
   HttpFetcherAsync& http_fetcher_;
   UdfCodeLoaderInterface& loader_;
-  std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-      blob_storage_client_;
+  std::unique_ptr<BlobStorageClient> blob_storage_client_;
   const bidding_service::BuyerCodeFetchConfig udf_config_;
   const bool enable_protected_audience_;
   const bool enable_protected_app_signals_;

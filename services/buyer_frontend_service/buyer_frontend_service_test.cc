@@ -44,6 +44,8 @@
 #include "services/common/test/utils/service_utils.h"
 #include "services/common/test/utils/test_init.h"
 #include "services/common/test/utils/test_utils.h"
+#include "src/concurrent/event_engine_executor.h"
+#include "src/concurrent/executor.h"
 #include "src/encryption/key_fetcher/mock/mock_key_fetcher_manager.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
@@ -185,13 +187,16 @@ class BuyerFrontEndServiceTest : public ::testing::Test {
         std::make_unique<server_common::telemetry::BuildDependentConfig>(
             config_proto))
         ->Get(&request_);
+    executor_ = std::make_unique<server_common::EventEngineExecutor>(
+        grpc_event_engine::experimental::CreateEventEngine());
   }
 
   BiddingServiceClientConfig bidding_service_client_config_;
   grpc::ClientContext client_context_;
   GetBidsRequest request_;
   GetBidsResponse response_;
-  MockExecutor executor_;
+  std::unique_ptr<server_common::Executor> executor_;
+  server_common::GrpcInit gprc_init;
 };
 
 std::unique_ptr<BiddingAsyncClientMock> GetValidBiddingAsyncClientMock() {
@@ -261,18 +266,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -298,18 +310,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -333,19 +352,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true,
-                                  ClientType::CLIENT_TYPE_ANDROID);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request = CreateGetBidsRequest(
+      /* add_protected_signals_input */ true,
+      /* add_protected_audience_input */ true, ClientType::CLIENT_TYPE_ANDROID);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -375,18 +400,25 @@ TEST_F(BuyerFrontEndServiceTest,
        .is_protected_app_signals_enabled = true,
        .is_protected_audience_enabled = true,
        .is_hybrid_enabled = true},
-      executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(
@@ -405,18 +437,25 @@ TEST_F(
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(
@@ -441,18 +480,25 @@ TEST_F(
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request = CreateGetBidsRequest(
+      /* add_protected_signals_input */ true,
+      /* add_protected_audience_input */ true, ClientType::CLIENT_TYPE_ANDROID);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 std::unique_ptr<BiddingAsyncClientMock>
@@ -495,18 +541,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 std::unique_ptr<KVAsyncClientMock> GetBiddingSignalsProviderErrorMockV2() {
@@ -545,19 +598,26 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
+      config, *executor_);
 
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -579,19 +639,26 @@ TEST_F(BuyerFrontEndServiceTest,
        .is_protected_app_signals_enabled = true,
        .is_protected_audience_enabled = true,
        .is_hybrid_enabled = true},
-      executor_);
+      *executor_);
 
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -614,19 +681,26 @@ TEST_F(BuyerFrontEndServiceTest,
        .is_protected_app_signals_enabled = true,
        .is_protected_audience_enabled = true,
        .is_hybrid_enabled = true},
-      executor_);
+      *executor_);
 
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 std::unique_ptr<BiddingAsyncClientMock> GetErrorBiddingAsyncClientMock() {
@@ -666,18 +740,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -701,18 +782,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 std::unique_ptr<ProtectedAppSignalsBiddingAsyncClientMock>
@@ -754,18 +842,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            0);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -789,18 +884,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            0);
 }
 
 std::unique_ptr<BiddingAsyncClientMock> GetEmptyBiddingAsyncClientMock() {
@@ -839,18 +941,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -874,18 +983,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 1);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            1);
 }
 
 std::unique_ptr<ProtectedAppSignalsBiddingAsyncClientMock>
@@ -927,18 +1043,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            0);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -962,18 +1085,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            0);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -989,18 +1119,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            0);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -1024,18 +1161,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 0);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            0);
 }
 
 TEST_F(
@@ -1052,18 +1196,17 @@ TEST_F(
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
   EXPECT_THAT(status.error_message(),
               HasSubstr(kRejectionReasonBidBelowAuctionFloor));
   EXPECT_THAT(status.error_message(),
@@ -1091,18 +1234,17 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/true,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ true,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_FALSE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 0);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
   EXPECT_THAT(status.error_message(),
               HasSubstr(kRejectionReasonBidBelowAuctionFloor));
   EXPECT_THAT(status.error_message(),
@@ -1131,18 +1273,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
-                                  /*add_protected_audience_input=*/true);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ false,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            0);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -1166,18 +1315,25 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
-                                  /*add_protected_audience_input=*/true);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ false,
+                           /* add_protected_audience_input */ true);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
 
   ASSERT_TRUE(status.ok()) << server_common::ToAbslStatus(status);
-  GetBidsResponse::GetBidsRawResponse raw_response;
-  ASSERT_TRUE(raw_response.ParseFromString(response_.response_ciphertext()));
-  EXPECT_EQ(raw_response.bids_size(), 1);
-  EXPECT_EQ(raw_response.protected_app_signals_bids_size(), 0);
+  absl::StatusOr<DecodedGetBidsPayload<GetBidsResponse::GetBidsRawResponse>>
+      decoded_payload =
+          DecodeGetBidsPayload<GetBidsResponse::GetBidsRawResponse>(
+              response_.response_ciphertext());
+  ASSERT_TRUE(decoded_payload.ok()) << decoded_payload.status();
+  EXPECT_EQ(decoded_payload->get_bids_proto.bids_size(), 1);
+  EXPECT_EQ(decoded_payload->get_bids_proto.protected_app_signals_bids_size(),
+            0);
 }
 
 TEST_F(BuyerFrontEndServiceTest,
@@ -1195,9 +1351,12 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      CreateDefaultGetBidsConfig(), executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
-                                  /*add_protected_audience_input=*/false);
+      CreateDefaultGetBidsConfig(), *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ false,
+                           /* add_protected_audience_input */ false);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
@@ -1223,9 +1382,12 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
-  request_ = CreateGetBidsRequest(/*add_protected_signals_input=*/false,
-                                  /*add_protected_audience_input=*/false);
+      config, *executor_);
+  absl::StatusOr<GetBidsRequest> request =
+      CreateGetBidsRequest(/* add_protected_signals_input */ false,
+                           /* add_protected_audience_input */ false);
+  ASSERT_TRUE(request.ok()) << request.status();
+  request_ = *request;
   auto start_bfe_result = StartLocalService(&buyer_frontend_service);
   auto stub = CreateServiceStub<BuyerFrontEnd>(start_bfe_result.port);
   grpc::Status status = stub->GetBids(&client_context_, request_, &response_);
@@ -1250,7 +1412,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_signals_async_provider),
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client)),
-      config, executor_);
+      config, *executor_);
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);
   raw_request.mutable_log_context()->set_generation_id(kTestGenerationId);
@@ -1288,7 +1450,7 @@ TEST_F(BuyerFrontEndServiceTest,
           std::move(bidding_async_client),
           std::move(protected_app_signals_bidding_async_client),
           std::move(kv_async_client)),
-      config, executor_);
+      config, *executor_);
 
   GetBidsRequest::GetBidsRawRequest raw_request;
   raw_request.set_is_chaff(true);

@@ -66,20 +66,26 @@ absl::Status CborSerializeKeyValue(absl::string_view key, T invocable_builder,
   return absl::OkStatus();
 }
 
-absl::Status CborSerializeString(absl::string_view key, absl::string_view value,
-                                 cbor_item_t& root) {
+inline absl::Status CborSerializeUint64(absl::string_view key, uint64_t value,
+                                        cbor_item_t& root) {
+  return CborSerializeKeyValue(key, &cbor_build_uint64, root, value);
+}
+
+inline absl::Status CborSerializeString(absl::string_view key,
+                                        absl::string_view value,
+                                        cbor_item_t& root) {
   return CborSerializeKeyValue(key, &cbor_build_stringn, root, value.data(),
                                value.size());
 }
 
-absl::Status CborSerializeBool(absl::string_view key, bool value,
-                               cbor_item_t& root) {
+inline absl::Status CborSerializeBool(absl::string_view key, bool value,
+                                      cbor_item_t& root) {
   return CborSerializeKeyValue(key, &cbor_build_bool, root, value);
 }
 
-absl::Status CborSerializeByteString(absl::string_view key,
-                                     absl::string_view value,
-                                     cbor_item_t& root) {
+inline absl::Status CborSerializeByteString(absl::string_view key,
+                                            absl::string_view value,
+                                            cbor_item_t& root) {
   cbor_data data = reinterpret_cast<const unsigned char*>(value.data());
   return CborSerializeKeyValue(key, &cbor_build_bytestring, root, data,
                                value.size());
@@ -198,7 +204,7 @@ absl::Status CborSerializeBrowserSignals(
 
 absl::Status CborSerializeInterestGroup(
     const BuyerInputForBidding::InterestGroupForBidding& interest_group,
-    cbor_item_t& root) {
+    bool in_cooldown_or_lockout, cbor_item_t& root) {
   cbor_item_t* interest_group_serialized =
       cbor_new_definite_map(kNumInterestGroupKeys);
   PS_RETURN_IF_ERROR(CborSerializeString(kName, interest_group.name(),
@@ -217,6 +223,9 @@ absl::Status CborSerializeInterestGroup(
   PS_RETURN_IF_ERROR(CborSerializeBrowserSignals(
       kBrowserSignals, interest_group.browser_signals(),
       *interest_group_serialized));
+  PS_RETURN_IF_ERROR(CborSerializeBool(kInCooldownOrLockout,
+                                       in_cooldown_or_lockout,
+                                       *interest_group_serialized));
 
   if (!cbor_array_push(&root, cbor_move(interest_group_serialized))) {
     return absl::InternalError(
@@ -297,6 +306,17 @@ absl::StatusOr<std::string> CborEncodeProtectedAuctionProtoHelper(
   }
   PS_RETURN_IF_ERROR(CborSerializeBool(
       kEnforceKAnon, protected_auction_input.enforce_kanon(), *cbor_internal));
+  PS_RETURN_IF_ERROR(CborSerializeBool(
+      kSampledDebugReporting,
+      protected_auction_input.fdo_flags().enable_sampled_debug_reporting(),
+      *cbor_internal));
+  PS_RETURN_IF_ERROR(CborSerializeBool(
+      kInCooldownOrLockout,
+      protected_auction_input.fdo_flags().in_cooldown_or_lockout(),
+      *cbor_internal));
+  PS_RETURN_IF_ERROR(CborSerializeUint64(
+      kRequestTimestampMs, protected_auction_input.request_timestamp_ms(),
+      *cbor_internal));
   return SerializeCbor(*cbor_data_root);
 }
 
@@ -319,8 +339,9 @@ absl::StatusOr<BuyerInputMapEncoded> GetEncodedBuyerInputMap(
         cbor_new_definite_array(buyer_input.interest_groups_size()));
     cbor_item_t* interest_groups_list = *scoped_interest_groups_list;
     for (const auto& interest_group : buyer_input.interest_groups()) {
-      PS_RETURN_IF_ERROR(
-          CborSerializeInterestGroup(interest_group, *interest_groups_list));
+      PS_RETURN_IF_ERROR(CborSerializeInterestGroup(
+          interest_group, buyer_input.in_cooldown_or_lockout(),
+          *interest_groups_list));
     }
     std::string serialized_interest_groups =
         SerializeCbor(interest_groups_list);

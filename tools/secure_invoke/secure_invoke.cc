@@ -94,6 +94,8 @@ int main(int argc, char** argv) {
 
   std::optional<bool> enable_debug_reporting =
       absl::GetFlag(FLAGS_enable_debug_reporting);
+  std::optional<bool> enable_sampled_debug_reporting =
+      absl::GetFlag(FLAGS_enable_sampled_debug_reporting);
   std::optional<bool> enable_debug_info =
       absl::GetFlag(FLAGS_enable_debug_info);
   std::optional<bool> enable_unlimited_egress =
@@ -108,24 +110,27 @@ int main(int argc, char** argv) {
       std::cout << privacy_sandbox::bidding_auction_servers::
               PackagePlainTextSelectAdRequestToJson(
                   json_input_str, client_type, keyset, enable_debug_reporting,
-                  enable_debug_info, enable_unlimited_egress, enforce_kanon);
+                  enable_sampled_debug_reporting, enable_debug_info,
+                  enable_unlimited_egress, enforce_kanon);
     } else {
       std::cout << privacy_sandbox::bidding_auction_servers::
               PackagePlainTextGetBidsRequestToJson(
-                  keyset, enable_debug_reporting, enable_unlimited_egress);
+                  keyset, enable_debug_reporting,
+                  enable_sampled_debug_reporting, enable_unlimited_egress);
     }
   } else if (op == "invoke") {
     if (target_service == kSfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToSfe(
-              client_type, keyset, enable_debug_reporting, enable_debug_info,
+              client_type, keyset, enable_debug_reporting,
+              enable_sampled_debug_reporting, enable_debug_info,
               enable_unlimited_egress, enforce_kanon);
       CHECK(status.ok()) << status;
     } else if (target_service == kBfe) {
       const auto status =
           privacy_sandbox::bidding_auction_servers::SendRequestToBfe(
-              keyset, enable_debug_reporting, /*stub=*/nullptr,
-              enable_unlimited_egress);
+              keyset, /*stub=*/nullptr, enable_debug_reporting,
+              enable_sampled_debug_reporting, enable_unlimited_egress);
       CHECK(status.ok()) << status;
     } else {
       LOG(FATAL) << "Unsupported target service: " << target_service;

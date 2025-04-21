@@ -24,10 +24,11 @@
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/cddl_spec_cache.h"
-#include "services/bidding_service/constants.h"
 #include "services/bidding_service/data/runtime_config.h"
 #include "services/bidding_service/egress_features/adtech_schema_fetcher.h"
+#include "services/bidding_service/egress_features/egress_schema_bucket_fetcher.h"
 #include "services/bidding_service/egress_schema_cache.h"
 #include "services/bidding_service/egress_schema_fetch_config.pb.h"
 #include "services/common/clients/http/http_fetcher_async.h"
@@ -131,7 +132,6 @@ EgressSchemaFetchManager::StartEgressSchemaFetch(
         bucket, absl::Milliseconds(fetch_config_.url_fetch_period_ms()),
         options_.executor, options_.blob_storage_client.get(),
         egress_schema_cache.get());
-
   } else {
     return absl::InvalidArgumentError(kEgressSchemaFetchModeNotSupported);
   }

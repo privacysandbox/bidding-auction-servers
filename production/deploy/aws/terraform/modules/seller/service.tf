@@ -35,8 +35,9 @@ module "networking" {
   source   = "../../services/networking"
   operator = var.operator
 
-  environment    = var.environment
-  vpc_cidr_block = var.vpc_cidr_block
+  environment               = var.environment
+  vpc_cidr_block            = var.vpc_cidr_block
+  forced_availability_zones = var.forced_availability_zones
 }
 
 module "security_groups" {
@@ -251,7 +252,7 @@ module "autoscaling_auction" {
   operator               = var.operator
   enclave_debug_mode     = var.enclave_debug_mode
   service                = "auction"
-  autoscaling_subnet_ids = module.networking.private_subnet_ids
+  autoscaling_subnet_ids = var.auto_scaling_use_first_zone ? [module.networking.private_subnet_ids[0]] : module.networking.private_subnet_ids
   # coalesce() takes any number of arguments and returns the first one that isn't null or an empty string.
   instance_ami_id                 = coalesce(var.auction_instance_ami_id, data.aws_ami_ids.auction_amis.ids...)
   instance_security_group_id      = module.security_groups.instance_security_group_id
@@ -273,7 +274,6 @@ module "autoscaling_auction" {
   healthcheck_unhealthy_threshold = var.healthcheck_unhealthy_threshold
   healthcheck_grace_period_sec    = var.healthcheck_grace_period_sec
   consented_request_s3_bucket     = var.consented_request_s3_bucket
-
 }
 
 
@@ -346,7 +346,7 @@ module "autoscaling_sfe" {
   operator               = var.operator
   enclave_debug_mode     = var.enclave_debug_mode
   service                = "sfe"
-  autoscaling_subnet_ids = module.networking.private_subnet_ids
+  autoscaling_subnet_ids = var.auto_scaling_use_first_zone ? [module.networking.private_subnet_ids[0]] : module.networking.private_subnet_ids
   # coalesce() takes any number of arguments and returns the first one that isn't null or an empty string.
   instance_ami_id            = coalesce(var.sfe_instance_ami_id, data.aws_ami_ids.seller_frontend_amis.ids...)
   instance_security_group_id = module.security_groups.instance_security_group_id

@@ -15,6 +15,7 @@
 #include "services/seller_frontend_service/select_ad_reactor.h"
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -48,6 +49,7 @@
 #include "services/seller_frontend_service/kv_seller_signals_adapter.h"
 #include "services/seller_frontend_service/private_aggregation/private_aggregation_helper.h"
 #include "services/seller_frontend_service/util/buyer_input_proto_utils.h"
+#include "services/seller_frontend_service/util/chaffing_utils.h"
 #include "services/seller_frontend_service/util/key_fetcher_utils.h"
 #include "services/seller_frontend_service/util/web_utils.h"
 #include "src/communication/ohttp_utils.h"
@@ -85,6 +87,19 @@ inline void RecordInterestGroupUpdates(
   }
 }
 
+// Calculates the difference between the request_timestamp from the ciphertext
+// and the server's clock time.
+unsigned int CalculateTimeDifferenceToNowSeconds(int64_t request_timestamp_ms) {
+  absl::Duration diff =
+      absl::FromUnixMillis(request_timestamp_ms) - absl::Now();
+  int64_t diff_seconds = std::abs(absl::ToInt64Seconds(diff));
+  if (diff_seconds > std::numeric_limits<int>::max()) {
+    return std::numeric_limits<int>::max();
+  }
+
+  return static_cast<int>(diff_seconds);
+}
+
 }  // namespace
 
 SelectAdReactor::SelectAdReactor(
@@ -92,7 +107,8 @@ SelectAdReactor::SelectAdReactor(
     SelectAdResponse* response, server_common::Executor* executor,
     const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
-    const ReportWinMap& report_win_map, bool enable_cancellation,
+    const ReportWinMap& report_win_map,
+    const RandomNumberGeneratorFactory& rng_factory, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
     int per_adtech_paapi_contributions_limit, bool fail_fast,
     int max_buyers_solicited)
@@ -103,6 +119,7 @@ SelectAdReactor::SelectAdReactor(
       clients_(clients),
       config_client_(config_client),
       report_win_map_(report_win_map),
+      rng_factory_(rng_factory),
       auction_scope_(GetAuctionScope(*request_)),
       log_context_({}, server_common::ConsentedDebugConfiguration(),
                    [this]() { return response_->mutable_debug_info(); }),
@@ -118,6 +135,10 @@ SelectAdReactor::SelectAdReactor(
       is_tkv_v2_browser_enabled_(
           config_client_.GetBooleanParameter(ENABLE_TKV_V2_BROWSER)),
       chaffing_enabled_(config_client_.GetBooleanParameter(ENABLE_CHAFFING)),
+      chaffing_v2_enabled_(
+          config_client_.GetBooleanParameter(ENABLE_CHAFFING_V2)),
+      buyer_caching_enabled_(
+          config_client_.GetBooleanParameter(ENABLE_BUYER_CACHING)),
       max_buyers_solicited_(chaffing_enabled_
                                 ? kMaxBuyersSolicitedChaffingEnabled
                                 : max_buyers_solicited),
@@ -155,7 +176,7 @@ SelectAdReactor::SelectAdReactor(
     benchmarking_logger_ = std::make_unique<NoOpsLogger>();
   }
 
-  CHECK_OK([this]() {
+  PS_CHECK_OK([this]() {
     PS_ASSIGN_OR_RETURN(metric_context_,
                         metric::SfeContextMap()->Remove(request_));
     return absl::OkStatus();
@@ -448,8 +469,18 @@ void SelectAdReactor::MayLogBuyerInput() {
 
 ChaffingConfig SelectAdReactor::GetChaffingConfig(
     const absl::flat_hash_set<absl::string_view>& auction_config_buyer_set) {
+  // The server has served this request before; use cached values.
+  if (buyer_caching_enabled_ && previously_invoked_buyers_) {
+    return {.chaff_request_candidates =
+                previously_invoked_buyers_->chaff_buyer_names,
+            .num_chaff_requests =
+                (int)previously_invoked_buyers_->chaff_buyer_names.size(),
+            .num_real_requests =
+                (int)previously_invoked_buyers_->non_chaff_buyer_names.size()};
+  }
+
   int num_chaff_requests = 0;
-  std::vector<std::string_view> chaff_request_candidates;
+  std::vector<absl::string_view> chaff_request_candidates;
 
   // 'real' requests means non-chaff requests, e.g. buyers that will actually
   // generate bids to show an ad to this client.
@@ -477,17 +508,9 @@ ChaffingConfig SelectAdReactor::GetChaffingConfig(
     }
   }
 
-  if (!chaffing_enabled_) {
+  if (!chaffing_enabled_ ||
+      ShouldSkipChaffing(clients_.buyer_factory.Entries().size(), *rng_)) {
     return {.num_real_requests = num_real_requests};
-  }
-
-  // The server has served this request before; use cached values.
-  if (clients_.invoked_buyers_cache && invoked_buyers_) {
-    return {
-        .chaff_request_candidates = invoked_buyers_->chaff_buyer_names,
-        .num_chaff_requests = (int)invoked_buyers_->chaff_buyer_names.size(),
-        .num_real_requests =
-            (int)invoked_buyers_->non_chaff_buyer_names.size()};
   }
 
   // Use the RNG seeded w/ the generation ID to deterministically determine
@@ -505,16 +528,15 @@ ChaffingConfig SelectAdReactor::GetChaffingConfig(
 
     num_chaff_requests_lower_bound = std::min(
         num_chaff_requests_lower_bound, (int)chaff_request_candidates.size());
-    std::uniform_int_distribution<int> num_chaff_buyers_dist(
-        num_chaff_requests_lower_bound, chaff_request_candidates.size());
-    if (generator_.has_value()) {
-      num_chaff_requests = num_chaff_buyers_dist(*generator_);
+
+    if (rng_) {
+      num_chaff_requests = rng_->GetUniformInt(num_chaff_requests_lower_bound,
+                                               chaff_request_candidates.size());
     }
   }
 
-  if (generator_.has_value()) {
-    std::shuffle(chaff_request_candidates.begin(),
-                 chaff_request_candidates.end(), *generator_);
+  if (rng_) {
+    rng_->Shuffle(chaff_request_candidates);
   }
 
   return {.chaff_request_candidates = std::move(chaff_request_candidates),
@@ -584,9 +606,11 @@ void SelectAdReactor::FetchBids() {
 
   std::vector<absl::string_view> non_chaff_buyer_candidates;
   absl::Span<absl::string_view> chaff_buyer_candidates;
-  if (clients_.invoked_buyers_cache && invoked_buyers_) {
-    non_chaff_buyer_candidates = invoked_buyers_->non_chaff_buyer_names;
-    chaff_buyer_candidates = absl::MakeSpan(invoked_buyers_->chaff_buyer_names);
+  if (buyer_caching_enabled_ && previously_invoked_buyers_) {
+    non_chaff_buyer_candidates =
+        previously_invoked_buyers_->non_chaff_buyer_names;
+    chaff_buyer_candidates =
+        absl::MakeSpan(previously_invoked_buyers_->chaff_buyer_names);
   } else {
     non_chaff_buyer_candidates =
         GetNonChaffBuyerNames(auction_config_buyer_set, chaffing_config);
@@ -609,33 +633,31 @@ void SelectAdReactor::FetchBids() {
         {buyer_ig_owner, std::move(get_bids_request)});
   }
 
-  if (chaffing_enabled_ && !chaff_buyer_candidates.empty()) {
-    // Loop through chaff candidates and send 'num_chaff_requests' requests.
-    for (auto it = chaffing_config.chaff_request_candidates.begin();
-         it != chaffing_config.chaff_request_candidates.end(); ++it) {
-      if (std::distance(chaffing_config.chaff_request_candidates.begin(), it) >=
-          chaffing_config.num_chaff_requests) {
-        break;
-      }
-
-      auto get_bids_request =
-          std::make_unique<GetBidsRequest::GetBidsRawRequest>();
-      get_bids_request->set_is_chaff(true);
-      auto* log_context = get_bids_request->mutable_log_context();
-      std::visit(
-          [log_context](const auto& protected_auction_input) {
-            log_context->set_generation_id(
-                protected_auction_input.generation_id());
-          },
-          protected_auction_input_);
-      buyer_get_bids_requests.push_back(
-          {it->data(), std::move(get_bids_request)});
+  // Loop through chaff candidates and send 'num_chaff_requests' requests.
+  for (auto it = chaff_buyer_candidates.begin();
+       it != chaff_buyer_candidates.end(); ++it) {
+    DCHECK(chaffing_enabled_ || chaffing_v2_enabled_);
+    if (std::distance(chaff_buyer_candidates.begin(), it) >=
+        chaffing_config.num_chaff_requests) {
+      break;
     }
 
-    if (generator_) {
-      std::shuffle(buyer_get_bids_requests.begin(),
-                   buyer_get_bids_requests.end(), *generator_);
-    }
+    auto get_bids_request =
+        std::make_unique<GetBidsRequest::GetBidsRawRequest>();
+    get_bids_request->set_is_chaff(true);
+    auto* log_context = get_bids_request->mutable_log_context();
+    std::visit(
+        [log_context](const auto& protected_auction_input) {
+          log_context->set_generation_id(
+              protected_auction_input.generation_id());
+        },
+        protected_auction_input_);
+    buyer_get_bids_requests.push_back(
+        {it->data(), std::move(get_bids_request)});
+  }
+
+  if (chaffing_enabled_ && rng_) {
+    rng_->Shuffle(buyer_get_bids_requests);
   }
 
   int num_buyers_solicited = 0;
@@ -665,7 +687,7 @@ void SelectAdReactor::FetchBids() {
     num_buyers_solicited++;
   }
 
-  if (chaffing_enabled_ && clients_.invoked_buyers_cache && !invoked_buyers_) {
+  if (buyer_caching_enabled_ && !previously_invoked_buyers_) {
     std::visit(
         [this, moved_chaff_buyers = std::move(chaff_buyers),
          moved_non_chaff_buyers =
@@ -717,12 +739,16 @@ void SelectAdReactor::Execute() {
 
   std::visit(
       [this](auto& protected_input) mutable {
-        is_sampled_for_debug_ = SetGeneratorAndSample(
-            config_client_.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
-            chaffing_enabled_,
+        bool is_debug_eligible =
             request_->client_type() == CLIENT_TYPE_ANDROID &&
-                protected_input.enable_unlimited_egress(),
-            protected_input.generation_id(), generator_);
+            protected_input.enable_unlimited_egress();
+        rng_ =
+            CreateRng(config_client_.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
+                      chaffing_enabled_, is_debug_eligible,
+                      protected_input.generation_id(), rng_factory_);
+        is_sampled_for_debug_ = ShouldSample(
+            config_client_.GetIntParameter(DEBUG_SAMPLE_RATE_MICRO),
+            is_debug_eligible, *rng_);
 
         if (config_client_.GetBooleanParameter(CONSENT_ALL_REQUESTS)) {
           ModifyConsent(*protected_input.mutable_consented_debug_config());
@@ -736,7 +762,11 @@ void SelectAdReactor::Execute() {
             },
             protected_input.consented_debug_config(), is_sampled_for_debug_);
 
-        if (!chaffing_enabled_ || !clients_.invoked_buyers_cache) {
+        LogIfError(metric_context_->LogHistogram<metric::kRequestAgeSeconds>(
+            (int)CalculateTimeDifferenceToNowSeconds(
+                protected_input.request_timestamp_ms())));
+
+        if (!buyer_caching_enabled_) {
           return;
         }
 
@@ -744,7 +774,8 @@ void SelectAdReactor::Execute() {
             clients_.invoked_buyers_cache->Query(
                 {protected_input.generation_id()});
         if (!invoked_buyers.empty()) {
-          invoked_buyers_ = std::move(invoked_buyers.begin()->second);
+          previously_invoked_buyers_ =
+              std::move(invoked_buyers.begin()->second);
         }
       },
       protected_auction_input_);
@@ -896,6 +927,9 @@ SelectAdReactor::CreateGetBidsRequest(
             protected_auction_input.publisher_name());
         get_bids_request->set_enable_debug_reporting(
             protected_auction_input.enable_debug_reporting());
+        get_bids_request->set_enable_sampled_debug_reporting(
+            protected_auction_input.fdo_flags()
+                .enable_sampled_debug_reporting());
         auto* log_context = get_bids_request->mutable_log_context();
         log_context->set_generation_id(protected_auction_input.generation_id());
         log_context->set_adtech_debug_id(buyer_debug_id);
@@ -968,25 +1002,19 @@ void SelectAdReactor::FetchBid(
           .release();
   bfe_request->SetBuyer(buyer_ig_owner);
 
-  size_t chaff_request_size = 0;
-  if (chaffing_enabled_ && get_bids_request->is_chaff() && generator_) {
-    std::uniform_int_distribution<size_t> request_size_dist(
-        kMinChaffRequestSizeBytes, kMaxChaffRequestSizeBytes);
-    chaff_request_size = request_size_dist(*generator_);
+  RequestConfig request_config;
+  const bool is_chaff_request = get_bids_request->is_chaff();
+  if (chaffing_enabled_ && !chaffing_v2_enabled_ && rng_) {
+    request_config = GetChaffingV1GetBidsRequestConfig(is_chaff_request, *rng_);
+  } else if (chaffing_enabled_ && chaffing_v2_enabled_) {
+    request_config = GetChaffingV2GetBidsRequestConfig(
+        buyer_ig_owner, is_chaff_request, *clients_.moving_median_manager,
+        {log_context_});
   }
-
-  RequestConfig request_config = {.chaff_request_size = chaff_request_size,
-                                  .compression_type = CompressionType::kGzip};
 
   // If using the old request format, add a gRPC header to signal the payload is
   // compressed.
   RequestMetadata buyer_metadata_copy = buyer_metadata_;
-  if (!chaffing_enabled_) {
-    int compression_type_int =
-        static_cast<int>(request_config.compression_type);
-    buyer_metadata_copy.insert({kBiddingAuctionCompressionHeader.data(),
-                                std::to_string(compression_type_int)});
-  }
   if (absl::string_view header_flag =
           config_client_.GetStringParameter(HEADER_PASSED_TO_BUYER);
       !header_flag.empty()) {
@@ -1015,7 +1043,7 @@ void SelectAdReactor::FetchBid(
       std::move(get_bids_request), client_context,
       CancellationWrapper(
           request_context_, enable_cancellation_,
-          [buyer_ig_owner, this, bfe_request, buyer_client](
+          [buyer_ig_owner, this, bfe_request, buyer_client, is_chaff_request](
               absl::StatusOr<
                   std::unique_ptr<GetBidsResponse::GetBidsRawResponse>>
                   response,
@@ -1024,6 +1052,15 @@ void SelectAdReactor::FetchBid(
               bfe_request->SetRequestSize((int)response_metadata.request_size);
               bfe_request->SetResponseSize(
                   (int)response_metadata.response_size);
+
+              if (chaffing_v2_enabled_ && !is_chaff_request) {
+                absl::Status add_result =
+                    clients_.moving_median_manager->AddNumberToBuyerWindow(
+                        buyer_ig_owner, *rng_, response_metadata.request_size);
+                if (!add_result.ok()) {
+                  PS_LOG(ERROR, log_context_) << add_result;
+                }
+              }
 
               // destruct bfe_request, destructor measures request time
               delete bfe_request;
@@ -1364,6 +1401,17 @@ void SelectAdReactor::CancellableFetchScoringSignalsV2(
                                       << maybe_scoring_signals_request.status();
     return;
   }
+
+  std::visit(
+      [this,
+       &maybe_scoring_signals_request](const auto& protected_auction_input) {
+        server_common::LogContext* log_context =
+            (*maybe_scoring_signals_request)->mutable_log_context();
+        log_context->set_generation_id(protected_auction_input.generation_id());
+        log_context->set_adtech_debug_id(auction_config_.seller_debug_id());
+      },
+      protected_auction_input_);
+
   grpc::ClientContext* client_context = client_contexts_.Add();
 
   EventMessage::KvSignal score_signal = KvEventMessage(
@@ -1519,6 +1567,11 @@ SelectAdReactor::CreateScoreAdsRequest() {
             protected_auction_input.publisher_name());
         raw_request->set_enable_debug_reporting(
             protected_auction_input.enable_debug_reporting());
+        raw_request->mutable_fdo_flags()->set_enable_sampled_debug_reporting(
+            protected_auction_input.fdo_flags()
+                .enable_sampled_debug_reporting());
+        raw_request->mutable_fdo_flags()->set_in_cooldown_or_lockout(
+            protected_auction_input.fdo_flags().in_cooldown_or_lockout());
         auto* log_context = raw_request->mutable_log_context();
         log_context->set_generation_id(protected_auction_input.generation_id());
         log_context->set_adtech_debug_id(auction_config_.seller_debug_id());
@@ -1680,7 +1733,8 @@ void SelectAdReactor::OnScoreAdsDone(
       }
       ghost_winners = &(found_response->ghost_winning_ad_scores());
     }
-    PerformDebugReporting(high_score);
+    PerformDebugReporting(found_response->mutable_seller_debug_reports(),
+                          high_score);
     if (high_score && enable_buyer_private_aggregate_reporting_) {
       HandlePrivateAggregationContributions(
           interest_group_index_map_, *high_score, shared_buyer_bids_map_);
@@ -1760,6 +1814,7 @@ bool SelectAdReactor::EncryptResponse(std::string plaintext_response) {
 }
 
 void SelectAdReactor::PerformDebugReporting(
+    DebugReports* seller_debug_reports,
     const std::optional<AdScore>& high_score) {
   // Create new metric context.
   metric::MetricContextMap<SelectAdRequest>()->Get(request_);
@@ -1767,135 +1822,327 @@ void SelectAdReactor::PerformDebugReporting(
   // from ContextMap.
   absl::StatusOr<std::unique_ptr<metric::SfeContext>> metric_context =
       metric::MetricContextMap<SelectAdRequest>()->Remove(request_);
-  CHECK_OK(metric_context);
+  PS_CHECK_OK(metric_context, log_context_);
   std::shared_ptr<metric::SfeContext> shared_context =
       *std::move(metric_context);
 
   bool enable_debug_reporting = false;
+  bool enable_sampled_debug_reporting = false;
   std::visit(
-      [&enable_debug_reporting](const auto& protected_auction_input) {
+      [&enable_debug_reporting,
+       &enable_sampled_debug_reporting](const auto& protected_auction_input) {
         enable_debug_reporting =
             protected_auction_input.enable_debug_reporting();
+        enable_sampled_debug_reporting = protected_auction_input.fdo_flags()
+                                             .enable_sampled_debug_reporting();
       },
       protected_auction_input_);
   if (!enable_debug_reporting) {
     return;
   }
+
+  // Perform debug reporting for buyers.
   PostAuctionSignals post_auction_signals = GeneratePostAuctionSignals(
       high_score, auction_config_.seller_currency(),
       (scoring_signals_ == nullptr) ? 0 : scoring_signals_->data_version);
+  if (enable_sampled_debug_reporting) {
+    PerformSampledDebugReporting(post_auction_signals);
+  } else {
+    PerformUnsampledDebugReporting(post_auction_signals, high_score);
+  }
+
+  // Merge debug reports for sellers into the adtech_origin_debug_urls_map in
+  // the response.
+  MergeSellerDebugReportsToResponse(seller_debug_reports,
+                                    enable_sampled_debug_reporting);
+}
+
+void SelectAdReactor::PerformSampledDebugReporting(
+    const PostAuctionSignals& post_auction_signals) {
+  if (IsComponentAuction(auction_scope_)) {
+    PerformSampledDebugReportingForComponentAuction(post_auction_signals);
+    return;
+  }
+
+  // Single-seller auction. Iterate over all buyers.
   for (const auto& [ig_owner, get_bid_response] : shared_buyer_bids_map_) {
+    bool put_buyer_in_cooldown_for_debug_win = false;
+    bool put_buyer_in_cooldown_for_debug_loss = false;
+    bool sampled_debug_url = false;
+
+    // Iterate over all ads.
     for (const AdWithBid& ad_with_bid : get_bid_response->bids()) {
-      const auto& ig_name = ad_with_bid.interest_group_name();
-      if (!ad_with_bid.has_debug_report_urls()) {
+      absl::string_view ig_name = ad_with_bid.interest_group_name();
+      bool is_winning_ig = (ig_owner == post_auction_signals.winning_ig_owner &&
+                            ig_name == post_auction_signals.winning_ig_name);
+
+      // Case 1. Debug url was not selected during sampling. The adtech needs to
+      // be put in cooldown for calling the forDebuggingOnly API.
+      if (is_winning_ig && ad_with_bid.debug_win_url_failed_sampling()) {
+        put_buyer_in_cooldown_for_debug_win = true;
         continue;
       }
-      absl::string_view debug_url;
-      bool is_winning_ig = false;
-      if (post_auction_signals.winning_ig_owner == ig_owner &&
-          ad_with_bid.interest_group_name() ==
-              post_auction_signals.winning_ig_name) {
-        debug_url = ad_with_bid.debug_report_urls().auction_debug_win_url();
-        is_winning_ig = true;
-      } else {
-        debug_url = ad_with_bid.debug_report_urls().auction_debug_loss_url();
+      if (!is_winning_ig && ad_with_bid.debug_loss_url_failed_sampling()) {
+        put_buyer_in_cooldown_for_debug_loss = true;
+        continue;
       }
+
+      // Consider the debug win url for the winning ad, and the debug loss url
+      // for the losing ad.
+      absl::string_view debug_url =
+          is_winning_ig
+              ? ad_with_bid.debug_report_urls().auction_debug_win_url()
+              : ad_with_bid.debug_report_urls().auction_debug_loss_url();
       if (debug_url.empty()) {
         continue;
       }
-      // Skip debug pings for the winning interest group in component
-      // auction, and instead populate debug reports in the response.
+
+      // Case 2. Debug url passed sampling and is added to the response. Skip
+      // all other ads for this buyer since there is a limit of one debug url
+      // per adtech in single-seller auctions.
+      AddBuyerDebugReportToResponse(
+          debug_url, ig_owner, /*is_win_report=*/is_winning_ig,
+          /*is_component_win=*/false,
+          GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
+                                             post_auction_signals));
+      sampled_debug_url = true;
+      break;
+    }
+    if (sampled_debug_url) {
+      continue;
+    }
+
+    // If no debug url was selected during sampling, add a corresponding debug
+    // report with an empty url to pass cooldown information to the client.
+    if (put_buyer_in_cooldown_for_debug_win) {
+      AddBuyerDebugReportToResponse("", ig_owner, /*is_win_report=*/true,
+                                    /*is_component_win=*/false);
+    } else if (put_buyer_in_cooldown_for_debug_loss) {
+      AddBuyerDebugReportToResponse("", ig_owner, /*is_win_report=*/false,
+                                    /*is_component_win=*/false);
+    }
+  }
+}
+
+void SelectAdReactor::PerformSampledDebugReportingForComponentAuction(
+    const PostAuctionSignals& post_auction_signals) {
+  // Iterate over all buyers.
+  for (const auto& [ig_owner, get_bid_response] : shared_buyer_bids_map_) {
+    // Early exit condition variables:
+    //
+    // 1. Handled the debug win url for the component auction winning ad.
+    bool win_url_checked = false;
+    // 2. Found a debug loss url that was selected during sampling and added to
+    // the response (there is a limit of max one debug loss url per adtech).
+    bool loss_url_selected = false;
+    // 3. Found a debug loss url for a losing ad, guaranteeing that the adtech
+    // needs to be put in cooldown.
+
+    // Iterate over all ads.
+    bool put_buyer_in_cooldown_for_confirmed_loss = false;
+    for (const AdWithBid& ad_with_bid : get_bid_response->bids()) {
+      // Early exit for current buyer.
+      if (win_url_checked && loss_url_selected &&
+          put_buyer_in_cooldown_for_confirmed_loss) {
+        break;
+      }
+      absl::string_view ig_name = ad_with_bid.interest_group_name();
+      bool is_winning_ig = (ig_owner == post_auction_signals.winning_ig_owner &&
+                            ig_name == post_auction_signals.winning_ig_name);
+
+      // Handle debug win url for component auction winning ad.
+      if (is_winning_ig) {
+        HandleSampledDebugWinReportForComponentAuctionWinner(
+            ad_with_bid, post_auction_signals);
+        win_url_checked = true;
+      }
+
+      // Handle debug loss url for all ads (since component auction winning ad
+      // can still lose in the top-level auction).
+      HandleSampledDebugLossReportForComponentAuctionAd(
+          ad_with_bid, ig_owner, ig_name, post_auction_signals, is_winning_ig,
+          loss_url_selected, put_buyer_in_cooldown_for_confirmed_loss);
+    }
+
+    // If a confirmed debug loss url was selected during sampling, add a
+    // corresponding debug report with an empty url to pass cooldown information
+    // to the client.
+    if (put_buyer_in_cooldown_for_confirmed_loss) {
+      AddBuyerDebugReportToResponse("", ig_owner, /*is_win_report=*/false,
+                                    /*is_component_win=*/false);
+    }
+  }
+}
+
+void SelectAdReactor::HandleSampledDebugWinReportForComponentAuctionWinner(
+    const AdWithBid& winning_ad,
+    const PostAuctionSignals& post_auction_signals) {
+  absl::string_view ig_owner = post_auction_signals.winning_ig_owner;
+  absl::string_view ig_name = post_auction_signals.winning_ig_name;
+  absl::string_view debug_win_url =
+      winning_ad.debug_report_urls().auction_debug_win_url();
+
+  // Add the sampled debug win url to the response.
+  if (!debug_win_url.empty()) {
+    AddBuyerDebugReportToResponse(debug_win_url, ig_owner,
+                                  /*is_win_report=*/true,
+                                  /*is_component_win=*/true,
+                                  GetPlaceholderDataForInterestGroup(
+                                      ig_owner, ig_name, post_auction_signals));
+    return;
+  }
+
+  // If not selected, add a corresponding debug report with an empty url to
+  // pass the cooldown information to the client.
+  if (winning_ad.debug_win_url_failed_sampling()) {
+    AddBuyerDebugReportToResponse("", ig_owner, /*is_win_report=*/true,
+                                  /*is_component_win=*/true);
+  }
+}
+
+void SelectAdReactor::HandleSampledDebugLossReportForComponentAuctionAd(
+    const AdWithBid& ad, absl::string_view ig_owner, absl::string_view ig_name,
+    const PostAuctionSignals& post_auction_signals, bool is_winning_ig,
+    bool& loss_url_selected, bool& put_buyer_in_cooldown_for_confirmed_loss) {
+  absl::string_view debug_loss_url =
+      ad.debug_report_urls().auction_debug_loss_url();
+  if (!ad.debug_loss_url_failed_sampling() && debug_loss_url.empty()) {
+    return;
+  }
+
+  // If no debug loss url has been selected yet, and this one passed sampling,
+  // add this to the response. No more debug loss urls can be selected now.
+  if (!loss_url_selected && !debug_loss_url.empty()) {
+    AddBuyerDebugReportToResponse(debug_loss_url, ig_owner,
+                                  /*is_win_report=*/false,
+                                  /*is_component_win=*/is_winning_ig,
+                                  GetPlaceholderDataForInterestGroup(
+                                      ig_owner, ig_name, post_auction_signals));
+    loss_url_selected = true;
+    return;
+  }
+
+  // If this debug loss url is for the component auction winning ad and did
+  // not get selected, add a corresponding debug report with an empty url to the
+  // response. This will enable the client to put the adtech in cooldown if this
+  // ad goes on to lose in the top-level auction.
+  if (is_winning_ig) {
+    AddBuyerDebugReportToResponse("", ig_owner, /*is_win_report=*/false,
+                                  /*is_component_win=*/true);
+    return;
+  }
+
+  // If this debug loss url is for a losing ad and did not get selected, this
+  // is a confirmed loss url that will put the adtech in cooldown.
+  put_buyer_in_cooldown_for_confirmed_loss = true;
+}
+
+void SelectAdReactor::PerformUnsampledDebugReporting(
+    const PostAuctionSignals& post_auction_signals,
+    const std::optional<AdScore>& high_score) {
+  // Iterate over all buyers and their ads.
+  for (const auto& [ig_owner, get_bid_response] : shared_buyer_bids_map_) {
+    for (const AdWithBid& ad_with_bid : get_bid_response->bids()) {
+      if (!ad_with_bid.has_debug_report_urls()) {
+        continue;
+      }
+      absl::string_view ig_name = ad_with_bid.interest_group_name();
+      bool is_winning_ig = (ig_owner == post_auction_signals.winning_ig_owner &&
+                            ig_name == post_auction_signals.winning_ig_name);
+
+      // For component auction winning ad, skip buyer debug pings and instead
+      // add both win and loss debug reports to the response.
       if (is_winning_ig && IsComponentAuction(auction_scope_)) {
-        PopulateBuyerDebugReportsForComponentAuctionWinner(
+        PerformUnsampledDebugReportingForComponentAuctionWinner(
             ad_with_bid, post_auction_signals);
         continue;
       }
-      absl::AnyInvocable<void(absl::StatusOr<absl::string_view>)> done_cb;
-      if (server_common::log::PS_VLOG_IS_ON(5)) {
-        done_cb =
-            [ig_owner = ig_owner, ig_name](
-                absl::StatusOr<absl::string_view> result) mutable {  // NOLINT
-              if (result.ok()) {
-                PS_VLOG(5) << "Performed debug reporting for:" << ig_owner
-                           << ", interest_group: " << ig_name;
-              } else {
-                PS_VLOG(5) << "Error while performing debug reporting for:"
-                           << ig_owner << ", interest_group: " << ig_name
-                           << " ,status:" << result.status();
-              }
-            };
-      } else {
-        done_cb = [](absl::StatusOr<absl::string_view> result) {};  // NOLINT
-      }
-      HTTPRequest http_request = CreateDebugReportingHttpRequest(
-          debug_url,
-          GetPlaceholderDataForInterestGroup(ig_owner, ig_name,
-                                             post_auction_signals),
-          is_winning_ig);
-      clients_.reporting->DoReport(http_request, std::move(done_cb));
+
+      // For all other ads, send debug pings from the server.
+      absl::string_view debug_url =
+          is_winning_ig
+              ? ad_with_bid.debug_report_urls().auction_debug_win_url()
+              : ad_with_bid.debug_report_urls().auction_debug_loss_url();
+      SendDebugReportingPing(*clients_.reporting, debug_url, ig_owner, ig_name,
+                             is_winning_ig, post_auction_signals);
     }
   }
-  if (high_score && high_score->has_debug_report_urls()) {
-    PopulateSellerDebugReportsForComponentAuctionWinner(*high_score);
+}
+
+void SelectAdReactor::PerformUnsampledDebugReportingForComponentAuctionWinner(
+    const AdWithBid& winning_ad,
+    const PostAuctionSignals& post_auction_signals) {
+  absl::string_view ig_owner = post_auction_signals.winning_ig_owner;
+  DebugReportingPlaceholder placeholder_data =
+      GetPlaceholderDataForInterestGroup(
+          ig_owner, winning_ad.interest_group_name(), post_auction_signals);
+
+  // Add debug win url for component auction winning ad to response if present.
+  absl::string_view debug_win_url =
+      winning_ad.debug_report_urls().auction_debug_win_url();
+  if (!debug_win_url.empty()) {
+    AddBuyerDebugReportToResponse(debug_win_url, ig_owner,
+                                  /*is_win_report=*/true,
+                                  /*is_component_win=*/true, placeholder_data);
+  }
+
+  // Add debug loss url for component auction winning ad to response if present.
+  absl::string_view debug_loss_url =
+      winning_ad.debug_report_urls().auction_debug_loss_url();
+  if (!debug_loss_url.empty()) {
+    AddBuyerDebugReportToResponse(debug_loss_url, ig_owner,
+                                  /*is_win_report=*/false,
+                                  /*is_component_win=*/true, placeholder_data);
   }
 }
 
-void SelectAdReactor::PopulateBuyerDebugReportsForComponentAuctionWinner(
-    const AdWithBid& ad_with_bid,
-    const PostAuctionSignals& post_auction_signals) {
-  const auto& debug_report_urls = ad_with_bid.debug_report_urls();
-  if (debug_report_urls.auction_debug_win_url().empty() &&
-      debug_report_urls.auction_debug_loss_url().empty()) {
+void SelectAdReactor::AddBuyerDebugReportToResponse(
+    absl::string_view debug_url, absl::string_view adtech_origin,
+    bool is_win_report, bool is_component_win,
+    std::optional<DebugReportingPlaceholder> placeholder_data) {
+  // The debug url is for the winning interest group if it is a debug win url,
+  // or if it is a debug loss url for the component auction winner.
+  bool is_winning_ig = is_win_report || is_component_win;
+
+  // Add debug report object to the response.
+  DebugReports& debug_reports = adtech_origin_debug_urls_map_[adtech_origin];
+  auto* debug_report = debug_reports.add_reports();
+  debug_report->set_url((placeholder_data.has_value())
+                            ? CreateDebugReportingUrlForInterestGroup(
+                                  debug_url, *placeholder_data, is_winning_ig)
+                            : debug_url);
+  debug_report->set_is_seller_report(false);
+  debug_report->set_is_win_report(is_win_report);
+  debug_report->set_is_component_win(is_component_win);
+}
+
+void SelectAdReactor::MergeSellerDebugReportsToResponse(
+    DebugReports* seller_debug_reports, bool enable_sampled_debug_reporting) {
+  if (!seller_debug_reports || seller_debug_reports->reports().empty()) {
     return;
   }
-  DebugReportingPlaceholder placeholder_data =
-      GetPlaceholderDataForInterestGroup(post_auction_signals.winning_ig_owner,
-                                         ad_with_bid.interest_group_name(),
-                                         post_auction_signals);
-  DebugReports debug_reports;
-  if (!debug_report_urls.auction_debug_win_url().empty()) {
-    auto* win_report = debug_reports.add_reports();
-    win_report->set_url(CreateDebugReportingUrlForInterestGroup(
-        debug_report_urls.auction_debug_win_url(), placeholder_data,
-        /*is_winning_interest_group=*/true));
-    win_report->set_is_win_report(true);
-    win_report->set_is_component_win(true);
-  }
-  if (!debug_report_urls.auction_debug_loss_url().empty()) {
-    auto* loss_report = debug_reports.add_reports();
-    loss_report->set_url(CreateDebugReportingUrlForInterestGroup(
-        debug_report_urls.auction_debug_loss_url(), placeholder_data,
-        /*is_winning_interest_group=*/true));
-    loss_report->set_is_component_win(true);
-  }
-  adtech_origin_debug_urls_map_[post_auction_signals.winning_ig_owner] =
-      std::move(debug_reports);
-}
 
-void SelectAdReactor::PopulateSellerDebugReportsForComponentAuctionWinner(
-    const AdScore& high_score) {
-  DebugReports debug_reports;
-  if (auto it = adtech_origin_debug_urls_map_.find(auction_config_.seller());
-      it != adtech_origin_debug_urls_map_.end()) {
-    debug_reports = std::move(it->second);
+  // If the seller is also a buyer in the auction, there may be existing debug
+  // reports for the adtech origin. Otherwise, an empty DebugReports object
+  // is created.
+  DebugReports& debug_reports =
+      adtech_origin_debug_urls_map_[auction_config_.seller()];
+
+  // Get counts for existing non-empty (buyer) debug reports.
+  DebugReportsInResponseCounts debug_reports_counts =
+      DebugReportsInResponseCounts::Create(enable_sampled_debug_reporting,
+                                           IsComponentAuction(auction_scope_));
+  for (auto& debug_report : debug_reports.reports()) {
+    debug_reports_counts.DecrementCountsForDebugReport(debug_report);
   }
-  if (!high_score.debug_report_urls().auction_debug_win_url().empty()) {
-    auto* win_report = debug_reports.add_reports();
-    win_report->set_url(high_score.debug_report_urls().auction_debug_win_url());
-    win_report->set_is_win_report(true);
-    win_report->set_is_seller_report(true);
-    win_report->set_is_component_win(true);
-  }
-  if (!high_score.debug_report_urls().auction_debug_loss_url().empty()) {
-    auto* loss_report = debug_reports.add_reports();
-    loss_report->set_url(
-        high_score.debug_report_urls().auction_debug_loss_url());
-    loss_report->set_is_seller_report(true);
-    loss_report->set_is_component_win(true);
-  }
-  if (!debug_reports.reports().empty()) {
-    adtech_origin_debug_urls_map_[auction_config_.seller()] =
-        std::move(debug_reports);
+
+  // Add seller debug reports as long as they respect the max allowed counts per
+  // adtech origin.
+  for (auto& debug_report : *seller_debug_reports->mutable_reports()) {
+    if (debug_reports_counts.CanAddDebugReport(debug_report)) {
+      debug_reports_counts.DecrementCountsForDebugReport(debug_report);
+      *debug_reports.add_reports() = std::move(debug_report);
+    }
   }
 }
 

@@ -61,19 +61,19 @@ defined_values:
 
 usage_estimations:
   'Buyer-Compute':
-    'BoxUsage:c6i.12xlarge': test.duration * bidding:num_instances
-    'BoxUsage:c6i.2xlarge': test.duration
-    'BoxUsage:t2.micro': test.duration
+    'BoxUsage:c6i.12xlarge': test.duration_seconds * bidding:num_instances / 3600
+    'BoxUsage:c6i.2xlarge': test.duration_seconds / 3600
+    'BoxUsage:t2.micro': test.duration_seconds / 3600
 
   'Buyer-Network':
-    'LoadBalancerUsage': test.duration * 2  # A load balancer for bfe and bidding
+    'LoadBalancerUsage': test.duration_seconds * 2  # A load balancer for bfe and bidding / 3600
     'LCUUsage': (bfe:request.size_bytes + bfe:response.size_bytes + bidding:request.size_bytes + bidding:response.size_bytes)  * bfe:request.count * convert_to_gb
     'DataTransfer-Regional-Bytes': (bfe:request.size_bytes + bfe:response.size_bytes)  * bfe:request.count * convert_to_gb
     'AWS-Out-Bytes': 0
     # There are 7 vpc endpoints talking to aws services
-    'VpcEndpoint-Hours': 7 * buyer_availability_zones * test.duration
+    'VpcEndpoint-Hours': 7 * buyer_availability_zones * test.duration_seconds / 3600
     'NatGateway-Bytes': (bfe:initiated_request.to_kv.size_bytes + bfe:bfe.initiated_response.to_kv.size_bytes) * bfe:request.count * convert_to_gb
-    'NatGateway-Hours': (bfe:num_instances + bidding:num_instances) * test.duration
+    'NatGateway-Hours': (bfe:num_instances + bidding:num_instances) * test.duration_seconds / 3600
     'PublicIPv4:InUseAddress': 0
 ...
 ---
@@ -131,16 +131,16 @@ defined_values:
 
 usage_estimations:
   'Seller-Compute':
-    'BoxUsage:c6i.2xlarge': test.duration
-    'BoxUsage:c6i.4xlarge': test.duration * auction:num_instances
-    'BoxUsage:t2.micro': test.duration
+    'BoxUsage:c6i.2xlarge': test.duration_seconds / 3600
+    'BoxUsage:c6i.4xlarge': test.duration_seconds * auction:num_instances / 3600
+    'BoxUsage:t2.micro': test.duration_seconds / 3600
 
   'Seller-Network':
-    'LoadBalancerUsage': test.duration * 2
+    'LoadBalancerUsage': test.duration_seconds * 2 / 3600
     'LCUUsage': (sfe:request.size_bytes + sfe:response.size_bytes + auction:request.size_bytes + auction:response.size_bytes) * sfe:request.count * convert_to_gb
     'DataTransfer-Out-Bytes': (sfe:response.size_bytes + sfe:initiated_request.to_kv.size_bytes) * sfe:request.count * convert_to_gb
     # There are 7 vpc endpoints talking to aws services
-    'VpcEndpoint-Hours': 7 * seller_availability_zones * test.duration
+    'VpcEndpoint-Hours': 7 * seller_availability_zones * test.duration_seconds / 3600
 
     # Note that the to_kv metrics here are averages since they are exported as distributions,
     # so they need to be multiplied bu the number of requests
@@ -150,7 +150,7 @@ usage_estimations:
                         + sfe:request.count * convert_to_gb *
                                         (sfe:initiated_request.to_kv.size_bytes + sfe:sfe.initiated_response.to_kv.size_bytes)
 
-    'NatGateway-Hours': (sfe:num_instances + auction:num_instances) * test.duration
+    'NatGateway-Hours': (sfe:num_instances + auction:num_instances) * test.duration_seconds / 3600
     'PublicIPv4:InUseAddress': 0
 ...
 ---
@@ -187,8 +187,8 @@ download_metrics:
     service: [bfe]
 
 defined_values:
-  bfe_cpu_hours: test.duration * bfe:system.cpu.count * bfe:num_instances
-  bidding_cpu_hours: test.duration * bidding:system.cpu.count * bidding:num_instances
+  bfe_cpu_hours: test.duration_seconds * bfe:system.cpu.count * bfe:num_instances / 3600
+  bidding_cpu_hours: test.duration_seconds * bidding:system.cpu.count * bidding:num_instances / 3600
   ram_gb_per_vcpu: 4
   e2MicroCoreTime: 0.25
   convert_to_gb: .000000001
@@ -197,8 +197,8 @@ usage_estimations:
   'Buyer-Compute':
     'N2D AMD Instance Core running in Virginia': bfe_cpu_hours + bidding_cpu_hours
     'N2D AMD Instance Ram running in Virginia': (bfe_cpu_hours + bidding_cpu_hours) * ram_gb_per_vcpu
-    'E2 Instance Core running in Virginia': test.duration * e2MicroCoreTime
-    'E2 Instance Ram running in Virginia': test.duration
+    'E2 Instance Core running in Virginia': test.duration_seconds * e2MicroCoreTime / 3600
+    'E2 Instance Ram running in Virginia': test.duration_seconds / 3600
 
   'Buyer-Confidential-Compute':
     'Confidential Computing Instance Core': bfe_cpu_hours + bidding_cpu_hours
@@ -214,10 +214,10 @@ usage_estimations:
 
     'Networking Cloud Nat Data Processing': (bfe:initiated_request.to_kv.size_bytes + bfe:bfe.initiated_response.to_kv.size_bytes) * convert_to_gb
 
-    'Networking Cloud NAT IP Usage': test.duration
+    'Networking Cloud NAT IP Usage': test.duration_seconds / 3600
 
      # More than 32 VMs using the NAT gateways are charged at the 32 gateway price: https://cloud.google.com/nat/pricing
-    'Networking Cloud Nat Gateway Uptime': test.duration * min(32, bfe:num_instances + bidding:num_instances)
+    'Networking Cloud Nat Gateway Uptime': test.duration_seconds * min(32, bfe:num_instances + bidding:num_instances) / 3600
 ...
 ---
 cost_model_metadata:
@@ -257,8 +257,8 @@ download_metrics:
     service: [sfe]
 
 defined_values:
-  sfe_cpu_hours: test.duration * sfe:system.cpu.count * sfe:num_instances
-  auction_cpu_hours: test.duration * auction:system.cpu.count * auction:num_instances
+  sfe_cpu_hours: test.duration_seconds * sfe:system.cpu.count * sfe:num_instances / 3600
+  auction_cpu_hours: test.duration_seconds * auction:system.cpu.count * auction:num_instances / 3600
   ram_gb_per_vcpu: 4
   e2MicroCoreTime: 0.25
   convert_to_gb: .000000001
@@ -267,8 +267,8 @@ usage_estimations:
   'Seller-Compute':
     'N2D AMD Instance Core running in Virginia': sfe_cpu_hours + auction_cpu_hours
     'N2D AMD Instance Ram running in Virginia': (sfe_cpu_hours + auction_cpu_hours) * ram_gb_per_vcpu
-    'E2 Instance Core running in Virginia': test.duration * e2MicroCoreTime
-    'E2 Instance Ram running in Virginia': test.duration
+    'E2 Instance Core running in Virginia': test.duration_seconds * e2MicroCoreTime / 3600
+    'E2 Instance Ram running in Virginia': test.duration_seconds / 3600
 
   'Seller-Confidential-Compute':
     'Confidential Computing Instance Core': sfe_cpu_hours + auction_cpu_hours
@@ -286,8 +286,8 @@ usage_estimations:
                                             + sfe:initiated_request.to_kv.size_bytes
                                             + sfe:sfe.initiated_response.to_kv.size_bytes)
 
-    'Networking Cloud NAT IP Usage': test.duration
+    'Networking Cloud NAT IP Usage': test.duration_seconds / 3600
 
     # More than 32 VMs using the NAT gateways are charged at the 32 gateway price: https://cloud.google.com/nat/pricing
-    'Networking Cloud Nat Gateway Uptime': test.duration * min(32, auction:num_instances + sfe:num_instances)
+    'Networking Cloud Nat Gateway Uptime': test.duration_seconds * min(32, auction:num_instances + sfe:num_instances) / 3600
 ...

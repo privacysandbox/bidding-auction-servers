@@ -572,6 +572,7 @@ absl::Status CborSerializeScoreAdResponse(
     const ScoreAdsResponse::AdScore& ad_score,
     const BiddingGroupMap& bidding_group_map,
     const UpdateGroupMap& update_group_map,
+    const AdtechOriginDebugUrlsMap& adtech_origin_debug_urls_map,
     int per_adtech_paapi_contributions_limit,
     absl::string_view ad_auction_result_nonce,
     std::unique_ptr<KAnonAuctionResultData> kanon_auction_result_data,
@@ -594,6 +595,8 @@ absl::Status CborSerializeScoreAdResponse(
         ad_score.top_level_contributions(),
         per_adtech_paapi_contributions_limit, error_handler, root));
   }
+  PS_RETURN_IF_ERROR(CborSerializeDebugReports(adtech_origin_debug_urls_map,
+                                               error_handler, root));
   PS_RETURN_IF_ERROR(
       CborSerializeUpdateGroups(update_group_map, error_handler, root));
   PS_RETURN_IF_ERROR(
@@ -670,11 +673,8 @@ absl::Status CborSerializeComponentScoreAdResponse(
     PS_RETURN_IF_ERROR(CborSerializeString(
         kBidCurrency, ad_score.bid_currency(), error_handler, root));
   }
-  if (auto status = CborSerializeDebugReports(adtech_origin_debug_urls_map,
-                                              error_handler, root);
-      !status.ok()) {
-    PS_VLOG(5) << "Failed to serialize debug reports: " << status;
-  }
+  PS_RETURN_IF_ERROR(CborSerializeDebugReports(adtech_origin_debug_urls_map,
+                                               error_handler, root));
   PS_RETURN_IF_ERROR(
       CborSerializeUpdateGroups(update_group_map, error_handler, root));
   PS_RETURN_IF_ERROR(
@@ -1217,6 +1217,7 @@ absl::Status CborDecodeGhostWinnerForTopLevelAuctionToProto(
             << key;
     }
   }
+  ghost_winner.set_ad_type(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD);
   return absl::OkStatus();
 }
 
@@ -1664,6 +1665,7 @@ absl::StatusOr<std::string> Encode(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
     const BiddingGroupMap& bidding_group_map,
     const UpdateGroupMap& update_group_map,
+    const AdtechOriginDebugUrlsMap& adtech_origin_debug_urls_map,
     const std::optional<AuctionResult::Error>& error,
     ErrorHandler error_handler, int per_adtech_paapi_contributions_limit,
     absl::string_view ad_auction_result_nonce,
@@ -1685,8 +1687,9 @@ absl::StatusOr<std::string> Encode(
   } else if (high_score) {
     PS_RETURN_IF_ERROR(CborSerializeScoreAdResponse(
         *high_score, bidding_group_map, update_group_map,
-        per_adtech_paapi_contributions_limit, ad_auction_result_nonce,
-        std::move(kanon_auction_result_data), error_handler, *cbor_internal));
+        adtech_origin_debug_urls_map, per_adtech_paapi_contributions_limit,
+        ad_auction_result_nonce, std::move(kanon_auction_result_data),
+        error_handler, *cbor_internal));
   } else if (kanon_auction_result_data != nullptr &&
              kanon_auction_result_data->kanon_ghost_winners != nullptr) {
     // "nonce" must be added before "kAnonGhostWinners".
@@ -1924,6 +1927,19 @@ BuyerInputForBidding DecodeBuyerInput(absl::string_view owner,
                                    buyer_input_for_bidding);
           RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
                                 buyer_input_for_bidding);
+          break;
+        }
+        case 6: {  // Buyer in Cooldown or Lockout.
+          bool is_valid_cooldown_or_lockout_type =
+              IsTypeValid(&cbor_is_bool, ig_entry.value, kInCooldownOrLockout,
+                          kBool, error_accumulator);
+          RETURN_IF_PREV_ERRORS(error_accumulator, fail_fast,
+                                buyer_input_for_bidding);
+
+          if (is_valid_cooldown_or_lockout_type) {
+            buyer_input_for_bidding.set_in_cooldown_or_lockout(
+                cbor_get_bool(ig_entry.value));
+          }
           break;
         }
         default:

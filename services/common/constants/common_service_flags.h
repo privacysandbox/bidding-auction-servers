@@ -60,6 +60,7 @@ ABSL_DECLARE_FLAG(std::optional<int>, ps_verbosity);
 ABSL_DECLARE_FLAG(std::optional<int>, max_allowed_size_debug_url_bytes);
 ABSL_DECLARE_FLAG(std::optional<int>, max_allowed_size_all_debug_urls_kb);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_chaffing);
+ABSL_DECLARE_FLAG(std::optional<bool>, enable_chaffing_v2);
 ABSL_DECLARE_FLAG(std::optional<int>, debug_sample_rate_micro);
 ABSL_DECLARE_FLAG(std::optional<bool>, enable_tkv_v2_browser);
 ABSL_DECLARE_FLAG(std::optional<bool>, tkv_egress_tls);
@@ -69,6 +70,7 @@ ABSL_DECLARE_FLAG(std::optional<std::string>, seller_code_fetch_config);
 ABSL_DECLARE_FLAG(std::optional<int>, curlmopt_maxconnects);
 ABSL_DECLARE_FLAG(std::optional<int>, curlmopt_max_total_connections);
 ABSL_DECLARE_FLAG(std::optional<int>, curlmopt_max_host_connections);
+ABSL_DECLARE_FLAG(std::optional<std::string>, parc_addr);
 
 namespace privacy_sandbox::bidding_auction_servers {
 
@@ -114,6 +116,7 @@ inline constexpr char MAX_ALLOWED_SIZE_DEBUG_URL_BYTES[] =
 inline constexpr char MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB[] =
     "MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB";
 inline constexpr char ENABLE_CHAFFING[] = "ENABLE_CHAFFING";
+inline constexpr char ENABLE_CHAFFING_V2[] = "ENABLE_CHAFFING_V2";
 inline constexpr char DEBUG_SAMPLE_RATE_MICRO[] = "DEBUG_SAMPLE_RATE_MICRO";
 inline constexpr char ENABLE_TKV_V2_BROWSER[] = "ENABLE_TKV_V2_BROWSER";
 inline constexpr char TKV_EGRESS_TLS[] = "TKV_EGRESS_TLS";
@@ -126,6 +129,7 @@ inline constexpr char CURLMOPT_MAX_TOTAL_CONNECTIONS[] =
     "CURLMOPT_MAX_TOTAL_CONNECTIONS";
 inline constexpr char CURLMOPT_MAX_HOST_CONNECTIONS[] =
     "CURLMOPT_MAX_HOST_CONNECTIONS";
+inline constexpr char PARC_ADDR[] = "PARC_ADDR";
 
 inline constexpr absl::string_view kCommonServiceFlags[] = {
     PUBLIC_KEY_ENDPOINT,
@@ -154,6 +158,7 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     MAX_ALLOWED_SIZE_DEBUG_URL_BYTES,
     MAX_ALLOWED_SIZE_ALL_DEBUG_URLS_KB,
     ENABLE_CHAFFING,
+    ENABLE_CHAFFING_V2,
     DEBUG_SAMPLE_RATE_MICRO,
     ENABLE_TKV_V2_BROWSER,
     TKV_EGRESS_TLS,
@@ -162,6 +167,7 @@ inline constexpr absl::string_view kCommonServiceFlags[] = {
     CURLMOPT_MAXCONNECTS,
     CURLMOPT_MAX_TOTAL_CONNECTIONS,
     CURLMOPT_MAX_HOST_CONNECTIONS,
+    PARC_ADDR,
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers

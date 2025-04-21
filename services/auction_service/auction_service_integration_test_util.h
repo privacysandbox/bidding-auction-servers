@@ -61,8 +61,6 @@ inline std::unique_ptr<Auction::StubInterface> CreateAuctionStub(int port) {
 }
 
 struct TestBuyerReportingSignals {
-  absl::string_view seller = kTestSeller;
-  absl::string_view interest_group_name = kTestInterestGroupName;
   double ad_cost = kTestAdCost;
   long recency = kTestRecency;
   int modeling_signals = kTestModelingSignals;
@@ -73,25 +71,35 @@ struct TestBuyerReportingSignals {
 };
 
 struct TestScoreAdsRequestConfig {
-  const TestBuyerReportingSignals& test_buyer_reporting_signals;
+  const TestBuyerReportingSignals test_buyer_reporting_signals = {};
+  int desired_ad_count = 1;
   bool enable_debug_reporting = false;
-  int desired_ad_count = 90;
-  std::string top_level_seller = "";
+  bool enable_sampled_debug_reporting = false;
+  bool in_cooldown_or_lockout = false;
+  absl::string_view seller = kTestSeller;
+  absl::string_view top_level_seller = "";
   bool is_consented = false;
   std::optional<std::string> buyer_reporting_id;
   std::optional<std::string> buyer_and_seller_reporting_id;
   std::optional<std::string> selected_buyer_and_seller_reporting_id;
-  std::string interest_group_owner = "";
+  absl::string_view interest_group_name = kTestInterestGroupName;
+  absl::string_view interest_group_owner = kTestIgOwner;
   TestComponentAuctionResultData component_auction_data;
   const uint32_t seller_data_version = kTestSellerDataVersion;
   std::optional<bool> enforce_kanon;
   std::optional<bool> k_anon_status;
+  bool generate_scoring_signals = true;
 };
+
+ScoreAdsRequest BuildScoreAdsRequest(
+    const TestScoreAdsRequestConfig& test_score_ads_request_config = {});
+
+ScoreAdsRequest BuildScoreAdsRequestForPAS(
+    const TestScoreAdsRequestConfig& test_score_ads_request_config = {});
 
 // This function simulates a E2E successful call to ScoreAds in the
 // Auction Service E2E for Protected Audience:
-// - Loads a test protected audience udf for buyer and seller
-// into Roma
+// - Loads a test protected audience udf for buyer and seller into Roma
 // - Creates a test ScoreAdsRequest based on the TestScoreAdsConfig.
 // - Calls ScoreAd using the request
 // - Sets the response

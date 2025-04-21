@@ -95,6 +95,10 @@ class CostTool:
             arg_params["test.duration"] = int(
                 (end_time - start_time).total_seconds() / 3600
             )
+            arg_params["test.duration_seconds"] = int(
+                (end_time - start_time).total_seconds()
+            )
+
             metrics.update(
                 GcpMetricsLoader(project, env, start_time, end_time).get_metrics(
                     cost_yaml

@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,17 +21,19 @@
 #include <string>
 #include <vector>
 
+#include <apis/privacysandbox/apis/parc/v0/parc_service.grpc.pb.h>
+#include <apis/privacysandbox/apis/parc/v0/parc_service.pb.h>
+
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "services/bidding_service/cddl_spec_cache.h"
 #include "services/bidding_service/egress_schema_cache.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "services/common/data_fetch/periodic_bucket_fetcher.h"
 #include "src/concurrent/executor.h"
-#include "src/public/cpio/interface/blob_storage_client/blob_storage_client_interface.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-
 class EgressSchemaBucketFetcher : public PeriodicBucketFetcher {
  public:
   // bucket_name: the name of the bucket to fetch schemas from.
@@ -44,11 +46,11 @@ class EgressSchemaBucketFetcher : public PeriodicBucketFetcher {
   // outlive EgressSchemaBucketFetcher.
   // egress_schema_cache: This cache is updated upon periodic egress schema
   // fetch.
-  explicit EgressSchemaBucketFetcher(
-      absl::string_view bucket_name, absl::Duration fetch_period_ms,
-      server_common::Executor* executor,
-      google::scp::cpio::BlobStorageClientInterface* blob_storage_client,
-      EgressSchemaCache* egress_schema_cache);
+  explicit EgressSchemaBucketFetcher(absl::string_view bucket_name,
+                                     absl::Duration fetch_period_ms,
+                                     server_common::Executor* executor,
+                                     BlobStorageClient* blob_storage_client,
+                                     EgressSchemaCache* egress_schema_cache);
 
   ~EgressSchemaBucketFetcher() { End(); }
 
@@ -58,6 +60,11 @@ class EgressSchemaBucketFetcher : public PeriodicBucketFetcher {
       delete;
 
  protected:
+  // Loads the fetched code blobs into EgressSchemaCache.
+  absl::Status OnFetch(
+      const privacysandbox::apis::parc::v0::GetBlobRequest blob_request,
+      const std::string blob_data) override;
+
   // Loads the fetched code blobs into EgressSchemaCache.
   absl::Status OnFetch(
       const google::scp::core::AsyncContext<

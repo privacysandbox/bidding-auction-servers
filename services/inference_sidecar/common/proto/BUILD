@@ -22,6 +22,7 @@ proto_library(
     name = "inference_sidecar_proto",
     srcs = ["inference_sidecar.proto"],
     deps = [
+        ":inference_payload_proto",
     ],
 )
 

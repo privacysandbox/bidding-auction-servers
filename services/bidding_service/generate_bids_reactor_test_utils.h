@@ -29,6 +29,9 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+using IGForBidding =
+    GenerateBidsRequest::GenerateBidsRawRequest::InterestGroupForBidding;
+using GenerateBidsRawRequest = GenerateBidsRequest::GenerateBidsRawRequest;
 using GenerateProtectedAppSignalsBidsRawRequest =
     GenerateProtectedAppSignalsBidsRequest::
         GenerateProtectedAppSignalsBidsRawRequest;
@@ -83,6 +86,30 @@ constexpr char kTestDebugReportingUrls[] = R"JSON(
 constexpr char kEmptyAuctionMetadata[] = "{}";
 constexpr char kTestAuctionMetadata[] =
     R"JSON({"topLevelSeller":"https://www.example-top-ssp.com"})JSON";
+constexpr uint32_t kDataVersionForAll = 1787;
+
+struct GenerateBidsRawRequestOptions {
+  std::vector<IGForBidding> interest_groups_to_add;
+  bool enable_debug_reporting = false;
+  bool enable_sampled_debug_reporting = false;
+  bool in_cooldown_or_lockout = false;
+  bool enable_adtech_code_logging = false;
+  absl::string_view auction_signals = kTestAuctionSignals;
+  absl::string_view buyer_signals = kTestBuyerSignals;
+  absl::string_view seller = kTestSeller;
+  absl::string_view publisher_name = kTestPublisherName;
+  uint32_t data_version = kDataVersionForAll;
+  int multi_bid_limit = kDefaultMultiBidLimit;
+};
+
+// Creates a test GenerateBidsRawRequest for a single-seller auction.
+GenerateBidsRawRequest BuildGenerateBidsRawRequest(
+    const GenerateBidsRawRequestOptions& options);
+
+// Creates a test GenerateBidsRawRequest for a component auction.
+GenerateBidsRawRequest BuildGenerateBidsRawRequestForComponentAuction(
+    const GenerateBidsRawRequestOptions& options,
+    absl::string_view top_level_seller = kTestTopLevelSeller);
 
 // Creates a test PrivateAggregationContribution object.
 PrivateAggregateContribution CreateTestPAggContribution(

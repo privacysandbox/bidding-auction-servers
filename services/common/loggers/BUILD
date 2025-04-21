@@ -34,6 +34,7 @@ cc_library(
     hdrs = ["request_log_context.h"],
     deps = [
         "//api:bidding_auction_servers_cc_proto",
+        "//services/common/random:rng",
         "@com_google_absl//absl/base:no_destructor",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:bit_gen_ref",

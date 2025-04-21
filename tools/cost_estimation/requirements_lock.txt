@@ -19,7 +19,7 @@ grpcio==1.68.1
 grpcio_status==1.68.1
 grpcio-tools
 grpcio-gcp==0.2.2
-boto3>=1.35.87
+boto3==1.35.87
 jmespath==1.0.1
 botocore==1.35.87
 s3transfer==0.10.4

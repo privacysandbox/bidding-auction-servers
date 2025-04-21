@@ -13,8 +13,8 @@
 //   limitations under the License.
 //
 
-#ifndef SERVICES_COMMON_LOGGERS_BIDDING_NO_OP_LOGGER_H_
-#define SERVICES_COMMON_LOGGERS_BIDDING_NO_OP_LOGGER_H_
+#ifndef SERVICES_BIDDING_SERVICE_BENCHMARKING_BIDDING_NO_OP_LOGGER_H_
+#define SERVICES_BIDDING_SERVICE_BENCHMARKING_BIDDING_NO_OP_LOGGER_H_
 
 #include <string_view>
 
@@ -37,4 +37,4 @@ class BiddingNoOpLogger : public BiddingBenchmarkingLogger {
 
 }  // namespace privacy_sandbox::bidding_auction_servers
 
-#endif  // SERVICES_COMMON_LOGGERS_BIDDING_NO_OP_LOGGER_H_
+#endif  // SERVICES_BIDDING_SERVICE_BENCHMARKING_BIDDING_NO_OP_LOGGER_H_

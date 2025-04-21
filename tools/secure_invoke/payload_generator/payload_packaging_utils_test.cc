@@ -149,7 +149,8 @@ TEST(UnpackageBrowserAuctionResultTest, GeneratesAValidResponse) {
   // Encode.
   auto encoded_data = Encode(
       input, expected.bidding_groups(), expected.update_groups(),
-      /*error=*/std::nullopt, [](const grpc::Status& status) {},
+      /*adtech_origin_debug_urls_map=*/{}, /*error=*/std::nullopt,
+      [](const grpc::Status& status) {},
       /*per_adtech_paapi_contributions_limit=*/100, nonce);
   ASSERT_TRUE(encoded_data.ok()) << encoded_data.status();
 

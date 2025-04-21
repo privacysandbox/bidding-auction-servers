@@ -37,6 +37,7 @@
 #include "services/common/loggers/build_input_process_response_benchmarking_logger.h"
 #include "services/common/loggers/no_ops_logger.h"
 #include "services/common/metric/server_definition.h"
+#include "services/common/random/rng.h"
 #include "services/common/util/async_task_tracker.h"
 #include "services/common/util/cancellation_wrapper.h"
 #include "services/common/util/client_contexts.h"
@@ -81,9 +82,6 @@ inline constexpr char kCheckProviderNullnessV2ErrorMsg[] =
 
 inline constexpr absl::string_view kWinningAd = "winning_ad";
 
-inline constexpr int kMinChaffRequestSizeBytes = 9000;
-inline constexpr int kMaxChaffRequestSizeBytes = 95000;
-
 inline constexpr int kMinChaffRequests = 1;
 inline constexpr int kMinChaffRequestsWithNoRealRequests = 2;
 
@@ -116,8 +114,9 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
       SelectAdResponse* response, server_common::Executor* executor,
       const ClientRegistry& clients,
       const TrustedServersConfigClient& config_client,
-      const ReportWinMap& report_win_map, bool enable_cancellation = false,
-      bool enable_kanon = false,
+      const ReportWinMap& report_win_map,
+      const RandomNumberGeneratorFactory& rng_factory,
+      bool enable_cancellation = false, bool enable_kanon = false,
       bool enable_buyer_private_aggregate_reporting = false,
       int per_adtech_paapi_contributions_limit = 0, bool fail_fast = true,
       int max_buyers_solicited = metric::kMaxBuyersSolicited);
@@ -338,21 +337,56 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
       absl::StatusOr<std::unique_ptr<ScoreAdsResponse::ScoreAdsRawResponse>>
           status);
 
-  // Sends debug reporting pings in all cases except for the winning interest
-  // group in component auctions.
+  // Performs debug reporting for all ads received from the buyer.
   void PerformDebugReporting(
+      DebugReports* seller_debug_reports,
       const std::optional<ScoreAdsResponse::AdScore>& high_score);
 
-  // Adds buyer debug reports for the winning interest group in component
-  // auctions to the adtech_origin_debug_urls_map_.
-  void PopulateBuyerDebugReportsForComponentAuctionWinner(
-      const AdWithBid& ad_with_bid,
+  // Helper functions to filter downsampled buyer debug urls and add the
+  // debug reports for the selected url(s) to the response:
+  // a) Single-seller auction: Maximum one debug url of either type per adtech.
+  // b) Component auction: Maximum one debug win and debug loss url per adtech.
+  //
+  // A debug report with an empty url is added to the response when the client
+  // might need to put the buyer adtech in cooldown due to a debug url that
+  // failed sampling.
+  void PerformSampledDebugReporting(
+      const PostAuctionSignals& post_auction_signals);
+  void PerformSampledDebugReportingForComponentAuction(
+      const PostAuctionSignals& post_auction_signals);
+  void HandleSampledDebugWinReportForComponentAuctionWinner(
+      const AdWithBid& winning_ad,
+      const PostAuctionSignals& post_auction_signals);
+  void HandleSampledDebugLossReportForComponentAuctionAd(
+      const AdWithBid& ad, absl::string_view ig_owner,
+      absl::string_view ig_name, const PostAuctionSignals& post_auction_signals,
+      bool is_winning_ig, bool& loss_url_selected,
+      bool& put_buyer_in_cooldown_for_confirmed_loss);
+
+  // Helper functions to perform debug reporting with downsampling disabled.
+  // Debug reports for the component auction winning ad are added to the
+  // response. The appropriate win or loss debug pings are sent from the server
+  // for all other ads.
+  void PerformUnsampledDebugReporting(
+      const PostAuctionSignals& post_auction_signals,
+      const std::optional<ScoreAdsResponse::AdScore>& high_score);
+  void PerformUnsampledDebugReportingForComponentAuctionWinner(
+      const AdWithBid& winning_ad,
       const PostAuctionSignals& post_auction_signals);
 
-  // Adds seller debug reports for the winning interest group in component
-  // auctions to the adtech_origin_debug_urls_map_.
-  void PopulateSellerDebugReportsForComponentAuctionWinner(
-      const ScoreAdsResponse::AdScore& high_score);
+  // Helper function to add to the response the debug report object
+  // corresponding to a buyer debug url that was not pinged by the server.
+  void AddBuyerDebugReportToResponse(
+      absl::string_view debug_url, absl::string_view adtech_origin,
+      bool is_win_report, bool is_component_win,
+      std::optional<DebugReportingPlaceholder> placeholder_data = std::nullopt);
+
+  // Helper function to add to the response any seller debug reports received
+  // from Auction service to the response. Handles the edge case where the
+  // seller adtech is also a buyer in the auction and may already have buyer
+  // debug reports.
+  void MergeSellerDebugReportsToResponse(DebugReports* seller_debug_reports,
+                                         bool enable_sampled_debug_reporting);
 
   // Encrypts the AuctionResult and sets the ciphertext field in the response.
   // Returns whether encryption was successful.
@@ -414,6 +448,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
   const ClientRegistry& clients_;
   const TrustedServersConfigClient& config_client_;
   const ReportWinMap& report_win_map_;
+  const RandomNumberGeneratorFactory& rng_factory_;
   // Scope for current auction (single seller, top level or component)
   const AuctionScope auction_scope_;
 
@@ -492,6 +527,8 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Is chaffing enabled on the server.
   const bool chaffing_enabled_;
+  const bool chaffing_v2_enabled_;
+  const bool buyer_caching_enabled_;
 
   // Temporary workaround for compliance, will be removed (b/308032414).
   const int max_buyers_solicited_;
@@ -504,7 +541,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   int per_adtech_paapi_contributions_limit_;
   // Pseudo random number generator for use in chaffing.
-  std::optional<std::mt19937> generator_;
+  std::unique_ptr<RandomNumberGenerator> rng_;
 
   bool is_sampled_for_debug_;
 
@@ -587,7 +624,7 @@ class SelectAdReactor : public grpc::ServerUnaryReactor {
 
   // Keeps track of which buyers (chaff and non-chaff) were invoked the first
   // time the request was served.
-  std::optional<InvokedBuyers> invoked_buyers_;
+  std::optional<InvokedBuyers> previously_invoked_buyers_;
 };
 }  // namespace privacy_sandbox::bidding_auction_servers
 

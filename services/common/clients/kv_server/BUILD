@@ -20,21 +20,6 @@ cc_library(
     name = "kv_async_client",
     srcs = ["kv_async_client.cc"],
     hdrs = ["kv_async_client.h"],
-    copts =
-        select(
-            {
-                "@google_privacysandbox_servers_common//:aws_instance": [
-                    "-DCLOUD_PLATFORM_AWS=1",
-                ],
-                "@google_privacysandbox_servers_common//:gcp_instance": [
-                    "-DCLOUD_PLATFORM_GCP=1",
-                ],
-                "@google_privacysandbox_servers_common//:local_instance": [
-                    "-DCLOUD_PLATFORM_LOCAL=1",
-                ],
-            },
-            no_match_error = "Please build for GCP, AWS, or local.",
-        ),
     deps = [
         "//services/common/clients:client_params_template",
         "//services/common/clients/async_grpc:default_async_grpc_client",

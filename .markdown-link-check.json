@@ -7,6 +7,9 @@
       "pattern": "^http://go/"
     },
     {
+      "pattern": "^http://shortn/"
+    },
+    {
       "pattern": "^/tools/"
     },
     {

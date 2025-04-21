@@ -168,6 +168,7 @@ TEST(KAnonUtilsTest, CreatesKAnonAuctionResultDataForComponentAuctions) {
           .SetRender(kTestGhostRender)
           .AddComponentRenders(kTestGhostComponentRender)
           .SetBuyerReportingId(kTestGhostBuyerReportingId)
+          .SetAdType(AdType::AD_TYPE_PROTECTED_AUDIENCE_AD)
           .SetBuyerAndSellerReportingId(kTestGhostBuyerAndSellerReportingId);
   RequestLogContext log_context({},
                                 server_common::ConsentedDebugConfiguration());
@@ -207,6 +208,7 @@ TEST(KAnonUtilsTest, CreatesKAnonAuctionResultDataForComponentAuctions) {
           ad_component_render_urls: "test-ghost-component-render"
           buyer_reporting_id: "ghost-buyer-reporting-id"
           buyer_and_seller_reporting_id: "ghost-buyer-seller-reporting-id"
+          ad_type: AD_TYPE_PROTECTED_AUDIENCE_AD
         }
       )pb",
       &expected_k_anon_ghost_winner));

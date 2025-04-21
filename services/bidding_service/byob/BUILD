@@ -49,6 +49,7 @@ cc_test(
     srcs = ["buyer_code_fetch_manager_byob_test.cc"],
     deps = [
         ":buyer_code_fetch_manager_byob",
+        "//services/common/blob_storage_client:blob_storage_client_cpio",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
         "@com_google_absl//absl/strings",

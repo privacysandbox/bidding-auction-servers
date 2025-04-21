@@ -22,51 +22,9 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
+#include "services/common/clients/http/curl_request_data.h"
 
 namespace privacy_sandbox::bidding_auction_servers {
-
-struct HTTPRequest {
-  std::string url;
-  // Optional
-  std::vector<std::string> headers = {};
-  // Optional
-  std::string body = "";
-
-  // Will include response headers in the response with the specified
-  // case insensitive name.
-  // Defaults to empty.
-  std::vector<std::string> include_headers = {};
-
-  struct RedirectConfig {
-    // Limits redirects to HTTP/HTTPS only.
-    // Defaults to false.
-    bool strict_http = false;
-
-    // Get redirect URL in response metadata.
-    // Defaults to false.
-    bool get_redirect_url = false;
-  } redirect_config;
-};
-
-struct HTTPResponse {
-  // The pointer to this is used to write the request output.
-  std::string body;
-
-  // Optional. Included if include_headers has values.
-  absl::flat_hash_map<std::string, absl::StatusOr<std::string>> headers;
-
-  // Optional. Included if get_redirect_url is true.
-  std::string final_url;
-};
-
-using OnDoneFetchUrl = absl::AnyInvocable<void(absl::StatusOr<std::string>) &&>;
-using OnDoneFetchUrls =
-    absl::AnyInvocable<void(std::vector<absl::StatusOr<std::string>>) &&>;
-
-using OnDoneFetchUrlWithMetadata =
-    absl::AnyInvocable<void(absl::StatusOr<HTTPResponse>) &&>;
-using OnDoneFetchUrlsWithMetadata =
-    absl::AnyInvocable<void(std::vector<absl::StatusOr<HTTPResponse>>) &&>;
 
 class HttpFetcherAsync {
  public:

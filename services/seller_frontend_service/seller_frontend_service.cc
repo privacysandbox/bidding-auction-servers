@@ -42,24 +42,25 @@ std::unique_ptr<SelectAdReactor> GetSelectAdReactor(
     SelectAdResponse* response, server_common::Executor* executor,
     const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
-    const ReportWinMap& report_win_map, bool enable_cancellation,
+    const ReportWinMap& report_win_map,
+    const RandomNumberGeneratorFactory& rng_factory, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
     int per_adtech_paapi_contributions_limit) {
   switch (request->client_type()) {
     case CLIENT_TYPE_ANDROID:
       return std::make_unique<SelectAdReactorForApp>(
           context, request, response, executor, clients, config_client,
-          report_win_map, enable_cancellation, enable_kanon);
+          report_win_map, rng_factory, enable_cancellation, enable_kanon);
     case CLIENT_TYPE_BROWSER:
       return std::make_unique<SelectAdReactorForWeb>(
           context, request, response, executor, clients, config_client,
-          report_win_map, enable_cancellation, enable_kanon,
+          report_win_map, rng_factory, enable_cancellation, enable_kanon,
           enable_buyer_private_aggregate_reporting,
           per_adtech_paapi_contributions_limit);
     default:
       return std::make_unique<SelectAdReactorInvalid>(
           context, request, response, executor, clients, config_client,
-          report_win_map);
+          report_win_map, rng_factory);
   }
 }
 
@@ -74,9 +75,28 @@ SellerFrontEndService::CreateV1KVClient() {
   } else if (config_client_.GetBooleanParameter(ENABLE_TKV_V2_BROWSER)) {
     return nullptr;
   }
+
+  int num_curl_workers = config_client_.GetIntParameter(CURL_SFE_NUM_WORKERS);
+  int curl_max_wait_time_ms =
+      config_client_.GetIntParameter(CURL_SFE_QUEUE_MAX_WAIT_MS);
+  int curl_queue_length =
+      config_client_.GetIntParameter(CURL_SFE_WORK_QUEUE_LENGTH);
   return std::make_unique<SellerKeyValueAsyncHttpClient>(
       config_client_.GetStringParameter(KEY_VALUE_SIGNALS_HOST),
-      std::make_unique<MultiCurlHttpFetcherAsync>(executor_.get()), true);
+      std::make_unique<MultiCurlHttpFetcherAsync>(
+          executor_.get(),
+          MultiCurlHttpFetcherAsyncOptions{
+              .num_curl_workers = num_curl_workers > 0 ? num_curl_workers
+                                                       : kDefaultNumCurlWorkers,
+              .curl_max_wait_time_ms =
+                  curl_max_wait_time_ms > 0
+                      ? absl::Milliseconds(curl_max_wait_time_ms)
+                      : kDefaultMaxRequestWaitTime,
+              .curl_queue_length = curl_queue_length > 0
+                                       ? curl_queue_length
+                                       : kDefaultMaxCurlPendingRequests,
+          }),
+      true);
 }
 
 grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
@@ -86,14 +106,14 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
   if (request->ByteSizeLong() == 0) {
     auto reactor = std::make_unique<SelectAdReactorInvalid>(
         context, request, response, executor_.get(), clients_, config_client_,
-        report_win_map_);
+        report_win_map_, rng_factory_);
     reactor->Execute();
     return reactor.release();
   }
   if (AuctionScope auction_scope = GetAuctionScope(*request);
       auction_scope == AuctionScope::AUCTION_SCOPE_SERVER_TOP_LEVEL_SELLER) {
     auto reactor = std::make_unique<SelectAuctionResultReactor>(
-        context, request, response, clients_, config_client_,
+        context, request, response, clients_, config_client_, rng_factory_,
         enable_cancellation_,
         /*enable_buyer_private_aggregate_reporting=*/false,
         /*per_adtech_paapi_contributions_limit=*/100, enable_kanon_);
@@ -102,7 +122,7 @@ grpc::ServerUnaryReactor* SellerFrontEndService::SelectAd(
   }
   std::unique_ptr<SelectAdReactor> reactor = GetSelectAdReactor(
       context, request, response, executor_.get(), clients_, config_client_,
-      report_win_map_, enable_cancellation_, enable_kanon_,
+      report_win_map_, rng_factory_, enable_cancellation_, enable_kanon_,
       enable_buyer_private_aggregate_reporting_,
       per_adtech_paapi_contributions_limit_);
   reactor->Execute();

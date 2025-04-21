@@ -50,6 +50,12 @@ variable "frontend_certificate_map_id" {
   default     = ""
 }
 
+variable "frontend_ssl_policy_id" {
+  description = "A GCP ssl policy id. Example: projects/test-projects/global/sslPolicies/test-ssl-policy."
+  type        = string
+  default     = ""
+}
+
 variable "frontend_service_name" {
   type = string
 }
@@ -74,4 +80,10 @@ variable "experiment_match_rules" {
     present_match = bool
   })))
   default = {}
+}
+
+variable "gcp_dns_zones_project_id" {
+  description = "The name of the Google Cloud project where DNS zones are managed."
+  type        = string
+  default     = null
 }

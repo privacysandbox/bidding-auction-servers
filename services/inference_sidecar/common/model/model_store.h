@@ -188,7 +188,9 @@ class ModelStore {
     if (auto it = per_model_inference_count_.find(key);
         it != per_model_inference_count_.end()) {
       ++(it->second);
-      inference_notification_.Notify();
+      if (!inference_notification_.HasBeenNotified()) {
+        inference_notification_.Notify();
+      }
     }
   }
 

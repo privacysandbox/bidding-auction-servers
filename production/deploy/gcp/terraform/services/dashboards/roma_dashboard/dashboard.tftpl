@@ -1,0 +1,275 @@
+{
+  "displayName": "${environment} Roma Metrics",
+  "mosaicLayout": {
+    "columns": 48,
+    "tiles": [
+      {
+        "height": 19,
+        "widget": {
+          "title": "roma.execution.duration_ms [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/roma.execution.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")"
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "roma.execution.code_run.duration_ms [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/roma.execution.code_run.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")"
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "roma.execution.json_input_parsing.duration_ms [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/roma.execution.json_input_parsing.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")"
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 19
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "roma.execution.js_engine_handler_call.duration_ms [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/roma.execution.js_engine_handler_call.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")"
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 19
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "roma.execution.queue_fullness_ratio [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/roma.execution.queue_fullness_ratio\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")"
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 38
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "roma.execution.active_worker_ratio [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/roma.execution.active_worker_ratio\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")"
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "xPos": 24,
+        "yPos": 38
+      },
+      {
+        "height": 19,
+        "widget": {
+          "title": "udf_execution.dispatcher_initialization.duration_ms [95TH PERCENTILE]",
+          "xyChart": {
+            "chartOptions": {},
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "targetAxis": "Y1",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "alignmentPeriod": "60s",
+                      "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+                      "groupByFields": [
+                        "metric.label.\"service_name\"",
+                        "metric.label.\"deployment_environment\"",
+                        "metric.label.\"operator\"",
+                        "metric.label.\"Noise\"",
+                        "metric.label.\"service_version\""
+                      ],
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/udf_execution.dispatcher_initialization.duration_ms\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")"
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        },
+        "width": 24,
+        "yPos": 57
+      }
+    ]
+  }
+}

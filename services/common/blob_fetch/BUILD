@@ -39,10 +39,18 @@ cc_library(
 
 cc_library(
     name = "blob_fetcher",
-    srcs = ["blob_fetcher.cc"],
+    srcs = [
+        "blob_fetcher.cc",
+    ] + select({
+        "//:parc_enabled": ["blob_fetcher_parc.cc"],
+        "//conditions:default": ["blob_fetcher_cpio.cc"],
+    }),
     hdrs = ["blob_fetcher.h"],
     deps = [
         ":blob_fetcher_base",
+        "//services/common/blob_storage_client:blob_storage_client_cpio_utils",
+        "//services/common/blob_storage_client:blob_storage_client_parc_utils",
+        "//services/common/data_fetch:blob_storage_client",
         "//services/common/loggers:request_log_context",
         "//services/common/util:hash_util",
         "@com_google_absl//absl/log:check",
@@ -52,7 +60,6 @@ cc_library(
         "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/public/core/interface:errors",
         "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
     ],
 )
@@ -60,9 +67,14 @@ cc_library(
 cc_test(
     name = "blob_fetcher_test",
     size = "small",
-    srcs = ["blob_fetcher_test.cc"],
+    srcs = select({
+        "//:parc_enabled": ["blob_fetcher_parc_test.cc"],
+        "//conditions:default": ["blob_fetcher_cpio_test.cc"],
+    }),
     deps = [
         ":blob_fetcher",
+        "//services/common/clients/config:parc_service_grpc_proto",
+        "//services/common/data_fetch:blob_storage_client",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
         "@com_google_absl//absl/functional:any_invocable",
@@ -72,9 +84,9 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
         "@google_privacysandbox_servers_common//src/public/core/interface:errors",
         "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
     ],
 )

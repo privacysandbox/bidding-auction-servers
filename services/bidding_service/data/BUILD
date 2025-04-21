@@ -22,6 +22,6 @@ cc_library(
         "runtime_config.h",
     ],
     deps = [
-        "//services/bidding_service:bidding_constants",
+        "//services/bidding_service:bidding_v8_constants",
     ],
 )

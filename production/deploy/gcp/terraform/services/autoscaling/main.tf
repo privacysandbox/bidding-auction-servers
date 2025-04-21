@@ -67,8 +67,9 @@ resource "google_compute_instance_template" "frontends" {
     enable_vtpm                 = true
   }
   confidential_instance_config {
-    # confidential_instance_type introduced in terraform-provider-google 5.36.0
-    # confidential_instance_type  = "SEV"
+    # You should use terraform-provider-google newer or equal to 5.36.0 for
+    # confidential_instance_type field.
+    confidential_instance_type  = "SEV"
     enable_confidential_compute = true
   }
 
@@ -188,7 +189,6 @@ resource "google_compute_health_check" "frontend" {
 # The backend service uses HTTP/2 (gRPC) with no TLS.
 ###############################################################
 
-
 resource "google_compute_instance_template" "backends" {
   for_each = var.subnets
 
@@ -202,7 +202,7 @@ resource "google_compute_instance_template" "backends" {
     auto_delete  = true
     boot         = true
     device_name  = "persistent-disk-0"
-    disk_type    = "pd-standard"
+    disk_type    = var.region_config[each.value.region].backend.use_intel_amx ? "pd-balanced" : "pd-standard"
     interface    = "NVME"
     mode         = "READ_WRITE"
     source_image = "projects/confidential-space-images/global/images/family/${var.use_confidential_space_debug_image ? "confidential-space-debug" : "confidential-space"}"
@@ -225,8 +225,9 @@ resource "google_compute_instance_template" "backends" {
     enable_vtpm                 = true
   }
   confidential_instance_config {
-    # confidential_instance_type introduced in terraform-provider-google 5.36.0
-    # confidential_instance_type  = "SEV"
+    # You should use terraform-provider-google newer or equal to 5.36.0 for
+    # confidential_instance_type field.
+    confidential_instance_type  = var.region_config[each.value.region].backend.use_intel_amx ? "TDX" : "SEV"
     enable_confidential_compute = true
   }
 

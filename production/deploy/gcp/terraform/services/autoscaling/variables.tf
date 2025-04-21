@@ -136,6 +136,7 @@ variable "region_config" {
       max_replicas          = number
       zones                 = list(string) # Use null to signify 'all zones'.
       max_rate_per_instance = number       # Use null to signify no max.
+      use_intel_amx         = bool
     })
     frontend = object({
       machine_type          = string

@@ -19,8 +19,8 @@
 #include <vector>
 
 #include "services/bidding_service/bidding_code_fetch_config.pb.h"
+#include "services/bidding_service/bidding_v8_constants.h"
 #include "services/bidding_service/buyer_code_fetch_manager.h"
-#include "services/bidding_service/constants.h"
 #include "services/common/util/file_util.h"
 #include "src/util/status_macro/status_macros.h"
 

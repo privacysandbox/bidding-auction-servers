@@ -74,12 +74,13 @@ SelectAdReactorForApp::SelectAdReactorForApp(
     SelectAdResponse* response, server_common::Executor* executor,
     const ClientRegistry& clients,
     const TrustedServersConfigClient& config_client,
-    const ReportWinMap& report_win_map, bool enable_cancellation,
+    const ReportWinMap& report_win_map,
+    const RandomNumberGeneratorFactory& rng_factory, bool enable_cancellation,
     bool enable_kanon, bool enable_buyer_private_aggregate_reporting,
     int per_adtech_paapi_contributions_limit, bool fail_fast)
     : SelectAdReactor(context, request, response, executor, clients,
-                      config_client, report_win_map, enable_cancellation,
-                      enable_kanon, fail_fast) {}
+                      config_client, report_win_map, rng_factory,
+                      enable_cancellation, enable_kanon, fail_fast) {}
 
 absl::StatusOr<std::string> SelectAdReactorForApp::GetNonEncryptedResponse(
     const std::optional<ScoreAdsResponse::AdScore>& high_score,
@@ -166,7 +167,7 @@ DecodedBuyerInputs SelectAdReactorForApp::GetDecodedBuyerinputs(
     }
 
     BuyerInputForBidding buyer_input_for_bidding =
-        ToBuyerInputForBidding(buyer_input);
+        ToBuyerInputForBidding(std::move(buyer_input));
     decoded_buyer_inputs.insert({owner, std::move(buyer_input_for_bidding)});
   }
 
@@ -267,6 +268,7 @@ SelectAdReactorForApp::CreateGetBidsRequest(
       SelectAdReactor::CreateGetBidsRequest(buyer_ig_owner, buyer_input);
   // Debug reporting is not supported for Android.
   request->set_enable_debug_reporting(false);
+  request->set_enable_sampled_debug_reporting(false);
   // TODO(b/369159855): use is_debug_eligible from client.
   request->set_is_debug_eligible(request->enable_unlimited_egress());
   MayPopulateProtectedAppSignalsBuyerInput(buyer_ig_owner, request.get());
@@ -278,6 +280,7 @@ SelectAdReactorForApp::CreateScoreAdsRequest() {
   auto request = SelectAdReactor::CreateScoreAdsRequest();
   // Debug reporting is not supported for Android.
   request->set_enable_debug_reporting(false);
+  request->mutable_fdo_flags()->set_enable_sampled_debug_reporting(false);
   std::visit(
       [&request, this](const auto& protected_auction_input) {
         if (enable_enforce_kanon_) {

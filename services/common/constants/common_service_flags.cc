@@ -97,6 +97,11 @@ ABSL_FLAG(std::optional<bool>, enable_chaffing, false,
           "If true, chaff requests are sent out from the SFE. Chaff requests "
           "are requests sent to buyers not participating in an auction to mask "
           "the buyers associated with a client request.");
+ABSL_FLAG(
+    std::optional<bool>, enable_chaffing_v2, false,
+    "Enables chaffing V2 features - relying on historical buyer payload size "
+    "for GetBids requests and responses + improved chaffing algorithm to "
+    "reduce chaff traffic");
 ABSL_FLAG(std::optional<int>, debug_sample_rate_micro, 0,
           "Set a value between 0 (never debug) and 1,000,000 (always debug) to "
           "determine the sampling rate of requests eligible for debugging. "
@@ -126,3 +131,6 @@ ABSL_FLAG(std::optional<int>, curlmopt_max_total_connections, 0L,
 ABSL_FLAG(std::optional<int>, curlmopt_max_host_connections, 0L,
           "The maximum amount of simultaneously open connections libcurl may "
           "hold to a single host.");
+ABSL_FLAG(std::optional<std::string>, parc_addr, "dns:///parc",
+          "Address of the grpc parc service. See "
+          "https://grpc.github.io/grpc/core/md_doc_naming.html for format.");

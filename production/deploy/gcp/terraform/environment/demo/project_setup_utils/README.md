@@ -324,6 +324,7 @@ Once these files have been updated the following modules will be ready for deplo
 
     This directory provides terraform functionality to create a service account and configure all
     project permissions the service account requires to operate the Bidding and Auction servers.
+    Using the terraform-provided default service account name is recommended, but not required.
 
     Additionally, the provided configs create a
     [GCS HMAC Key](https://github.com/privacysandbox/bidding-auction-servers/blob/722e1542c262dddc3aaf41be7b6c159a38cefd0a/production/deploy/gcp/terraform/modules/secrets/secrets.tf#L49)

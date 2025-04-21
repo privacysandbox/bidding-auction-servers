@@ -25,6 +25,7 @@
 #include "services/auction_service/udf_fetcher/auction_code_fetch_config.pb.h"
 #include "services/auction_service/udf_fetcher/buyer_reporting_fetcher.h"
 #include "services/auction_service/udf_fetcher/buyer_reporting_udf_fetch_manager.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
 #include "services/common/clients/code_dispatcher/v8_dispatcher.h"
 #include "services/common/clients/http/http_fetcher_async.h"
 #include "services/common/data_fetch/fetcher_interface.h"
@@ -46,8 +47,7 @@ constexpr char kSellerUDFLoadFailedStartup[] =
 class SellerUdfFetchManager {
  public:
   SellerUdfFetchManager(
-      std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-          blob_storage_client,
+      std::unique_ptr<BlobStorageClient> blob_storage_client,
       server_common::Executor* executor, HttpFetcherAsync* seller_http_fetcher,
       HttpFetcherAsync* buyer_reporting_http_fetcher, V8Dispatcher* dispatcher,
       const auction_service::SellerCodeFetchConfig& udf_config,
@@ -95,8 +95,7 @@ class SellerUdfFetchManager {
   V8Dispatcher& dispatcher_;
   const bool enable_protected_app_signals_;
   const auction_service::SellerCodeFetchConfig& udf_config_;
-  std::unique_ptr<google::scp::cpio::BlobStorageClientInterface>
-      blob_storage_client_;
+  std::unique_ptr<BlobStorageClient> blob_storage_client_;
 
   std::unique_ptr<BuyerReportingFetcher> buyer_reporting_fetcher_;
   std::unique_ptr<BuyerReportingUdfFetchManager>

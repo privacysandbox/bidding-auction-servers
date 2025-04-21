@@ -30,21 +30,23 @@ cc_library(
     hdrs = [
         "default_async_grpc_client.h",
     ],
-    copts =
-        select(
-            {
-                "@google_privacysandbox_servers_common//:aws_instance": [
-                    "-DCLOUD_PLATFORM_AWS=1",
-                ],
-                "@google_privacysandbox_servers_common//:gcp_instance": [
-                    "-DCLOUD_PLATFORM_GCP=1",
-                ],
-                "@google_privacysandbox_servers_common//:local_instance": [
-                    "-DCLOUD_PLATFORM_LOCAL=1",
-                ],
-            },
-            no_match_error = "Please build for GCP, AWS, or local.",
-        ),
+    defines = select(
+        {
+            "@google_privacysandbox_servers_common//:aws_instance": [
+                "CLOUD_PLATFORM_AWS=1",
+            ],
+            "@google_privacysandbox_servers_common//:azure_instance": [
+                "CLOUD_PLATFORM_AZURE=1",
+            ],
+            "@google_privacysandbox_servers_common//:gcp_instance": [
+                "CLOUD_PLATFORM_GCP=1",
+            ],
+            "@google_privacysandbox_servers_common//:local_instance": [
+                "CLOUD_PLATFORM_LOCAL=1",
+            ],
+        },
+        no_match_error = "Please build for GCP, AWS, Azure, or local.",
+    ),
     deps = [
         ":grpc_client_utils",
         ":request_config",

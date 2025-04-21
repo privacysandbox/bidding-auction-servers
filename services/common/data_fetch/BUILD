@@ -86,6 +86,24 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "periodic_code_fetcher_test",
+    size = "small",
+    srcs = ["periodic_code_fetcher_test.cc"],
+    deps = [
+        ":fetcher_interface",
+        ":periodic_code_fetcher",
+        "//services/common/clients/code_dispatcher:udf_code_loader_interface",
+        "//services/common/clients/http:http_fetcher_async",
+        "//services/common/test:mocks",
+        "//services/common/test/utils:test_init",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@google_privacysandbox_servers_common//src/concurrent:executor",
+    ],
+)
+
 cc_library(
     name = "periodic_bucket_fetcher_metrics",
     hdrs = ["periodic_bucket_fetcher_metrics.h"],
@@ -116,13 +134,45 @@ cc_test(
     ],
 )
 
+alias(
+    name = "blob_storage_client",
+    actual = select(
+        {
+            "//:parc_enabled": "//services/common/blob_storage_client:blob_storage_client_parc",
+            "//conditions:default": "//services/common/blob_storage_client:blob_storage_client_cpio",
+        },
+        no_match_error = "Please build with or without PARC.",
+    ),
+)
+
+alias(
+    name = "blob_storage_client_utils",
+    actual = select(
+        {
+            "//:parc_enabled": "//services/common/blob_storage_client:blob_storage_client_parc_utils",
+            "//conditions:default": "//services/common/blob_storage_client:blob_storage_client_cpio_utils",
+        },
+        no_match_error = "Please build with or without PARC.",
+    ),
+)
+
 cc_library(
     name = "periodic_bucket_fetcher",
-    srcs = ["periodic_bucket_fetcher.cc"],
-    hdrs = ["periodic_bucket_fetcher.h"],
+    srcs = [
+        "periodic_bucket_fetcher.cc",
+    ] + select({
+        "//:parc_enabled": ["periodic_bucket_fetcher_parc.cc"],
+        "//conditions:default": ["periodic_bucket_fetcher_cpio.cc"],
+    }),
+    hdrs = [
+        "periodic_bucket_fetcher.h",
+    ],
     deps = [
+        ":blob_storage_client",
+        ":blob_storage_client_utils",
         ":fetcher_interface",
         ":periodic_bucket_fetcher_metrics",
+        "//services/common/clients/config:parc_service_grpc_proto",
         "//services/common/data_fetch:version_util",
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
@@ -144,12 +194,20 @@ cc_library(
 
 cc_library(
     name = "periodic_bucket_code_fetcher",
-    srcs = ["periodic_bucket_code_fetcher.cc"],
-    hdrs = ["periodic_bucket_code_fetcher.h"],
+    srcs = [
+        "periodic_bucket_code_fetcher.cc",
+    ],
+    hdrs = [
+        "periodic_bucket_code_fetcher.h",
+    ],
     deps = [
+        ":blob_storage_client",
+        ":blob_storage_client_utils",
+        ":fetcher_interface",
         ":periodic_bucket_fetcher",
-        ":version_util",
+        ":periodic_bucket_fetcher_metrics",
         "//services/common/clients/code_dispatcher:udf_code_loader_interface",
+        "//services/common/data_fetch:version_util",
         "//services/common/loggers:request_log_context",
         "//services/common/util:request_response_constants",
         "@com_google_absl//absl/functional:any_invocable",
@@ -162,20 +220,25 @@ cc_library(
         "@google_privacysandbox_servers_common//src/concurrent:executor",
         "@google_privacysandbox_servers_common//src/public/core/interface:errors",
         "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_macros",
         "@google_privacysandbox_servers_common//src/util/status_macro:status_util",
     ],
 )
 
 cc_test(
-    name = "periodic_code_fetcher_test",
+    name = "periodic_bucket_code_fetcher_test",
     size = "small",
-    srcs = ["periodic_code_fetcher_test.cc"],
+    srcs = select({
+        "//:parc_enabled": ["periodic_bucket_code_fetcher_parc_test.cc"],
+        "//conditions:default": ["periodic_bucket_code_fetcher_cpio_test.cc"],
+    }),
     deps = [
+        ":blob_storage_client",
         ":fetcher_interface",
-        ":periodic_code_fetcher",
+        ":periodic_bucket_code_fetcher",
+        "//services/common/blob_storage_client:blob_storage_client_parc_utils",
         "//services/common/clients/code_dispatcher:udf_code_loader_interface",
+        "//services/common/clients/config:parc_service_grpc_proto",
         "//services/common/clients/http:http_fetcher_async",
         "//services/common/test:mocks",
         "//services/common/test/utils:test_init",
@@ -183,31 +246,7 @@ cc_test(
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@google_privacysandbox_servers_common//src/concurrent:executor",
-    ],
-)
-
-cc_test(
-    name = "periodic_bucket_code_fetcher_test",
-    size = "small",
-    srcs = ["periodic_bucket_code_fetcher_test.cc"],
-    deps = [
-        ":fetcher_interface",
-        ":periodic_bucket_code_fetcher",
-        ":version_util",
-        "//services/common/clients/code_dispatcher:udf_code_loader_interface",
-        "//services/common/test:mocks",
-        "//services/common/test/utils:test_init",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
-        "@com_google_googletest//:gtest",
-        "@com_google_googletest//:gtest_main",
-        "@google_privacysandbox_servers_common//src/concurrent:executor",
-        "@google_privacysandbox_servers_common//src/core/interface:async_context",
-        "@google_privacysandbox_servers_common//src/public/core/interface:errors",
-        "@google_privacysandbox_servers_common//src/public/core/interface:execution_result",
-        "@google_privacysandbox_servers_common//src/public/cpio/interface:cpio",
+        "@google_privacysandbox_servers_common//src/core/test/utils",
         "@google_privacysandbox_servers_common//src/public/cpio/interface/blob_storage_client",
         "@google_privacysandbox_servers_common//src/public/cpio/mock/blob_storage_client:blob_storage_client_mock",
     ],

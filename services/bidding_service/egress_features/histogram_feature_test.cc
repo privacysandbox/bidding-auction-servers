@@ -108,7 +108,7 @@ TEST_F(HistogramFeatureTest, ComplainsAboutSize) {
   // serialize.
   CHECK_OK(status);
   auto serialized_val = histogram_feature.Serialize();
-  ASSERT_TRUE(!serialized_val.ok()) << serialized_val.status();
+  ASSERT_FALSE(serialized_val.ok()) << serialized_val.status();
   EXPECT_THAT(serialized_val.status().message(),
               HasSubstr("Number of buckets in histogram feature payload (3) "
                         "doesn't match schema (2)"));

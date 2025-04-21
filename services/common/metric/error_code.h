@@ -85,12 +85,14 @@ inline constexpr absl::string_view kSfeSelectAdNoSuccessfulBid =
     "SelectAd no successful bid";
 inline constexpr absl::string_view kSfeSelectAdRequestBadInput =
     "SelectAd request bad input";
+inline constexpr absl::string_view kSfeInvalidComponentAuctionInputs =
+    "SelectAd invalid component auctions";
 
 inline constexpr absl::string_view kSfeErrorCode[]{
     kSfeGetBidsFailedToCall,         kSfeGetBidsResponseError,
     kSfeScoreAdsFailedToCall,        kSfeScoreAdsResponseError,
-    kSfeScoringSignalsResponseError, kSfeSelectAdNoSuccessfulBid,
-    kSfeSelectAdRequestBadInput,
+    kSfeScoringSignalsResponseError, kSfeInvalidComponentAuctionInputs,
+    kSfeSelectAdNoSuccessfulBid,     kSfeSelectAdRequestBadInput,
 };
 
 }  // namespace privacy_sandbox::bidding_auction_servers::metric

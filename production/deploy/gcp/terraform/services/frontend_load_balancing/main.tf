@@ -74,6 +74,7 @@ resource "google_compute_target_https_proxy" "default" {
   name             = "${var.operator}-${var.environment}-https-lb-proxy"
   url_map          = google_compute_url_map.default.id
   ssl_certificates = var.frontend_certificate_map_id == "" ? [var.frontend_domain_ssl_certificate_id] : null
+  ssl_policy       = var.frontend_ssl_policy_id == "" ? null : var.frontend_ssl_policy_id
   certificate_map  = var.frontend_certificate_map_id == "" ? null : var.frontend_certificate_map_id
 }
 
@@ -97,6 +98,7 @@ resource "google_compute_global_forwarding_rule" "xlb_https" {
 resource "google_dns_record_set" "default" {
   name         = "${var.operator}-${var.environment}.${var.frontend_domain_name}."
   managed_zone = var.frontend_dns_zone
+  project      = var.gcp_dns_zones_project_id
   type         = "A"
   ttl          = 10
   rrdatas = [

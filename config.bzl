@@ -23,3 +23,8 @@ IS_PROD_BUILD_DEFINES = select({
     "//:non_prod_build": ["PS_IS_PROD_BUILD=false"],
     "//conditions:default": ["PS_IS_PROD_BUILD=true"],
 })
+
+IS_PARC_BUILD_DEFINES = select({
+    "//:parc_enabled": ["PS_IS_PARC_BUILD=true"],
+    "//conditions:default": ["PS_IS_PARC_BUILD=false"],
+})

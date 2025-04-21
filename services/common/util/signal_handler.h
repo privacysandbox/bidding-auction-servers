@@ -29,8 +29,15 @@
 
 namespace privacy_sandbox::bidding_auction_servers {
 
+inline void (*extra_signal_writerfn)(const char*) = nullptr;
+
 inline void SignalHandler(int sig) {
-  fprintf(stderr, "Recived signal: %d:\n", sig);
+  char buffer[1024];
+  snprintf(buffer, sizeof(buffer), "Recived signal: %d:\n", sig);
+  fprintf(stderr, "%s", buffer);
+  if (extra_signal_writerfn != nullptr) {
+    extra_signal_writerfn(buffer);
+  }
   unw_cursor_t cursor;
   unw_context_t context;
   unw_getcontext(&context);
@@ -51,21 +58,28 @@ inline void SignalHandler(int sig) {
     char* demangled_name =
         abi::__cxa_demangle(symbol.c_str(), nullptr, nullptr, &status);
     if (status == 0) {
-      fprintf(stderr,
-              "#%-2d 0x%016" PRIxPTR " sp=0x%016" PRIxPTR " %s + 0x%" PRIxPTR
-              "\n",
-              frame_count, ip, sp, demangled_name, off);
+      snprintf(buffer, sizeof(buffer),
+               "#%-2d 0x%016" PRIxPTR " sp=0x%016" PRIxPTR " %s + 0x%" PRIxPTR
+               "\n",
+               frame_count, ip, sp, demangled_name, off);
       free(demangled_name);
     } else {
-      fprintf(stderr,
-              "#%-2d 0x%016" PRIxPTR " sp=0x%016" PRIxPTR " %s + 0x%" PRIxPTR
-              "\n",
-              frame_count, ip, sp, symbol.c_str(), off);
+      snprintf(buffer, sizeof(buffer),
+               "#%-2d 0x%016" PRIxPTR " sp=0x%016" PRIxPTR " %s + 0x%" PRIxPTR
+               "\n",
+               frame_count, ip, sp, symbol.c_str(), off);
+    }
+    fprintf(stderr, "%s", buffer);
+    if (extra_signal_writerfn != nullptr) {
+      extra_signal_writerfn(buffer);
     }
   }
 
   if (frame_count > kMaxFrames) {
-    fprintf(stderr, "[truncated]\n");
+    fprintf(stderr, "%s", "[truncated]\n");
+    if (extra_signal_writerfn != nullptr) {
+      extra_signal_writerfn("[truncated]\n");
+    }
   }
   exit(1);
 }

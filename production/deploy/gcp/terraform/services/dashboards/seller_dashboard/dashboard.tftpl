@@ -29,10 +29,9 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
-                      "perSeriesAligner": "ALIGN_SUM"
+                      "perSeriesAligner": "ALIGN_MEAN"
                     }
                   }
                 }
@@ -67,7 +66,6 @@
                         "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -107,7 +105,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -146,7 +143,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -187,7 +183,6 @@
                         "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -226,7 +221,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -266,7 +260,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -305,7 +298,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -326,7 +318,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_request.to_bfe.errors_count_by_status [MEAN]",
+          "title": "sfe.initiated_request.to_bfe.errors_count_by_status [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -343,14 +335,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_bfe.errors_count_by_status\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -371,7 +362,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "udf_execution.errors_count [MEAN]",
+          "title": "udf_execution.errors_count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -388,13 +379,12 @@
                     "filter": "metric.type=\"workload.googleapis.com/udf_execution.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -427,22 +417,17 @@
                   "timeSeriesFilter": {
                     "aggregation": {
                       "alignmentPeriod": "300s",
-                      "perSeriesAligner": "ALIGN_RATE"
-                    },
-                    "filter": "metric.type=\"workload.googleapis.com/auction.business_logic.bids_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
-                    "secondaryAggregation": {
-                      "alignmentPeriod": "300s",
                       "crossSeriesReducer": "REDUCE_MEAN",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
-                      "perSeriesAligner": "ALIGN_MEAN"
-                    }
+                      "perSeriesAligner": "ALIGN_DELTA"
+                    },
+                    "filter": "metric.type=\"workload.googleapis.com/auction.business_logic.bids_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")"
                   }
                 }
               }
@@ -458,7 +443,7 @@
       {
         "height": 16,
         "widget": {
-          "title": "auction.business_logic.bid_rejected_count [MEAN]",
+          "title": "auction.business_logic.bid_rejected_count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -475,14 +460,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/auction.business_logic.bid_rejected_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"seller_rejection_reason\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -521,7 +505,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -542,7 +525,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "initiated_request.count [MEAN]",
+          "title": "initiated_request.count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -559,14 +542,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/initiated_request.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"server_name\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -604,7 +586,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -643,7 +624,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -682,7 +662,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -721,7 +700,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -760,7 +738,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -781,7 +758,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "sfe.errors_count [MEAN]",
+          "title": "sfe.errors_count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -798,14 +775,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/sfe.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"error_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -825,7 +801,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "auction.errors_count [MEAN]",
+          "title": "auction.errors_count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -842,14 +818,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/auction.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"error_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -870,7 +845,7 @@
   {
         "height": 19,
         "widget": {
-          "title": "initiated_request.to_kv.errors_count [MEAN]",
+          "title": "initiated_request.to_kv.errors_count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -887,14 +862,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/initiated_request.to_kv.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -915,7 +889,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_request.to_auction.errors_count [MEAN]",
+          "title": "sfe.initiated_request.to_auction.errors_count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -932,14 +906,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_auction.errors_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -960,7 +933,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "request.failed_count [MEAN]",
+          "title": "request.failed_count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -977,14 +950,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/request.failed_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "60s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"status_code\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -1022,7 +994,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -1063,7 +1034,6 @@
                         "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -1085,7 +1055,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_request.to_bfe.errors_count_by_buyer [MEAN]",
+          "title": "sfe.initiated_request.to_bfe.errors_count_by_buyer [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1102,14 +1072,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_bfe.errors_count_by_buyer\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"buyer\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -1130,7 +1099,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "sfe.initiated_request.to_bfe.count [MEAN]",
+          "title": "sfe.initiated_request.to_bfe.count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1147,14 +1116,13 @@
                     "filter": "metric.type=\"workload.googleapis.com/sfe.initiated_request.to_bfe.count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"buyer\"",
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -1222,7 +1190,6 @@
                           "metric.label.\"deployment_environment\"",
                           "metric.label.\"operator\"",
                           "metric.label.\"Noise\"",
-                          "resource.label.\"task_id\"",
                           "metric.label.\"service_version\""
                         ],
                         "perSeriesAligner": "ALIGN_MEAN"
@@ -1266,7 +1233,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -1306,7 +1272,6 @@
                         "metric.label.\"operator\"",
                         "metric.label.\"label\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -1346,7 +1311,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -1367,7 +1331,7 @@
       {
         "height": 19,
         "widget": {
-          "title": "sfe.business_logic.request_with_winner_count",
+          "title": "sfe.business_logic.request_with_winner_count [SUM]",
           "xyChart": {
             "chartOptions": {},
             "dataSets": [
@@ -1384,13 +1348,12 @@
                     "filter": "metric.type=\"workload.googleapis.com/sfe.business_logic.request_with_winner_count\" resource.type=\"generic_task\" metric.label.\"deployment_environment\"=monitoring.regex.full_match(\"${environment}\")",
                     "secondaryAggregation": {
                       "alignmentPeriod": "300s",
-                      "crossSeriesReducer": "REDUCE_MEAN",
+                      "crossSeriesReducer": "REDUCE_SUM",
                       "groupByFields": [
                         "metric.label.\"service_name\"",
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_MEAN"
@@ -1429,7 +1392,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -1469,7 +1431,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -1509,7 +1470,6 @@
                         "metric.label.\"deployment_environment\"",
                         "metric.label.\"operator\"",
                         "metric.label.\"Noise\"",
-                        "resource.label.\"task_id\"",
                         "metric.label.\"service_version\""
                       ],
                       "perSeriesAligner": "ALIGN_DELTA"
@@ -1584,6 +1544,85 @@
         "yPos": 377,
         "width": 24,
         "height": 19
+      },
+      {
+        "yPos": 400,
+        "height": 20,
+        "width": 24,
+        "widget": {
+          "title": "logging/user/fatal_log-${environment} [SUM], logging/user/vm_crash_log-${environment} [SUM]",
+          "xyChart": {
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "resource.label.\"task_id\""
+                      ],
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"logging.googleapis.com/user/fatal_log-${environment}\" resource.type=\"generic_task\""
+                  }
+                }
+              },
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.\"host\""
+                      ],
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"logging.googleapis.com/user/vm_crash_log-${environment}\" resource.type=\"gce_instance\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "yPos": 400,
+        "xPos": 24,
+        "height": 20,
+        "width": 24,
+        "widget": {
+          "title": "logging/user/error_log-${environment} [SUM]",
+          "xyChart": {
+            "dataSets": [
+              {
+                "minAlignmentPeriod": "60s",
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "timeSeriesFilter": {
+                    "aggregation": {
+                      "crossSeriesReducer": "REDUCE_SUM",
+                      "groupByFields": [
+                        "metric.label.\"message\""
+                      ],
+                      "perSeriesAligner": "ALIGN_RATE"
+                    },
+                    "filter": "metric.type=\"logging.googleapis.com/user/error_log-${environment}\" resource.type=\"generic_task\""
+                  }
+                }
+              }
+            ],
+            "yAxis": {
+              "scale": "LINEAR"
+            }
+          }
+        }
       }
     ]
   }

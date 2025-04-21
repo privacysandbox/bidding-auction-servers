@@ -944,6 +944,52 @@ resource "aws_cloudwatch_dashboard" "environment_dashboard" {
                 "title": "Latest Blob Load Status",
                 "liveData": true
             }
+        },
+        {
+            "height": 6,
+            "width": 10,
+            "y": 130,
+            "x": 0,
+            "type": "metric",
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SELECT SUM(\"fatal_log-${var.environment}\") FROM log_based_metric WHERE Env = '${var.environment}' GROUP BY Service, Env" } ]
+                ],
+                "title": "fatal_log",
+                "timezone": "UTC",
+                "region": "${var.region}",
+                "view": "timeSeries",
+                "stacked": false,
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "showUnits": false
+                    }
+                }
+            }
+        },
+        {
+            "height": 6,
+            "width": 10,
+            "y": 130,
+            "x": 10,
+            "type": "metric",
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SELECT SUM(\"error_log-${var.environment}\") FROM log_based_metric WHERE Env = '${var.environment}' GROUP BY Service, Env" } ]
+                ],
+                "title": "error_log",
+                "timezone": "UTC",
+                "region": "${var.region}",
+                "view": "timeSeries",
+                "stacked": false,
+                "yAxis": {
+                    "left": {
+                        "min": 0,
+                        "showUnits": false
+                    }
+                }
+            }
         }
     ]
 }

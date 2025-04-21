@@ -6,7 +6,9 @@
     "https://owner2.com": "<bytes>"
   },
   "generationId": "a8098c1a-f86e-11da-bd1a-00112444be1e",
-  "enableDebugReporting": false,
+  "enableDebugReporting": true,
+  "enableSampledDebugReporting": true,
+  "inCooldownOrLockout": true,
   "requestTimestampMs": 1723102593791,
   "enforceKAnon": true
 }

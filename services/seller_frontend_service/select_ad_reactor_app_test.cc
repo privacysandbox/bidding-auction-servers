@@ -95,6 +95,8 @@ class SelectAdReactorForAppTest : public ::testing::Test {
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
     config_.SetOverride(kFalse, ENABLE_TKV_V2_BROWSER);
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING_V2);
+    config_.SetOverride(kFalse, ENABLE_BUYER_CACHING);
     config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
     config_.SetOverride("", K_ANON_API_KEY);
@@ -498,6 +500,8 @@ class SelectAdReactorPASTest : public ::testing::Test {
     config_.SetOverride(kTrue, ENABLE_PROTECTED_AUDIENCE);
     config_.SetOverride(kFalse, ENABLE_TKV_V2_BROWSER);
     config_.SetOverride(kFalse, ENABLE_CHAFFING);
+    config_.SetOverride(kFalse, ENABLE_CHAFFING_V2);
+    config_.SetOverride(kFalse, ENABLE_BUYER_CACHING);
     config_.SetOverride("0", DEBUG_SAMPLE_RATE_MICRO);
     config_.SetOverride(kFalse, CONSENT_ALL_REQUESTS);
     config_.SetOverride("", K_ANON_API_KEY);
@@ -582,6 +586,8 @@ class SelectAdReactorPASTest : public ::testing::Test {
         std::move(encoded_buyer_inputs);
     protected_auction_input.set_publisher_name(MakeARandomString());
     protected_auction_input.set_enable_debug_reporting(true);
+    protected_auction_input.mutable_fdo_flags()
+        ->set_enable_sampled_debug_reporting(true);
 
     SelectAdRequest request;
     auto* auction_config = request.mutable_auction_config();
@@ -1417,7 +1423,6 @@ TEST_F(SelectAdReactorPASTest, FailsWhenPlaceholderSetForTkvV2Address) {
                               GetBidDoneCallback on_done,
                               absl::Duration timeout,
                               RequestConfig request_config) {
-    EXPECT_FALSE(get_bids_raw_request->enable_debug_reporting());
     auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
     response->mutable_protected_app_signals_bids()->Add(GetTestPASAdWithBid());
     std::move(on_done)(std::move(response), /*response_metadata=*/{});
@@ -1451,7 +1456,6 @@ TEST_F(SelectAdReactorPASTest, FailsWhenPlaceholderSetForTkvV2Address) {
       .WillOnce([](std::unique_ptr<ScoreAdsRequest::ScoreAdsRawRequest> request,
                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
                    absl::Duration timeout, RequestConfig request_config) {
-        EXPECT_FALSE(request->enable_debug_reporting());
         std::move(on_done)(
             std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(),
             /*response_metadata=*/{});
@@ -1472,6 +1476,8 @@ TEST_F(SelectAdReactorPASTest, DisablesDebugReporting) {
   const auto& protected_auction_input =
       request_with_context.protected_auction_input;
   ASSERT_TRUE(protected_auction_input.enable_debug_reporting());
+  ASSERT_TRUE(
+      protected_auction_input.fdo_flags().enable_sampled_debug_reporting());
 
   // Setup BFE to return a PAS bid.
   auto mock_get_bids = [this](std::unique_ptr<GetBidsRequest::GetBidsRawRequest>
@@ -1481,6 +1487,7 @@ TEST_F(SelectAdReactorPASTest, DisablesDebugReporting) {
                               absl::Duration timeout,
                               RequestConfig request_config) {
     EXPECT_FALSE(get_bids_raw_request->enable_debug_reporting());
+    EXPECT_FALSE(get_bids_raw_request->enable_sampled_debug_reporting());
     auto response = std::make_unique<GetBidsResponse::GetBidsRawResponse>();
     response->mutable_protected_app_signals_bids()->Add(GetTestPASAdWithBid());
     std::move(on_done)(std::move(response), /*response_metadata=*/{});
@@ -1505,6 +1512,7 @@ TEST_F(SelectAdReactorPASTest, DisablesDebugReporting) {
                    grpc::ClientContext* context, ScoreAdsDoneCallback on_done,
                    absl::Duration timeout, RequestConfig request_config) {
         EXPECT_FALSE(request->enable_debug_reporting());
+        EXPECT_FALSE(request->fdo_flags().enable_sampled_debug_reporting());
         std::move(on_done)(
             std::make_unique<ScoreAdsResponse::ScoreAdsRawResponse>(),
             /*response_metadata=*/{});

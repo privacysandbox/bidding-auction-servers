@@ -19,6 +19,8 @@
 #include "absl/strings/str_cat.h"
 #include "gtest/gtest.h"
 #include "services/bidding_service/code_wrapper/buyer_code_wrapper.h"
+#include "services/common/blob_storage_client/blob_storage_client.h"
+#include "services/common/blob_storage_client/blob_storage_client_cpio.h"
 #include "services/common/data_fetch/version_util.h"
 #include "services/common/test/mocks.h"
 #include "services/common/test/utils/test_init.h"
@@ -66,11 +68,13 @@ TEST_F(BuyerCodeFetchManagerTest, LocalModeTriesFileLoadJs) {
   EXPECT_CALL(*blob_storage_client_, Init).Times(0);
   EXPECT_CALL(*blob_storage_client_, Run).Times(0);
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    true /*enable_protected_audience*/,
-                                    false /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, true /*enable_protected_audience*/,
+      false /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(), absl::StrCat(kPathFailed, pa_js_path));
@@ -83,11 +87,13 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFailsForNoPABucket) {
   EXPECT_CALL(*blob_storage_client_, Init).WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    true /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, true /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(),
@@ -146,11 +152,13 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFetchesJsForPA) {
         return absl::OkStatus();
       });
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    true /*enable_protected_audience*/,
-                                    false /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, true /*enable_protected_audience*/,
+      false /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -167,11 +175,13 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFailsForNoPASBucket) {
   EXPECT_CALL(*blob_storage_client_, Run).WillOnce(Return(absl::OkStatus()));
   EXPECT_CALL(*blob_storage_client_, ListBlobsMetadata).Times(0);
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    false /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, false /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(),
@@ -236,11 +246,13 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFailsForNoAdsRetrievalBucket) {
         return absl::OkStatus();
       });
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    false /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, false /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(),
@@ -348,11 +360,13 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFetchesJsForPAS) {
         return absl::OkStatus();
       });
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    false /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, false /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -501,11 +515,13 @@ TEST_F(BuyerCodeFetchManagerTest, BucketModeFetchesJsForPAAndPAS) {
         return absl::OkStatus();
       });
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    true /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, true /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -521,11 +537,13 @@ TEST_F(BuyerCodeFetchManagerTest, UrlModeFailsForNoPAUrl) {
   EXPECT_CALL(*blob_storage_client_, Run).Times(0);
   EXPECT_CALL(*http_fetcher_, FetchUrls).Times(0);
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    true /*enable_protected_audience*/,
-                                    false /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, true /*enable_protected_audience*/,
+      false /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(),
@@ -560,11 +578,13 @@ TEST_F(BuyerCodeFetchManagerTest, UrlModeFetchesJsForPA) {
         std::move(done_callback)({""});
       });
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    true /*enable_protected_audience*/,
-                                    false /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, true /*enable_protected_audience*/,
+      false /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -583,11 +603,13 @@ TEST_F(BuyerCodeFetchManagerTest, UrlModeFailsForNoPASUrl) {
   EXPECT_CALL(*blob_storage_client_, Run).Times(0);
   EXPECT_CALL(*http_fetcher_, FetchUrls).Times(0);
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    false /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, false /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(),
@@ -622,11 +644,13 @@ TEST_F(BuyerCodeFetchManagerTest, UrlModeFailsForNoAdsRetrievalUrl) {
         std::move(done_callback)({""});
       });
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    false /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, false /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   ASSERT_FALSE(load_status.ok());
   EXPECT_EQ(load_status.message(),
@@ -673,11 +697,13 @@ TEST_F(BuyerCodeFetchManagerTest, UrlModeFetchesJsForPAS) {
         std::move(done_callback)({""});
       });
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    false /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, false /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }
@@ -734,11 +760,13 @@ TEST_F(BuyerCodeFetchManagerTest, UrlModeFetchesJsForPAAndPAS) {
         std::move(done_callback)({""});
       });
 
-  BuyerCodeFetchManager udf_fetcher(executor_.get(), http_fetcher_.get(),
-                                    loader_.get(),
-                                    std::move(blob_storage_client_), udf_config,
-                                    true /*enable_protected_audience*/,
-                                    true /*enable_protected_app_signals*/);
+  std::unique_ptr<BlobStorageClient> cpio_client =
+      std::make_unique<CpioBlobStorageClient>(std::move(blob_storage_client_));
+
+  BuyerCodeFetchManager udf_fetcher(
+      executor_.get(), http_fetcher_.get(), loader_.get(),
+      std::move(cpio_client), udf_config, true /*enable_protected_audience*/,
+      true /*enable_protected_app_signals*/);
   absl::Status load_status = udf_fetcher.Init();
   EXPECT_TRUE(load_status.ok());
 }

@@ -151,7 +151,7 @@ RomaRequestSharedContext RomaSharedContextWithMetric(
   // Create new metric context for custom metrics.
   metric::MetricContextMap<RequestT>()->Get(request);
   auto metric_context = metric::MetricContextMap<RequestT>()->Remove(request);
-  CHECK_OK(metric_context);
+  PS_CHECK_OK(metric_context, log_context);
   absl::StatusOr<std::shared_ptr<RomaRequestContext>> roma_shared_context =
       shared_context.GetRomaRequestContext();
   if (roma_shared_context.ok()) {
