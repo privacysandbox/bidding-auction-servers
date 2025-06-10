@@ -8,7 +8,7 @@ cachetools==5.5.0
 google_api_core==2.24.0
 googleapis_common_protos==1.66.0
 pyasn1_modules==0.4.1
-requests==2.32.3
+requests==2.32.4
 rsa==4.9
 pyasn1==0.6.1
 idna==3.10
