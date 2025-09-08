@@ -14,6 +14,7 @@
 
 load(
     "@io_bazel_rules_docker//container:container.bzl",
+    "container_flatten",
     "container_image",
     "container_layer",
 )
@@ -58,6 +59,56 @@ container_layer(
         ":server_binaries_tar",
     ],
 )
+pkg_files(
+    name = "etc_envoy_files",
+    srcs = [
+        "bin/envoy.yaml",
+        "//api:bidding_auction_servers_descriptor_set",
+    ],
+    attributes = pkg_attributes(mode = "0444"),
+    prefix = "/etc/envoy",
+    visibility = [
+        "//production/packaging:__subpackages__",
+    ],
+)
+
+pkg_tar(
+    name = "envoy_config_tar",
+    srcs = [
+        ":etc_envoy_files",
+    ],
+)
+
+container_layer(
+    name = "envoy_config_layer",
+    directory = "/",
+    tars = [
+        ":envoy_config_tar",
+    ],
+    visibility = [
+        "//production/packaging:__subpackages__",
+        "//services:__subpackages__",
+    ],
+)
+
+container_flatten(
+    name = "envoy_distroless_flat",
+    image = select({
+        "@platforms//cpu:arm64": "@envoy-distroless-arm64//image",
+        "@platforms//cpu:x86_64": "@envoy-distroless-amd64//image",
+    }),
+)
+
+container_layer(
+    name = "envoy_distroless_layer",
+    tars = [
+        ":envoy_distroless_flat.tar",
+    ],
+    visibility = [
+        "//production/packaging:__subpackages__",
+        "//services:__subpackages__",
+    ],
+)
 
 pkg_files(
     name = "root_certs",
@@ -97,6 +148,8 @@ container_image(
     labels = {"tee.launch_policy.log_redirect": "always"},
     layers = [
         ":server_binary_layer",
+        ":envoy_distroless_layer",
+        ":envoy_config_layer",
         ":root_certs_layer",
     ] + select({
         "//:e2e_build": [

@@ -128,6 +128,7 @@ function run_server {
     "${PROJECT_ROOT}/builders/tools/cbuild" "${cbuild_args[@]}" --cmd "${SERVER_START_CMD}"
   else
     docker_image_uri="${DOCKER_IMAGE_URI:-$(docker load -i dist/debian/${SERVICE_NAME}_service_image.tar | sed -nr "s/^Loaded image: (.*)$/\1/p")}"
-    docker run -it "${DOCKER_RUN_ARGS[@]}" "${docker_image_uri}" -c "${SERVER_START_CMD}"
+    # Use --rm to automatically remove container when it stops, and add --base-id to avoid socket conflicts
+    docker run -it --rm --network host "${docker_image_uri}" -c "/usr/local/bin/envoy --config-path /etc/envoy/envoy.yaml -l warn --base-id 1 & sleep 2 && ${SERVER_START_CMD}"
   fi
 }

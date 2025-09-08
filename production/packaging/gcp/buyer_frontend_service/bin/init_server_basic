@@ -1,5 +1,5 @@
 #!/busybox/sh
-# Copyright 2022 Google LLC
+# Portions Copyright (c) Microsoft Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,33 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -o errexit
-set -x
-
 #########################################################################
 #                                                                       #
-#                             Mesh Startup                              #
+#                            Envoy Startup                              #
 #                                                                       #
 #########################################################################
-# The following requires a GCP Metadata Server and a service account
-# that is allowed to read instance metadata.
 
-export MESH_NAME=$(wget -qO-  --header "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/mesh-name")
-export GRPC_XDS_BOOTSTRAP=/run/td-grpc-bootstrap.json
-echo export GRPC_XDS_BOOTSTRAP=$GRPC_XDS_BOOTSTRAP | tee /etc/profile.d/grpc-xds-bootstrap.sh
-wget https://storage.googleapis.com/traffic-director/td-grpc-bootstrap-0.14.0.tar.gz
-cat td-grpc-bootstrap-0.14.0.tar.gz | tar -xz
-./td-grpc-bootstrap-0.14.0/td-grpc-bootstrap --config-mesh-experimental $MESH_NAME | tee $GRPC_XDS_BOOTSTRAP
+# Start envoy.
 
-echo "Starting backend reachability test..."
-# Loop until we reach the backend. If not reachable, we will not start the server.
-# Thus, health checks will fail.
-while ! /server/bin/grpc_cli ls xds:///bidding --channel_creds_type=insecure
-do
-    echo "Backend not reachable... will try again in 5 seconds."
-    sleep 5
-done
-echo "Passed backend reachability test."
+/usr/local/bin/envoy --config-path /etc/envoy/envoy.yaml -l warn &
+sleep 2
 
 #########################################################################
 #                                                                       #
