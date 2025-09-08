@@ -113,8 +113,8 @@ if [ "${OPERATION}" = "batch_invoke" ]; then
   ARGS_ARRAY+=("-success_log_path=${BATCH_FILE_DIR}/success_log.jsonl")
   echo "Failure log path: ${BATCH_FILE_DIR}/failure_log.jsonl"
   echo "Success log path: ${BATCH_FILE_DIR}/success_log.jsonl"
-  echo "Executing: /secure_invoke/invoke ${ARGS_ARRAY[@]} $@"
-  exec /secure_invoke/invoke "${ARGS_ARRAY[@]}" "$@"
+  echo "Executing: /secure_invoke/invoke ${ARGS_ARRAY[@]}"
+  exec /secure_invoke/invoke "${ARGS_ARRAY[@]}" 
 # Single request handling
 else
   # Set number of retries if provided
@@ -123,15 +123,15 @@ else
     while [ $i -le "${RETRIES}" ]; do
       echo "Running attempt $i of ${RETRIES}..."
       # Execute the command with all arguments
-      echo "Executing: /secure_invoke/invoke ${ARGS_ARRAY[@]} $@"
-      exec /secure_invoke/invoke "${ARGS_ARRAY[@]}" "$@"
+      echo "Executing: /secure_invoke/invoke ${ARGS_ARRAY[@]}"
+      exec /secure_invoke/invoke "${ARGS_ARRAY[@]}" 
       # Add a small delay between retries
       [ $i -lt "${RETRIES}" ] && sleep 1
       i=$((i + 1))
     done
   else
     # No retries, just run once
-    echo "Executing: /secure_invoke/invoke ${ARGS_ARRAY[@]} $@"
-    exec /secure_invoke/invoke "${ARGS_ARRAY[@]}" "$@"
+    echo "Executing: /secure_invoke/invoke ${ARGS_ARRAY[@]}"
+    exec /secure_invoke/invoke "${ARGS_ARRAY[@]}"
   fi
 fi
