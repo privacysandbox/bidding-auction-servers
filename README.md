@@ -1,4 +1,4 @@
-**This technology is scheduled for deprecation and removal from Chrome.**
+**This technology is scheduled for deprecation.**
 
 This repository will be archived and will no longer be updated.
 
