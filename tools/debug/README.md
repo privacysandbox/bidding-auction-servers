@@ -243,7 +243,7 @@ populated manually. There are two ways to send encrypted requests to local serve
 
     ```bash
     PROJECT_PATH=<Path to B&A project eg. ~/projects>
-    docker run --rm -t --network="host" -v $PROJECT_PATH/bidding-auction-server/bazel-bin/api/bidding_auction_servers_descriptor_set.pb:/etc/envoy/bidding_auction_servers_descriptor_set.pb -v $(pwd)/logs:/logs -v $PROJECT_PATH/bidding-auction-server/tools/debug/envoy.yaml:/tmp/envoy.yaml envoyproxy/envoy:dev-3b18bc650237ce923176becc1e7ee0bd8de4b701 -c /tmp/envoy.yaml
+    docker run --rm -t --network="host" -v $PROJECT_PATH/bidding-auction-server/dist/bidding_auction_servers_descriptor_set.pb:/etc/envoy/bidding_auction_servers_descriptor_set.pb -v $(pwd)/logs:/logs -v $PROJECT_PATH/bidding-auction-server/tools/debug/envoy.yaml:/tmp/envoy.yaml envoyproxy/envoy:dev-3b18bc650237ce923176becc1e7ee0bd8de4b701 -c /tmp/envoy.yaml
     ```
 
     You can then send the request to envoy using CURL -
