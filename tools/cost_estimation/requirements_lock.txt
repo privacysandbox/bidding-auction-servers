@@ -1,6 +1,6 @@
 PyYAML==6.0.2
 google-cloud-monitoring==2.24.0
-protobuf==5.29.1
+protobuf==5.29.5
 google_api_core==2.24.0
 google_auth==2.37.0
 proto_plus==1.25.0
