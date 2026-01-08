@@ -14,7 +14,7 @@ pyasn1==0.6.1
 idna==3.10
 certifi==2024.8.30
 charset_normalizer==3.4.0
-urllib3==2.2.3
+urllib3==2.6.3
 grpcio==1.68.1
 grpcio_status==1.68.1
 grpcio-tools
