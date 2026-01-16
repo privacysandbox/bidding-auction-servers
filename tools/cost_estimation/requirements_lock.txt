@@ -10,7 +10,7 @@ googleapis_common_protos==1.66.0
 pyasn1_modules==0.4.1
 requests==2.32.3
 rsa==4.9
-pyasn1==0.6.1
+pyasn1==0.6.2
 idna==3.10
 certifi==2024.8.30
 charset_normalizer==3.4.0
